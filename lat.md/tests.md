@@ -152,6 +152,10 @@ An update whose later operation fails (`CREATE GRAPH` on an existing graph) abor
 
 A 6000-triple bulk load is split into batches under D1's statement limits, all triples arrive, and statistics are refreshed for `explain()`.
 
+### Cypher runs on D1
+
+Through the wasm core on Miniflare D1, `cypher()` creates a chain per row, finds its shortest path by breadth-first search, counts with `OPTIONAL MATCH`, detaches a node, and rejects deleting a connected node.
+
 ### Reasoning on D1
 
 RDFS subclass chains, an OWL transitive property and SQL-rule materialization (one D1 batch per round) work on a Miniflare D1 database.
@@ -239,6 +243,148 @@ A child Node process writes a quad to a SQLite file; a store reopened on that fi
 ### Explain returns SQL
 
 `explain()` returns the generated SQL for a SELECT, and `explainUpdate()` describes a compiled update.
+
+### Cypher reads and writes the same dataset
+
+`store.cypher()` creates nodes and a relationship with a property that SPARQL then finds, reads data inserted by SPARQL UPDATE, returns typed node and relationship objects, and `explainCypher()` shows the SQL.
+
+## Cypher
+
+openCypher over the RDF store ([[architecture#Property graph frontend]]). Unless noted, each test runs on the bundled SQLite, the system `libsqlite3` (dylib), a D1-capability async store, and Miniflare D1 when `OXILITE_D1_URL` points at `testsuite/d1-sidecar`.
+
+### Cypher nodes are visible to SPARQL
+
+A node created with `CREATE (:Person {name: 'Ada'})` is found by a SPARQL `ASK` over `rdf:type` and the `name` property under the base IRI.
+
+### RDF data is visible to Cypher
+
+Turtle loaded with SPARQL-side APIs is matched by a Cypher `MATCH` over labels, a relationship and properties.
+
+### A plain relationship is one triple
+
+Creating a relationship without properties between existing nodes adds exactly one quad and no reifier.
+
+### Relationship properties live on a reifier
+
+A relationship property round-trips through Cypher, and SPARQL finds it on an RDF 1.2 reifier of the asserted triple.
+
+### Parallel relationships stay distinct
+
+Two relationships of one type between the same nodes are counted separately and keep their own properties; adding a third, plain one keeps the existing reifiers.
+
+### Plain relationship becomes parallel
+
+Adding a relationship with properties next to an existing plain one yields two relationships, and deleting the plain one keeps the other.
+
+### Multi-valued properties read as lists
+
+A property with several RDF values reads as a list in term order under the default policy, and equality in `WHERE` matches any of the values.
+
+### List properties round-trip as rdf:JSON
+
+List and map property values are stored as `rdf:JSON` literals and decode back, including map access and `size()`.
+
+### WITH pipelines aggregation
+
+`WITH` seals an aggregation that a later `WHERE` filters; `ORDER BY`, `SKIP` and `LIMIT` follow Cypher null ordering.
+
+### OPTIONAL MATCH yields null
+
+A person without a matching `OPTIONAL MATCH` row keeps its row, with null for the optional part.
+
+### Reads are one SQL statement
+
+A three-hop `MATCH` over plain relationships needs at most three backend requests: the query, term resolution and node materialisation.
+
+### Relationships are not reused in one MATCH
+
+Over a single relationship, a two-hop undirected pattern returns no rows, while a one-hop undirected pattern matches it in both directions.
+
+### Variable-length paths follow trails
+
+On a three-node cycle, `*1..5` stops when a relationship would repeat, and path values expose their length and nodes.
+
+### Shortest paths run on D1
+
+`shortestPath` and `allShortestPaths` return the shortest length on both backends, the D1 one included, as a breadth-first step machine.
+
+### Nodes, relationships and paths are values
+
+Returned nodes carry labels and properties and relationships carry type and properties, alongside `labels()`, `type()`, `keys()` and map projections.
+
+### Explain shows the SQL
+
+`explain_cypher` on a two-pattern `MATCH` reports the join order and the lowered SPARQL form.
+
+### Read clauses and functions
+
+A table of read queries covers string predicates, `IN`, null checks, pattern predicates, `EXISTS` subqueries, `collect` and other clauses, each with its expected rows.
+
+### Parameters
+
+`$` parameters, including a list of maps fed through `UNWIND`, drive both writes and reads.
+
+### MERGE is idempotent
+
+Running `MERGE` twice leaves one node with `ON CREATE` and `ON MATCH` effects applied, and later rows in one statement match nodes that earlier rows created.
+
+### SET and REMOVE
+
+`SET` updates properties and labels, `+=` merges maps with null removing a key, and `REMOVE` drops properties and labels.
+
+### DETACH DELETE removes relationships
+
+Deleting a node with incoming and outgoing relationships removes those relationships and their reifiers, and deleting everything restores the empty store.
+
+### Deleting a connected node fails atomically
+
+`SET` followed by `DELETE` of a node that still has relationships fails with a constraint error, and the `SET` is not applied.
+
+### Per-row creation on D1
+
+`UNWIND range(1, 100)` with `CREATE` makes 100 distinct nodes in one statement on both backends.
+
+### Labels follow the class hierarchy
+
+With RDFS reasoning, a label matches instances of its subclasses; without reasoning it does not.
+
+### Inverse relationship types
+
+With OWL QL reasoning, a relationship type also matches pairs stored only through its `owl:inverseOf` property.
+
+### Required properties join without OPTIONAL
+
+With a registered SHACL schema, a property with `sh:minCount 1` compiles to an inner join, while an optional property keeps a `LEFT JOIN`.
+
+### SHACL guards abort invalid writes
+
+Writes that break shape datatype, required-property or `sh:in` constraints fail with a shape violation and leave the store unchanged.
+
+### Schema procedures
+
+`db.labels()`, `db.relationshipTypes()` and `db.schema.nodeTypeProperties()` report labels, types and mandatory properties from the shapes and the data.
+
+### Temporal values are stored as XSD literals
+
+Dates, zoned datetimes and durations created by Cypher are `xsd:date`/`xsd:duration` literals for SPARQL, and read back with arithmetic, components, week dates and `duration.between`.
+
+### Pattern comprehensions
+
+`[(p)-[:KNOWS]->(f) WHERE … | f.name]` gives each row the list of its own matches (empty when none), with path variables and `size()` over the list.
+
+### Schema datatypes type comparisons
+
+With the SHACL schema loaded, a property with `sh:datatype xsd:integer` compiles `p.age > 30` to a single numeric comparison instead of one per possible type, with the same answer.
+
+### SPARQL and Cypher agree
+
+Over one dataset (labels, multi-valued and temporal properties, reified and parallel relationships, an ontology), 21 questions asked in SPARQL and in Cypher give the same rows; Cypher is checked on the native store and on the D1 code path.
+
+### openCypher TCK
+
+The openCypher TCK (`testsuite/openCypher`, 3880 scenarios) runs through a Gherkin runner with result tables, expected errors and side effects diffed from graph snapshots; failures must match `tck-allowlist.txt`.
+
+The test fails when an unlisted scenario fails or a listed one passes, so the list only shrinks. `OXILITE_TCK_REPORT=1` prints each failure with its query.
 
 ## Planner benchmark
 

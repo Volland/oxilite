@@ -1,8 +1,15 @@
+<p align="center">
+  <picture>
+    <source srcset="site/assets/logo.svg" type="image/svg+xml">
+    <img src="site/assets/logo.png" alt="oxilite logo" width="160">
+  </picture>
+</p>
+
 # oxilite
 
 **An Oxigraph-compatible RDF database and SPARQL engine that uses SQLite as its storage engine. It runs anywhere SQLite runs, including Cloudflare D1.**
 
-> **Status: milestones M1–M6 implemented** — M1 (storage core), M2 (full SPARQL 1.1 query compiled to SQL), M3 (atomic SPARQL Update, Cloudflare D1), the TypeScript packages, M4 (RDFS / OWL reasoning), M5 (SHACL / ShEx validation with rudof) and M6 (BSBM benchmarks, planner tuning, full-text search). See [Roadmap](#roadmap).
+> **Status: milestones M1–M7 implemented** — M1 (storage core), M2 (full SPARQL 1.1 query compiled to SQL), M3 (atomic SPARQL Update, Cloudflare D1), the TypeScript packages, M4 (RDFS / OWL reasoning), M5 (SHACL / ShEx validation with rudof), M6 (BSBM benchmarks, planner tuning, full-text search) and M7 (openCypher over the same data). See [Roadmap](#roadmap).
 
 ---
 
@@ -118,9 +125,9 @@ The filter is applied right after the first scan, before any join. The unary `+`
 ## Usage
 
 ```bash
-cargo add oxilite                      # Rust (features: rusqlite (default), dylib, d1, reasonable)
+cargo add oxilite                      # Rust (features: rusqlite (default), dylib, d1, reasonable, cypher)
 cargo install oxilite-cli              # the `oxilite` command and SPARQL endpoint
-npm install @oxilite/node              # Node.js (prebuilt for macOS arm64 in 0.1.0)
+npm install @oxilite/node              # Node.js (prebuilt for macOS arm64 in 0.2.0)
 npm install @oxilite/d1                # Cloudflare D1 (WebAssembly)
 ```
 
@@ -276,6 +283,10 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
 
 A complete endpoint (`/sparql`, `/update`, `/load`, `/explain`) with its `wrangler.toml` and migration is in [`examples/d1-worker`](examples/d1-worker/); build it with `worker-build --release`.
 
+### 2c. Durable Objects
+
+The same `@oxilite/d1` package runs on a Durable Object's embedded SQLite through a small adapter over `ctx.storage.sql` (atomic batches use `transactionSync`). That gives each agent or user a private graph. [`examples/do-agent-memory-ts`](examples/do-agent-memory-ts/) is a tested agent-memory Worker built this way; the [article](site/articles/agent-memory-durable-objects.html) walks through it.
+
 ### What oxilite does differently on D1
 
 | D1 constraint | How oxilite handles it |
@@ -389,6 +400,28 @@ let results = validate_shex(&store, shexc, "http://example.com/", "<http://examp
 let report = oxilite_validate::prefetch::validate_shacl_async(&d1_store, shapes_ttl, &ShaclValidationMode::Native, &Default::default()).await?;
 ```
 
+## Cypher and property graphs
+
+The same dataset is also a property graph you can query with **openCypher** (M7, feature `cypher`, crate `oxilite-cypher`). Nodes are IRIs, labels are `rdf:type`, properties are literal triples, and relationships are triples; a relationship's properties live on an RDF 1.2 reifier (`?r rdf:reifies <<( ?a :KNOWS ?b )>>`), created only when needed. Data written with Cypher is plain RDF for SPARQL, and RDF loaded from Turtle is a graph for Cypher.
+
+```rust
+use oxilite::cypher::{CypherOptions, Params, Vocabulary};
+
+let opts = CypherOptions { vocabulary: Vocabulary::new("http://example.com/"), ..Default::default() };
+store.cypher_with("CREATE (:Person {name: 'Ada'})-[:KNOWS {since: 2020}]->(:Person {name: 'Alan'})", &Params::new(), &opts)?;
+let r = store.cypher_with("MATCH (a:Person)-[k:KNOWS]->(b) RETURN b.name, k.since", &Params::new(), &opts)?;
+// SPARQL sees the same data: ASK { ?a ex:KNOWS ?b . ?r rdf:reifies <<( ?a ex:KNOWS ?b )>> ; ex:since 2020 }
+```
+
+```ts
+const r = store.cypher("MATCH p = shortestPath((a:Station {id: $from})-[:LINE*]-(b:Station {id: $to})) RETURN length(p) AS hops", { from: 1, to: 9 });
+await d1store.cypher("UNWIND $rows AS row MERGE (p:Person {id: row.id}) SET p.name = row.name", { rows });
+```
+
+- **How it runs.** Reading clauses become one SPARQL query, compiled to SQL by the same compiler and planner (reasoning and the fallback included). What SQL cannot express — writes, lists, maps, `collect()`, temporal arithmetic — runs in Rust over the rows. A writing statement reads once and applies its changes as **one atomic request** (one D1 batch). `shortestPath` is a breadth-first search, one SQL request per level, so it works on D1. `explain_cypher()` shows the SPARQL and the SQL.
+- **OWL and SHACL aware.** With `reasoning: "rdfs"` / `"owl-ql"`, labels match subclasses and relationship types their subproperties and inverses. SHACL shapes stored in the dataset are the graph's schema: writes that break `sh:datatype`, cardinality, `sh:in` or `sh:pattern` are rejected before anything is written, `sh:minCount 1` properties join without `OPTIONAL`, `sh:datatype` types comparisons for the compiler, and `CALL db.labels()` / `db.schema.nodeTypeProperties()` read shapes and data.
+- **Coverage.** 3728 of the 3880 [openCypher TCK](https://github.com/opencypher/openCypher/tree/main/tck) scenarios pass (read-only 96.3%, temporal functions 100%), on the bundled SQLite; the failures (user-defined procedures, reading after a write in one statement, errors on deleted entities…) are listed in [`crates/oxilite-cypher/tck-allowlist.txt`](crates/oxilite-cypher/tck-allowlist.txt).
+
 ---
 
 ## Roadmap
@@ -403,11 +436,13 @@ let report = oxilite_validate::prefetch::validate_shacl_async(&d1_store, shapes_
 | **M4** Reasoning | TBox closure, rewriting, OWL 2 RL | entailment tests; agreement with `reasonable` | ✅ done: RDFS/OWL QL rewriting, SQL OWL 2 RL rules on every backend, identical to `reasonable` |
 | **M5** Validation | rudof SHACL/ShEx | rudof suites over oxilite | ✅ done: W3C SHACL core and shexTest results identical to rudof in memory; bounded D1 prefetch |
 | **M6** Performance | BSBM vs Oxigraph, tuning, FTS5 | published comparison | ✅ done: BSBM results in [Performance](#performance), D1 write-cost report, FTS5 text search |
+| **M7** Cypher | openCypher over the RDF store, OWL- and SHACL-aware | ≥ 80% of read-only TCK scenarios | ✅ done: 96.1% of the TCK (read-only 96.3%), on bundled SQLite, system SQLite and D1 |
 
 ---
 
 ## Project documentation
 
+- [`site/`](site/): the project website (static, deployed to GitHub Pages by `.github/workflows/pages.yml`). The logo is [`site/assets/logo.svg`](site/assets/logo.svg), with a PNG at [`site/assets/logo.png`](site/assets/logo.png).
 - [`lat.md/`](lat.md/): the architecture knowledge graph (architecture, decisions, milestones, tests, test plan), checked by `lat check`.
 - [`openspec/changes/`](openspec/changes/): one change per milestone, each with a proposal, requirement specs with scenarios, a design, and a task list (`openspec validate --all --strict`).
 

@@ -39,6 +39,21 @@ fn graph(json: Option<String>) -> Result<Option<GraphName>> {
         .transpose()
 }
 
+fn cypher_args(
+    params: Option<String>,
+    options: Option<String>,
+) -> Result<(oxilite::cypher::Params, oxilite::cypher::CypherOptions)> {
+    let params = match params {
+        Some(p) => oxilite::cypher::json::params_from_json(&p).map_err(err)?,
+        None => oxilite::cypher::Params::new(),
+    };
+    let opts = match options {
+        Some(o) => oxilite::cypher::json::options_from_json(&o).map_err(err)?,
+        None => oxilite::cypher::CypherOptions::default(),
+    };
+    Ok((params, opts))
+}
+
 enum Backend {
     Native(Store),
     Library(Store<DylibBackend>),
@@ -115,6 +130,34 @@ impl NativeStore {
             None => output_to_json(&out),
         };
         Ok(v.to_string())
+    }
+
+    /// A Cypher statement; `params` and `options` are JSON (`oxilite_cypher::json`). Returns
+    /// `{"kind": "cypher", "columns", "rows", "stats"}` as JSON.
+    #[napi]
+    pub fn cypher(
+        &self,
+        query: String,
+        params: Option<String>,
+        options: Option<String>,
+    ) -> Result<String> {
+        let (params, opts) = cypher_args(params, options)?;
+        let r = with_store!(self, s => s.cypher_with(&query, &params, &opts)).map_err(err)?;
+        let mut v = r.to_json();
+        v["kind"] = json!("cypher");
+        Ok(v.to_string())
+    }
+
+    /// How a Cypher statement runs: its SPARQL, the SQL, and what runs in Rust.
+    #[napi]
+    pub fn explain_cypher(
+        &self,
+        query: String,
+        params: Option<String>,
+        options: Option<String>,
+    ) -> Result<String> {
+        let (params, opts) = cypher_args(params, options)?;
+        with_store!(self, s => s.explain_cypher(&query, &params, &opts)).map_err(err)
     }
 
     /// The SQL a query compiles to, with the planner's notes.

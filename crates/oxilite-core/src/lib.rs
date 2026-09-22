@@ -22,7 +22,7 @@ pub mod text;
 pub mod update;
 pub mod writer;
 
-pub use compiler::QueryOptions;
+pub use compiler::{QueryOptions, ValueType};
 pub use error::{Error, Result};
 pub use job::{run_async, run_sync, AsyncBackend, Job, Step, SyncBackend};
 pub use query::{compile_query, CompiledQuery, QueryJob, QueryOutput};

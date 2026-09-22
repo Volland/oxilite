@@ -42,6 +42,22 @@ pub struct QueryOptions {
     pub reasoning: crate::reason::Reasoning,
     /// Also match materialized inferences (`quads_inf`, see `materialize()`).
     pub include_inferred: bool,
+    /// Value types known for variables (e.g. from a schema): comparisons on them compile to
+    /// one typed comparison instead of a comparison per possible type. A value of another
+    /// type then compares as unknown (false in a filter).
+    pub var_types: BTreeMap<String, ValueType>,
+}
+
+/// A static value type for [`QueryOptions::var_types`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+pub enum ValueType {
+    /// Numbers (`xsd:integer`, `xsd:decimal`, `xsd:double`… and derived types).
+    Numeric,
+    /// Simple literals (`xsd:string`).
+    String,
+    Boolean,
 }
 
 /// How a variable is represented in SQL.

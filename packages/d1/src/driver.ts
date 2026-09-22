@@ -5,6 +5,11 @@
 // become one `db.batch()` — D1's only transaction.
 
 import {
+  type CypherOptions,
+  type CypherOutput,
+  type CypherResult,
+  type CypherValue,
+  cypherResult,
   type DumpOptions,
   type LoadData,
   type LoadOptions,
@@ -43,6 +48,8 @@ export interface WasmEngine {
   query(sparql: string, options?: string | null): WasmJob;
   queryJson(sparql: string): WasmJob;
   explain(sparql: string): string;
+  cypher(query: string, params?: string | null, options?: string | null): WasmJob;
+  explainCypher(query: string, params?: string | null, options?: string | null): string;
   update(sparql: string, baseIri?: string | null): WasmJob;
   explainUpdate(sparql: string): string;
   load(data: string, format: string, base?: string | null, graph?: string | null): WasmJob;
@@ -137,6 +144,20 @@ export class D1Store {
     } finally {
       job.free?.();
     }
+  }
+
+  /**
+   * A Cypher statement over the property-graph view of the dataset. Reads compile to SQL; a
+   * writing statement reads, then applies its changes as one D1 batch.
+   */
+  async cypher(query: string, params: Record<string, CypherValue> = {}, options: CypherOptions = {}): Promise<CypherResult> {
+    const out = (await this.run(this.engine.cypher(query, JSON.stringify(params), JSON.stringify(options)))) as unknown as CypherOutput;
+    return cypherResult(out);
+  }
+
+  /** How a Cypher statement runs: its SPARQL, the SQL, and what runs in Rust. */
+  explainCypher(query: string, params: Record<string, CypherValue> = {}, options: CypherOptions = {}): string {
+    return this.engine.explainCypher(query, JSON.stringify(params), JSON.stringify(options));
   }
 
   /** SPARQL query: `Map[]` for SELECT, `boolean` for ASK, `Quad[]` for CONSTRUCT/DESCRIBE, or a string with `results_format`. */

@@ -52,7 +52,7 @@ Milestone done-criteria measured with the harness, see [[milestones]].
 - M2: ≥95% of W3C SPARQL 1.1 query evaluation tests; zero unlisted divergences on the corpus.
 - M3: W3C SPARQL 1.1 update suite on rusqlite and D1; the corpus on D1.
 - M5: rudof SHACL/ShEx suites over an oxilite-backed store equal rudof over an in-memory graph.
-- M7: ≥80% of read-only openCypher TCK scenarios on rusqlite, dylib and D1; SPARQL and Cypher agree on the differential corpus.
+- M7: ≥80% of read-only openCypher TCK scenarios (96.3% today); the specification scenarios on rusqlite, dylib and D1.
 
 ## Storage unit tests
 
@@ -90,11 +90,9 @@ Tests specific to the D1 backend and TypeScript driver.
 
 ## Cypher tests
 
-Planned tests for [[architecture#Property graph frontend]] (M7), run by the harness on rusqlite, dylib and D1.
+Tests of [[architecture#Property graph frontend]] (M7), implemented in `crates/oxilite-cypher/tests` and listed in [[tests#Cypher]].
 
-- The openCypher TCK is run by a Gherkin runner in `testsuite/`; at least 80% of the read-only scenarios pass, and the rest are allow-listed with reasons.
-- A differential corpus poses the same questions as SPARQL and as Cypher over one dataset and compares the answers.
-- Mapping round-trips: Cypher-created nodes, relationship properties and parallel relationships are visible to SPARQL, and loaded Turtle is visible to Cypher.
-- Relationship uniqueness, trail variable-length paths over cycles, and shortest path on D1 without the fallback.
-- Write atomicity: a failing `DELETE` of a connected node leaves the batch unapplied; per-row `CREATE` makes distinct generated nodes on D1.
-- With M4 and M5: label and relationship-type entailment under a reasoning option; an invalid `CREATE` aborted by a SHACL guard on D1.
+- The openCypher TCK runs through the Gherkin runner in `tests/tck.rs`; failures are allow-listed with their message.
+- The specification scenarios run on the bundled SQLite, the system `libsqlite3`, the D1 code path and Miniflare D1.
+- A differential corpus poses the same questions in SPARQL and Cypher (`tests/differential.rs`).
+- Still planned: TCK runs on the dylib and D1 engines.

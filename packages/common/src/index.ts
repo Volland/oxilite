@@ -299,3 +299,107 @@ export function loadDataToString(data: LoadData): string {
   const one = (d: string | Uint8Array) => (typeof d === "string" ? d : new TextDecoder().decode(d));
   return Array.isArray(data) ? data.map(one).join("\n") : one(data);
 }
+
+// ----- Cypher (property-graph view) -----
+
+/** A node of the property-graph view of the dataset. */
+export interface CypherNode {
+  type: "node";
+  /** The node's IRI (or `_:label` for a blank node). */
+  id: string;
+  labels: string[];
+  properties: Record<string, CypherValue>;
+}
+
+/** A relationship: an RDF triple, identified by its reifier when it has one. */
+export interface CypherRelationship {
+  type: "relationship";
+  id: string;
+  relType: string;
+  start: string;
+  end: string;
+  properties: Record<string, CypherValue>;
+}
+
+export interface CypherPath {
+  type: "path";
+  nodes: CypherNode[];
+  relationships: CypherRelationship[];
+}
+
+/** A temporal value in its ISO 8601 form (`value`). */
+export interface CypherTemporal {
+  type: "date" | "datetime" | "localdatetime" | "time" | "localtime" | "duration";
+  value: string;
+}
+
+export type CypherValue =
+  | null
+  | boolean
+  | number
+  | string
+  | CypherValue[]
+  | CypherNode
+  | CypherRelationship
+  | CypherPath
+  | CypherTemporal
+  | { [key: string]: CypherValue };
+
+/** What a statement changed. */
+export interface CypherStats {
+  nodesCreated: number;
+  nodesDeleted: number;
+  relationshipsCreated: number;
+  relationshipsDeleted: number;
+  propertiesSet: number;
+  labelsAdded: number;
+  labelsRemoved: number;
+}
+
+export interface CypherResult {
+  columns: string[];
+  rows: CypherValue[][];
+  /** Rows as objects keyed by column. */
+  records: Record<string, CypherValue>[];
+  stats: CypherStats;
+}
+
+/** Options of the Cypher frontend (see `oxilite_cypher::json`). */
+export interface CypherOptions {
+  /** Namespace of labels, relationship types and keys without a prefix (default `urn:oxilite:pg:`). */
+  base?: string;
+  /** Prefixes usable in names: `` :`schema:Person` ``. */
+  prefixes?: Record<string, string>;
+  /** Explicit name → IRI mappings. */
+  names?: Record<string, string>;
+  /** How a property with several RDF values reads: a list (default), its first value, or an error. */
+  multiValue?: "list" | "first" | "error";
+  /** Maximum hops of an unbounded variable-length relationship that binds a variable. */
+  varLengthCap?: number;
+  /** Maximum depth of an unbounded shortest-path search. */
+  shortestPathCap?: number;
+  /** Check writes against the SHACL shapes of the dataset (default true). */
+  shapes?: boolean;
+  /** Give created nodes an `rdf:type rdfs:Resource` triple (default true). */
+  nodeMarker?: boolean;
+  /** Entailment for matching: `"rdfs"` or `"owl-ql"` make labels follow class hierarchies. */
+  reasoning?: "none" | "rdfs" | "owl-ql";
+  useDefaultGraphAsUnion?: boolean;
+}
+
+/** Output of a Cypher job (`kind: "cypher"`). */
+export interface CypherOutput {
+  kind: "cypher";
+  columns: string[];
+  rows: CypherValue[][];
+  stats: CypherStats;
+}
+
+export function cypherResult(out: CypherOutput): CypherResult {
+  return {
+    columns: out.columns,
+    rows: out.rows,
+    records: out.rows.map((row) => Object.fromEntries(out.columns.map((c, i) => [c, row[i] ?? null]))),
+    stats: out.stats,
+  };
+}

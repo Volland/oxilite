@@ -30,7 +30,7 @@ Statistics are refreshed explicitly, not per write, to avoid doubling D1 writes.
 
 The universal atomicity guarantee is "one request = one transaction = one D1 batch"; SPARQL UPDATE compiles to self-reading SQL that fits in it.
 
-Interactive read-then-write closures exist only natively. Rejected: making Durable Objects SQLite the Cloudflare target — the user requires D1 to work. See [[architecture#Updates and atomicity]].
+Interactive read-then-write closures exist only natively. Rejected: making Durable Objects SQLite the Cloudflare target — the user requires D1 to work. Durable Objects remain reachable through the same sans-IO driver (an example adapter, not a tested backend). See [[architecture#Updates and atomicity]].
 
 ## D6 Three-tier function strategy
 
@@ -74,30 +74,30 @@ This is the RDF merge the SPARQL specification requires. Oxigraph concatenates t
 
 ## D13 Cypher as a second frontend over the RDF store
 
-Cypher is lowered into the same compiler, planner and backends as SPARQL, over the same quads. It does not run on a separate engine with a native property-graph layout. Planned in M7.
+Cypher runs over the same quads as SPARQL, through the same compiler, planner and backends, instead of a separate engine with a native property-graph layout. Delivered in M7.
 
-OWL and SHACL are defined over RDF, so they apply to property graphs only when those graphs are stored as RDF. A native layout (`nodes` and `edges` tables with JSON properties) would make relationship properties cheaper, but it would duplicate four backends and the planner, lose SPARQL interop, and need an invented OWL/SHACL mapping. It is estimated at 30–40 person-weeks, against 22–29. See [[architecture#Property graph frontend]].
+OWL and SHACL are defined over RDF, so they apply to property graphs only when those graphs are stored as RDF. A native layout (`nodes` and `edges` tables with JSON properties) would make relationship properties cheaper, but it would duplicate four backends and the planner, lose SPARQL interop, and need an invented OWL/SHACL mapping. See [[architecture#Property graph frontend]].
 
 ## D14 Relationships as asserted triples, with reifiers only when needed
 
-A relationship `(a)-[:T]->(b)` is always the triple `a :T b`, so a hop is one join. An RDF 1.2 reifier is added only for relationship properties, parallel relationships or relationship identity.
+A relationship `(a)-[:T]->(b)` is always the triple `a :T b`, so a hop is one join. An RDF 1.2 reifier is added only for relationship properties or parallel relationships.
 
-Parallel relationships are several reifiers of one triple term. The asserted triple is deleted with its last reifier, checked in the same batch. Modelling every relationship as an intermediate node was rejected: it costs two joins per hop and triples write billing on D1. Reaching a traversed triple's reifier needs an optional `triple_terms(s, p, o)` index, kept optional as in [[decisions#D3 Three covering permutations plus optional graph index]].
+When a second relationship of a triple is created, the existing one gets a reifier too, so all parallel relationships are reifiers of one triple term. The triple is deleted with its last reifier. Modelling every relationship as an intermediate node was rejected: it costs two joins per hop and triples write billing on D1. Named relationship patterns look their reifier up optionally; with `reifier_uniqueness`, uniqueness checks also tell parallel relationships apart.
 
-## D15 Inline generated node ids
+## D15 Fresh node IRIs from Rust
 
-Nodes created by Cypher get a new inline GeneratedNode tag (tag 8) whose random payload determines the IRI `urn:oxilite:n:<hex>`, so SQL can create fresh nodes per row.
+Nodes created by Cypher get fresh IRIs (`urn:oxilite:node:<random>-<n>`) minted in Rust, and an `rdf:type rdfs:Resource` marker triple. This replaces the planned inline GeneratedNode id tag.
 
-D1 has no UDFs, so SQL cannot compute xxh3. An inline tag avoids both a `terms` row and a read-back, as inline integers do in [[decisions#D2 Tagged 64-bit hash ids with inline small values]]. The encoder maps every IRI of that form to the tag, so one IRI never has two ids.
+Writes are computed in Rust from the rows of the read ([[decisions#D16 Lowering to SPARQL algebra, with a Rust tail]]), so new terms are hashed as usual and no id needs to be generated inside SQL. The marker keeps nodes without labels, properties or relationships in existence (an RDF resource exists only through its triples); it is optional (`node_marker`) and hidden from `labels()`.
 
-## D16 Internal compiler algebra shared by SPARQL and Cypher
+## D16 Lowering to SPARQL algebra, with a Rust tail
 
-The compiler gets an internal `Op` algebra that both `spargebra` and Cypher lower into. It adds property-graph operations SPARQL lacks: relationship uniqueness, trail variable-length paths, shortest path, path values, lists and maps.
+Cypher reads are lowered to `spargebra` algebra for the unchanged SPARQL compiler; what SQL cannot express — writes, lists, maps, `collect()`, temporal arithmetic — runs in Rust over the rows. This replaces the planned `Op` algebra.
 
-Today the compiler matches on `spargebra::GraphPattern` directly. Encoding property-graph operations as special `SERVICE` patterns was rejected as fragile. The refactor lands first, alone, and is gated on the W3C suites and the differential corpus.
+Lowering to the existing algebra reuses the planner, the reasoning rewrites and the spareval fallback without touching the M2 compiler. Property-graph operations map onto SPARQL 1.2: uniqueness is inequality filters, variable-length patterns are unions of fixed-length branches or property paths, relationship identity is an optional reifier. Shortest paths are a breadth-first step machine. A writing statement is one read followed by one atomic write request: on D1 it is not isolated from concurrent writers between the two. A shared internal algebra remains possible if a feature needs it.
 
 ## D17 SHACL shapes as the property-graph schema
 
-Registered SHACL shapes act as the Cypher schema. `maxCount 1` makes a property scalar, `minCount 1` allows inner joins and `datatype` gives static types. Simple constraints are checked inside the write batch.
+The dataset's SHACL shapes are the Cypher schema: mandatory properties join without `OPTIONAL`, single-valued ones read as scalars, datatypes type comparisons, and writes are checked before the batch is sent.
 
-Guards abort the whole D1 batch through an `oxilite_pg_guard` CHECK table, which is the same pattern `oxilite_guard` uses for SPARQL UPDATE. Complete SHACL and ShEx remain rudof's job ([[decisions#D8 rudof engines unchanged through srdf traits]]). The shapes also drive `db.labels()` and `db.schema()`.
+The checks run in Rust on the final state of every node the statement touches (datatype, cardinality, `sh:in`, `sh:pattern`), so an invalid statement sends nothing. Shapes are read once per writing statement, or once per store with `cypher_schema()`. Complete SHACL and ShEx remain rudof's job ([[decisions#D8 rudof engines unchanged through srdf traits]]).

@@ -72,8 +72,6 @@ Status: planned (spec only).
 
 openCypher reads and writes over the RDF store, with OWL-aware matching and SHACL shapes as the property-graph schema. Change: `m7-cypher`.
 
-Scope: [[architecture#Property graph frontend]] and decisions D13–D17. The read MVP needs M2 only. Writes need M3, OWL-aware matching M4 and SHACL-aware compilation M5. Estimate: 22–29 person-weeks, 9–12 of them for the read MVP, excluding M4 and M5.
+Scope: [[architecture#Property graph frontend]] and decisions D13–D17. Done when at least 80% of the read-only openCypher TCK scenarios pass (the rest allow-listed), and the specification scenarios pass on rusqlite, dylib and D1.
 
-Done when at least 80% of the read-only openCypher TCK scenarios pass on rusqlite, dylib and D1 (the rest allow-listed), and a differential corpus gives the same answers through SPARQL and Cypher.
-
-Status: planned (spec only).
+Status: done. 3728 of 3880 TCK scenarios pass (96.1%; read-only 96.3%, temporal 100%), with the rest in `crates/oxilite-cypher/tck-allowlist.txt`. The specification scenarios pass on bundled SQLite, the system `libsqlite3`, the D1 code path and Miniflare D1; `@oxilite/node` and `@oxilite/d1` expose `cypher()`.

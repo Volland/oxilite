@@ -624,7 +624,17 @@ impl Compiler<'_> {
     pub(crate) fn var_value(&mut self, v: &Variable, cols: &BTreeMap<usize, Binding>) -> V {
         let idx = self.var(v);
         if let Some(b) = cols.get(&idx) {
-            return b.col.value();
+            let mut value = b.col.value();
+            if value.stat == Stat::Any {
+                if let Some(t) = self.options.var_types.get(v.as_str()) {
+                    value.stat = match t {
+                        super::ValueType::Numeric => Stat::Numeric,
+                        super::ValueType::String => Stat::String,
+                        super::ValueType::Boolean => Stat::Bool,
+                    };
+                }
+            }
+            return value;
         }
         for scope in self.outer.iter().rev() {
             if let Some(b) = scope.get(&idx) {

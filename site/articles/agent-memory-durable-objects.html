@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Graph memory for agents – oxilite</title>
+  <meta name="description" content="Step by step: give every AI agent its own RDF knowledge graph, stored in a Cloudflare Durable Object's SQLite and queried with SPARQL through oxilite.">
+  <meta property="og:title" content="Graph memory for AI agents on Cloudflare Durable Objects">
+  <meta property="og:image" content="../assets/logo.png">
+  <meta name="theme-color" content="#0a0a0a">
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg">
+  <link rel="icon" type="image/png" href="../assets/logo.png">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt=""><span>oxi<b>lite</b></span></a>
+      <nav class="nav" aria-label="Main">
+        <a href="../#articles">Articles</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="article">
+    <article class="wrap">
+      <span class="kicker">Cloudflare · Durable Objects · Agents</span>
+      <h1>Graph memory for AI agents on Durable Objects</h1>
+      <p class="standfirst">Give every agent its own knowledge graph: a Durable Object that stores RDF in its embedded SQLite and answers SPARQL. That takes about 100 lines of TypeScript and no extra infrastructure.</p>
+      <p class="meta">A step-by-step guide · The full, tested example is in <a href="https://github.com/Volland/oxilite/tree/main/examples/do-agent-memory-ts"><code>examples/do-agent-memory-ts</code></a></p>
+
+      <h2>Why an agent needs a graph</h2>
+      <p>Most agent memory today is a vector index: chunks of past conversations, found by similarity. Similarity search is good at "find something like this". It is weak at the questions an agent actually has to answer to act on the user's behalf:</p>
+      <ul>
+        <li><strong>Questions that follow relationships.</strong> "Which time zone should I use for the meeting with Maria?" needs four facts: Maria works at Acme, Acme is part of Globex, Globex is headquartered in Berlin, Berlin is on Europe/Berlin time. These facts came up in different conversations, and none of them mentions the other three. A vector search for "Maria meeting" finds none of the last three. A graph query follows the edges.</li>
+        <li><strong>Knowing where a fact came from.</strong> Did the user say this, or did a CRM export? When? An agent that can't tell a user's statement from a scraped web page will eventually act on the wrong one. In RDF, every fact can sit in a <em>named graph</em> that records its source.</li>
+        <li><strong>Changing its mind.</strong> People change their preferences, jobs and addresses. A graph lets the agent replace a fact in one atomic update (delete the old value, insert the new one) instead of piling up contradicting text chunks and hoping retrieval picks the latest.</li>
+        <li><strong>Exact answers.</strong> "How many open tickets does this customer have?" is a count, not a similarity score. Graph queries return exactly what matches, and the query can be shown to a person and checked.</li>
+        <li><strong>Shared meaning.</strong> An ontology can say that an <code>Employee</code> is a <code>Person</code>, or that <code>manages</code> is the inverse of <code>reportsTo</code>. oxilite applies RDFS and OWL rules at query time, so the agent doesn't have to store every implied fact.</li>
+      </ul>
+      <p>None of this replaces vector search. The two work well together: embeddings find the entry point ("which node is this conversation about?") and the graph answers the structured question from there.</p>
+
+      <h2>Why a Durable Object</h2>
+      <p>A <a href="https://developers.cloudflare.com/durable-objects/">Durable Object</a> is a small, stateful server that Cloudflare runs for you. Each object has a unique name, handles its requests one at a time, and can have its own SQLite database stored next to it. That fits agent memory unusually well:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Property</th><th>What it gives agent memory</th></tr></thead>
+          <tbody>
+            <tr><td>One object per name</td><td><code>idFromName("ada")</code> always reaches the same object, so each agent or user gets a private graph. There are no tenant filters to forget.</td></tr>
+            <tr><td>Embedded SQLite</td><td>SQL runs in the same process as your code. oxilite's 1–2 statements per query cost local SQLite time, not network round trips.</td></tr>
+            <tr><td>One request at a time</td><td>Two tool calls can't interleave their writes, and <code>transactionSync</code> makes a multi-statement write atomic.</td></tr>
+            <tr><td>Hibernation</td><td>An idle object costs nothing. The graph stays on disk and is there the next time the agent wakes up.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>D1 is still the better choice for one large, shared graph that many Workers read. A Durable Object is the better choice for many small, private graphs, one per agent, user or conversation. oxilite's core doesn't care which one you pick, as the next section shows.</p>
+
+      <h2>How it works</h2>
+      <p>oxilite's core is <em>sans-IO</em>: it turns SPARQL into SQL requests and turns rows back into results, but it never touches a database itself. The <code>@oxilite/d1</code> package runs that core as WebAssembly and needs only two calls from its database: <code>prepare(sql).raw()</code> for a read, and <code>batch(statements)</code> for an atomic write. A Durable Object's <code>ctx.storage.sql</code> can provide both.</p>
+
+      <figure>
+        <svg viewBox="0 0 760 300" role="img" aria-labelledby="flow-title flow-desc">
+          <title id="flow-title">Request flow</title>
+          <desc id="flow-desc">A request reaches the Worker, which routes it by agent name to that agent's Durable Object. Inside the object, the oxilite WebAssembly core compiles SPARQL to SQL, and a small adapter runs it on the object's SQLite.</desc>
+          <defs>
+            <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0a0a0a"/></marker>
+          </defs>
+          <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14">
+            <rect x="10" y="110" width="120" height="70" rx="12" fill="#fff" stroke="#0a0a0a" stroke-width="2"/>
+            <text x="70" y="140" text-anchor="middle" font-weight="700">Agent / LLM</text>
+            <text x="70" y="160" text-anchor="middle" fill="#5c5c5c" font-size="12">tool call</text>
+
+            <rect x="180" y="110" width="130" height="70" rx="12" fill="#fff" stroke="#0a0a0a" stroke-width="2"/>
+            <text x="245" y="140" text-anchor="middle" font-weight="700">Worker</text>
+            <text x="245" y="160" text-anchor="middle" fill="#5c5c5c" font-size="12">idFromName(agent)</text>
+
+            <rect x="360" y="20" width="390" height="260" rx="16" fill="#0a0a0a"/>
+            <text x="380" y="48" fill="#ff6b1a" font-weight="700">Durable Object "ada": GraphMemory</text>
+
+            <rect x="380" y="70" width="170" height="80" rx="10" fill="#1c1c1c" stroke="#ff6b1a" stroke-width="2"/>
+            <text x="465" y="100" text-anchor="middle" fill="#fff" font-weight="700">oxilite core</text>
+            <text x="465" y="120" text-anchor="middle" fill="#cfcfcf" font-size="12">WebAssembly</text>
+            <text x="465" y="137" text-anchor="middle" fill="#cfcfcf" font-size="12">SPARQL → SQL → results</text>
+
+            <rect x="570" y="70" width="160" height="80" rx="10" fill="#1c1c1c" stroke="#fff" stroke-width="1.5"/>
+            <text x="650" y="100" text-anchor="middle" fill="#fff" font-weight="700">do-sql adapter</text>
+            <text x="650" y="120" text-anchor="middle" fill="#cfcfcf" font-size="12">raw() · batch()</text>
+            <text x="650" y="137" text-anchor="middle" fill="#cfcfcf" font-size="12">transactionSync</text>
+
+            <rect x="380" y="180" width="350" height="80" rx="10" fill="#ff6b1a"/>
+            <text x="555" y="212" text-anchor="middle" fill="#0a0a0a" font-weight="700">ctx.storage.sql: embedded SQLite</text>
+            <text x="555" y="234" text-anchor="middle" fill="#0a0a0a" font-size="12">quads · terms · triple_terms · statistics</text>
+          </g>
+          <g fill="none" stroke="#0a0a0a" stroke-width="2">
+            <path d="M130 145 H176" marker-end="url(#ah)"/>
+            <path d="M310 145 H356" marker-end="url(#ah)"/>
+          </g>
+          <g fill="none" stroke="#fff" stroke-width="2">
+            <path d="M550 110 H566"/>
+            <path d="M650 150 V176"/>
+          </g>
+        </svg>
+        <figcaption>Each agent name maps to one Durable Object. Inside it, the same oxilite core that runs on D1 compiles the query, and a 30-line adapter runs the SQL on the object's own SQLite.</figcaption>
+      </figure>
+
+      <h2><span class="step">1</span>Configure the Worker</h2>
+      <p>Declare one Durable Object class and bind it as <code>MEMORY</code>. The <code>new_sqlite_classes</code> migration gives the class SQLite storage.</p>
+      <span class="filename">wrangler.toml</span>
+<pre><code>name = "oxilite-agent-memory"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+
+[[durable_objects.bindings]]
+name = "MEMORY"
+class_name = "GraphMemory"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GraphMemory"]</code></pre>
+      <p>Install the package with <code>npm install @oxilite/d1</code>. It contains the WebAssembly core, so the project needs no Rust toolchain.</p>
+
+      <h2><span class="step">2</span>Adapt the object's SQLite</h2>
+      <p>This is the only new piece. It presents <code>ctx.storage.sql</code> in the shape the oxilite driver expects:</p>
+      <ul>
+        <li>a read is one <code>exec</code>, returned as arrays of column values;</li>
+        <li>an atomic batch runs inside <code>transactionSync</code>, so it commits entirely or not at all;</li>
+        <li>each statement reports how many rows it changed, measured with <code>total_changes()</code>, because the core uses those counts (for example, to tell whether a graph already existed).</li>
+      </ul>
+      <span class="filename">src/do-sql.ts</span>
+<pre><code><span class="k">import</span> type { D1DatabaseLike } <span class="k">from</span> <span class="s">"@oxilite/d1"</span>;
+
+<span class="k">interface</span> Statement {
+  sql: string;
+  raw(): Promise&lt;unknown[][]&gt;;
+}
+
+<span class="k">export function</span> durableObjectDatabase(storage: DurableObjectStorage): D1DatabaseLike {
+  <span class="k">const</span> exec = (sql: string) =&gt; storage.sql.exec(sql).raw().toArray() <span class="k">as</span> unknown[][];
+  <span class="k">const</span> totalChanges = () =&gt; Number(exec(<span class="s">"SELECT total_changes()"</span>)[0][0]);
+  <span class="k">return</span> {
+    prepare(sql: string): Statement {
+      <span class="k">return</span> { sql, raw: <span class="k">async</span> () =&gt; exec(sql) };
+    },
+    <span class="k">async</span> batch(statements) {
+      <span class="k">return</span> storage.transactionSync(() =&gt;
+        (statements <span class="k">as</span> Statement[]).map((s) =&gt; {
+          <span class="k">const</span> before = totalChanges();
+          <span class="k">const</span> rows = exec(s.sql);
+          <span class="k">const</span> changes = totalChanges() - before;
+          <span class="c">// The driver reads each row with Object.values(), which returns an array's items in order.</span>
+          <span class="k">return</span> { results: rows <span class="k">as unknown as</span> Record&lt;string, unknown&gt;[], meta: { changes } };
+        }),
+      );
+    },
+  };
+}</code></pre>
+      <p>The adapter is short because the hard parts stay in the core: the SQL it generates already fits SQLite without extensions, keeps every write inside one batch, and selects 60-bit term ids as text so JavaScript numbers don't lose precision. The SQLite limits oxilite already respects on D1 apply here too.</p>
+
+      <h2><span class="step">3</span>Write the Durable Object</h2>
+      <p><code>GraphMemory</code> opens the store once, in <code>blockConcurrencyWhile</code>, so the schema exists before the first request. Opening is idempotent: the first time it creates the tables, and afterwards it finds them. The public methods become RPC methods the Worker can call directly.</p>
+      <span class="filename">src/index.ts: the object</span>
+<pre><code><span class="k">import</span> { DurableObject } <span class="k">from</span> <span class="s">"cloudflare:workers"</span>;
+<span class="k">import</span> { D1Store } <span class="k">from</span> <span class="s">"@oxilite/d1"</span>;
+<span class="k">import</span> wasm <span class="k">from</span> <span class="s">"@oxilite/d1/oxilite.wasm"</span>;
+<span class="k">import</span> { durableObjectDatabase } <span class="k">from</span> <span class="s">"./do-sql"</span>;
+
+<span class="k">type</span> Store = Awaited&lt;ReturnType&lt;<span class="k">typeof</span> D1Store.open&gt;&gt;;
+
+<span class="k">interface</span> Env {
+  MEMORY: DurableObjectNamespace&lt;GraphMemory&gt;;
+}
+
+<span class="k">export class</span> GraphMemory <span class="k">extends</span> DurableObject&lt;Env&gt; {
+  <span class="k">private</span> store!: Store;
+
+  <span class="k">constructor</span>(ctx: DurableObjectState, env: Env) {
+    <span class="k">super</span>(ctx, env);
+    ctx.blockConcurrencyWhile(<span class="k">async</span> () =&gt; {
+      <span class="k">this</span>.store = <span class="k">await</span> D1Store.open(durableObjectDatabase(ctx.storage), { wasm });
+    });
+  }
+
+  <span class="c">/** Adds facts, in Turtle, to one named graph: the provenance of the facts. */</span>
+  <span class="k">async</span> remember(turtle: string, source: string): Promise&lt;void&gt; {
+    <span class="k">await this</span>.store.load(turtle, {
+      format: <span class="s">"text/turtle"</span>,
+      to_graph_name: { termType: <span class="s">"NamedNode"</span>, value: source },
+    });
+  }
+
+  <span class="c">/** SPARQL JSON results; `reasoning` applies RDFS or OWL QL entailment at query time. */</span>
+  <span class="k">async</span> query(sparql: string, reasoning?: <span class="s">"rdfs"</span> | <span class="s">"owl-ql"</span>): Promise&lt;string&gt; {
+    <span class="k">if</span> (!reasoning) <span class="k">return this</span>.store.queryJson(sparql);
+    <span class="k">return</span> (<span class="k">await this</span>.store.query(sparql, {
+      reasoning, results_format: <span class="s">"application/sparql-results+json"</span>,
+    })) <span class="k">as</span> string;
+  }
+
+  <span class="k">async</span> update(sparql: string): Promise&lt;void&gt; {
+    <span class="k">await this</span>.store.update(sparql);      <span class="c">// one transaction</span>
+  }
+
+  explain(sparql: string): string {
+    <span class="k">return this</span>.store.explain(sparql);    <span class="c">// the SQL, the join order, warnings</span>
+  }
+}</code></pre>
+
+      <h2><span class="step">4</span>Route requests to the right agent</h2>
+      <p>The Worker is a thin router. It turns the agent name in the path into a Durable Object id and calls the object's methods over RPC. Requests for <code>ada</code> reach Ada's graph wherever in the world they arrive.</p>
+      <span class="filename">src/index.ts: the Worker</span>
+<pre><code><span class="k">export default</span> {
+  <span class="k">async</span> fetch(req: Request, env: Env): Promise&lt;Response&gt; {
+    <span class="k">const</span> url = <span class="k">new</span> URL(req.url);
+    <span class="k">const</span> m = url.pathname.match(<span class="s">/^\/agents\/([\w-]+)\/(remember|sparql|update|explain)$/</span>);
+    <span class="k">if</span> (!m) <span class="k">return new</span> Response(<span class="s">"not found"</span>, { status: 404 });
+    <span class="k">const</span> [, agent, action] = m;
+    <span class="k">const</span> memory = env.MEMORY.get(env.MEMORY.idFromName(agent));
+    <span class="k">try</span> {
+      <span class="k">switch</span> (action) {
+        <span class="k">case</span> <span class="s">"remember"</span>:
+          <span class="k">await</span> memory.remember(<span class="k">await</span> req.text(), url.searchParams.get(<span class="s">"source"</span>) ?? <span class="s">`urn:agent:${agent}:inbox`</span>);
+          <span class="k">return new</span> Response(<span class="k">null</span>, { status: 204 });
+        <span class="k">case</span> <span class="s">"sparql"</span>: {
+          <span class="k">const</span> reasoning = url.searchParams.get(<span class="s">"reasoning"</span>);
+          <span class="k">if</span> (reasoning &amp;&amp; reasoning !== <span class="s">"rdfs"</span> &amp;&amp; reasoning !== <span class="s">"owl-ql"</span>) <span class="k">throw new</span> Error(<span class="s">"reasoning must be rdfs or owl-ql"</span>);
+          <span class="k">return new</span> Response(<span class="k">await</span> memory.query(<span class="k">await</span> req.text(), reasoning ?? <span class="k">undefined</span>), {
+            headers: { <span class="s">"content-type"</span>: <span class="s">"application/sparql-results+json"</span> },
+          });
+        }
+        <span class="k">case</span> <span class="s">"update"</span>:
+          <span class="k">await</span> memory.update(<span class="k">await</span> req.text());
+          <span class="k">return new</span> Response(<span class="k">null</span>, { status: 204 });
+        <span class="k">default</span>:
+          <span class="k">return new</span> Response(<span class="k">await</span> memory.explain(url.searchParams.get(<span class="s">"query"</span>) ?? <span class="s">""</span>));
+      }
+    } <span class="k">catch</span> (e) {
+      <span class="k">return new</span> Response(e <span class="k">instanceof</span> Error ? e.message : String(e), { status: 400 });
+    }
+  },
+};</code></pre>
+
+      <h2><span class="step">5</span>Try it</h2>
+      <p>Run <code>npx wrangler dev</code>, then teach the agent a few facts. Each call names its source, which becomes the named graph that holds those facts.</p>
+<pre><code><span class="c"># from a chat with the user</span>
+curl -X POST 'localhost:8787/agents/ada/remember?source=urn:chat:1' --data-binary '
+  @prefix ex: &lt;http://example.com/&gt; .
+  ex:maria ex:worksAt ex:acme ; ex:prefers ex:email .
+  ex:acme ex:partOf ex:globex .
+  ex:globex ex:headquarteredIn ex:berlin .'
+
+<span class="c"># from a CRM export</span>
+curl -X POST 'localhost:8787/agents/ada/remember?source=urn:crm:export' --data-binary '
+  @prefix ex: &lt;http://example.com/&gt; .
+  ex:berlin ex:timezone "Europe/Berlin" .'</code></pre>
+
+      <h3>A multi-hop question</h3>
+      <p>Which time zone should the meeting with Maria use? The property path <code>ex:partOf*/ex:headquarteredIn</code> climbs the company hierarchy to any depth, and the answer combines facts from two sources:</p>
+<pre><code>curl -X POST localhost:8787/agents/ada/sparql --data-binary '
+  PREFIX ex: &lt;http://example.com/&gt;
+  SELECT ?tz WHERE {
+    GRAPH ?g1 { ex:maria ex:worksAt ?org }
+    GRAPH ?g2 { ?org ex:partOf*/ex:headquarteredIn ?city }
+    GRAPH ?g3 { ?city ex:timezone ?tz }
+  }'
+<span class="c"># → ?tz = "Europe/Berlin"</span></code></pre>
+      <p>The whole query, recursion included, compiles to one SQL statement. On a Durable Object that statement runs in-process.</p>
+
+      <h3>Where did a fact come from?</h3>
+<pre><code>PREFIX ex: &lt;http://example.com/&gt;
+SELECT ?p ?o ?source WHERE { GRAPH ?source { ex:maria ?p ?o } }
+<span class="c"># → worksAt acme   urn:chat:1</span>
+<span class="c">#   prefers email  urn:chat:1</span></code></pre>
+
+      <h3>Changing its mind</h3>
+      <p>Maria says she now prefers chat. One SPARQL update removes the old preference, from whichever source it came from, and records the new one with its own provenance. It runs as a single transaction, so a crash can't leave Maria with two preferences or none.</p>
+<pre><code>curl -X POST localhost:8787/agents/ada/update --data-binary '
+  PREFIX ex: &lt;http://example.com/&gt;
+  DELETE { GRAPH ?g { ex:maria ex:prefers ?old } }
+  INSERT { GRAPH &lt;urn:chat:2&gt; { ex:maria ex:prefers ex:chat } }
+  WHERE  { GRAPH ?g { ex:maria ex:prefers ?old } }'</code></pre>
+      <p>And a second agent, <code>bob</code>, sees none of it: <code>/agents/bob/sparql</code> reaches a different object with a different database.</p>
+
+      <h2>Giving the graph to a model</h2>
+      <p>To let a model use this memory, expose two tools that map onto the routes above. Put the tool definitions in whatever format your model API expects. The important decisions are in the descriptions and in what each tool is allowed to do.</p>
+<pre><code>[
+  {
+    "name": "remember",
+    "description": "Store durable facts about the user or their world as Turtle triples. Use the prefix ex: &lt;http://example.com/&gt;. Only store facts the user stated or that came from a trusted tool.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "turtle": { "type": "string" },
+        "source": { "type": "string", "description": "Where the facts came from, e.g. urn:chat:42" }
+      },
+      "required": ["turtle", "source"]
+    }
+  },
+  {
+    "name": "recall",
+    "description": "Answer a question from memory with a read-only SPARQL SELECT or ASK query. Use GRAPH ?source to see where facts came from.",
+    "input_schema": {
+      "type": "object",
+      "properties": { "query": { "type": "string" } },
+      "required": ["query"]
+    }
+  }
+]</code></pre>
+      <ul>
+        <li><strong><code>recall</code> can't write.</strong> It goes to <code>queryJson</code>, which parses a SPARQL <em>query</em>. An <code>INSERT</code> or <code>DELETE</code> is rejected as a syntax error, so a confused model can't damage its memory while reading.</li>
+        <li><strong>Revisions go through your code.</strong> Keep the <code>/update</code> route for logic you control, such as "replace this preference", rather than handing the model arbitrary updates.</li>
+        <li><strong>Errors help the model fix its query.</strong> Parse errors come back as text. Returning them as the tool result usually lets the model correct its query on the next try.</li>
+        <li><strong>Provenance is automatic.</strong> Because every <code>remember</code> call names a source, the model can weigh "the user said" against "a web page said" when facts disagree.</li>
+      </ul>
+
+      <h2>What to know before production</h2>
+      <ul>
+        <li><strong>Test status.</strong> D1 is oxilite's tested Cloudflare target: the W3C SPARQL suites run on it. The Durable Object adapter in this article is an example, with its own end-to-end test on Miniflare's SQLite-backed Durable Objects (<code>node test.mjs</code>). It isn't yet part of the full W3C runs.</li>
+        <li><strong>Size.</strong> A Durable Object's storage has a per-object size limit, so plan for one graph per agent or user, not one giant graph. For a large shared knowledge base, use D1 and keep per-agent memory in Durable Objects.</li>
+        <li><strong>Statistics.</strong> After a large import, call <code>store.optimize()</code> so the planner knows which predicates are rare. It reads the whole table, so run it occasionally, not on every write.</li>
+        <li><strong>Reasoning.</strong> Add <code>?reasoning=rdfs</code> to a query and the engine applies the ontology at query time, just as on D1. Store <code>ex:Employee rdfs:subClassOf ex:Person</code> once, and a question about people also finds Maria, who was only ever recorded as an employee. The example's test checks exactly that.</li>
+      </ul>
+
+      <div class="callout">
+        <p><strong>The takeaway.</strong> A Durable Object gives each agent a private, transactional SQLite database. oxilite turns that database into a knowledge graph the agent can query across relationships, trace back to sources, and update as facts change. The adapter between the two is about 30 lines, because oxilite's core was built to run on any SQLite it's given.</p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt="" width="28" height="28"><span>oxilite</span></a>
+      <span>MIT or Apache-2.0</span>
+      <nav aria-label="Rechtliches">
+        <a href="../impressum.html">Impressum</a>
+        <a href="../datenschutz.html">Datenschutz</a>
+        <a href="../agb.html">AGB</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>

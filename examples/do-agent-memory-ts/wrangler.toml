@@ -1,0 +1,11 @@
+name = "oxilite-agent-memory"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+
+[[durable_objects.bindings]]
+name = "MEMORY"
+class_name = "GraphMemory"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GraphMemory"]

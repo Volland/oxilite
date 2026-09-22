@@ -21,6 +21,8 @@
 
 mod async_store;
 mod common;
+#[cfg(feature = "cypher")]
+mod cypher_store;
 mod partial;
 pub mod store;
 
@@ -63,6 +65,12 @@ pub mod sparql {
     pub mod results {
         pub use sparesults::*;
     }
+}
+
+/// openCypher over the property-graph view of the dataset (`Store::cypher`).
+#[cfg(feature = "cypher")]
+pub mod cypher {
+    pub use oxilite_cypher::*;
 }
 
 /// The in-process SQLite backend (bundled SQLite, UDFs).

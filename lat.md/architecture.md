@@ -21,7 +21,7 @@ The workspace splits a pure, I/O-free core from thin backends and bindings, so t
 | `oxilite-compat` (`testsuite/`) | Compatibility harness: Oxigraph's W3C runner and store tests run on oxilite, see [[test-plan#Oxigraph compatibility harness]] |
 | `oxilite-reason` (M4) | TBox closure, query rewriting, OWL 2 RL materialization |
 | `oxilite-validate` (M5) | rudof `srdf` trait implementation and D1 prefetch adapter |
-| `oxilite-cypher` (M7) | openCypher parser, semantic pass, lowering to the core algebra, property-graph result decoding, see [[architecture#Property graph frontend]] |
+| `oxilite-cypher` (M7) | openCypher parser, validation, planning and lowering to SPARQL algebra, the Rust tail (writes, lists, temporal values), see [[architecture#Property graph frontend]] |
 
 Upstream reuse: `oxrdf`, `oxrdfio`/`oxttl`, `spargebra`, `spareval`, `sparesults`, `oxsdatatypes` (Oxigraph 0.5 family, `rdf-12`/`sparql-12` on), rudof's `srdf`/`shacl_*`/`shex_*` (same Oxigraph family), and `reasonable` for OWL 2 RL.
 
@@ -210,38 +210,39 @@ rudof's validators are compiled out on wasm32, so D1 is validated from native co
 
 ## Property graph frontend
 
-Cypher over the same quads as SPARQL: property graphs are an RDF 1.2 view, compiled by the same planner and backends. It is planned in M7 (change `m7-cypher`); see [[decisions#D13 Cypher as a second frontend over the RDF store]].
+Cypher over the same quads as SPARQL: property graphs are an RDF 1.2 view of the dataset, queried through the same compiler, planner and backends. Delivered in M7 by `oxilite-cypher`; see [[decisions#D13 Cypher as a second frontend over the RDF store]].
 
-Pipeline: Cypher text → parser (openCypher 9, GQL-compatible AST) → semantic pass (scopes across `WITH`, vocabulary) → the core `Op` algebra shared with SPARQL ([[decisions#D16 Internal compiler algebra shared by SPARQL and Cypher]]) → blocks, planner and Shallow SQL → a result step that materialises nodes, relationships and paths.
+Pipeline: Cypher text → parser ([[crates/oxilite-cypher/src/parser.rs#parse]]) → validation of scopes and static rules → planning into a SQL part and a Rust *tail* ([[crates/oxilite-cypher/src/plan.rs]]) → lowering of the SQL part to `spargebra` algebra ([[crates/oxilite-cypher/src/lower.rs]]) → the existing SPARQL-to-SQL compiler → the job ([[crates/oxilite-cypher/src/exec.rs#CypherJob]]), which materializes nodes and relationships, runs the tail and applies writes. `Store::cypher`, `AsyncStore::cypher`, the wasm engine and both JavaScript packages drive the same job.
 
 ### Mapping
 
 Nodes are IRIs or blank nodes, labels are `rdf:type`, node properties are literal triples, and relationships are asserted triples. Relationship properties and parallel relationships live on RDF 1.2 reifiers.
 
-A reifier is created only when needed ([[decisions#D14 Relationships as asserted triples, with reifiers only when needed]]). Names map to IRIs through a configurable vocabulary (base IRI in `oxilite_meta`, overrides, and names derived from SHACL). Lists and maps are `rdf:JSON` literals, handled by SQLite JSON1. A property with several RDF values follows a `multi_value` policy (`list`, `first` or `error`). New nodes use the inline GeneratedNode tag ([[decisions#D15 Inline generated node ids]]).
+A reifier (`_:r rdf:reifies <<( a :T b )>>`) is created only when a relationship has properties or is one of several between the same nodes; the triple stays for traversal ([[decisions#D14 Relationships as asserted triples, with reifiers only when needed]]). Names map to IRIs through a vocabulary ([[crates/oxilite-cypher/src/vocab.rs#Vocabulary]]): a base IRI, registered prefixes (`` :`schema:Person` ``), overrides, or absolute IRIs. Lists and maps are `rdf:JSON` literals; temporal values are `xsd:date`, `xsd:time`, `xsd:dateTime` and `xsd:duration` (a zoned datetime gets its own datatype). A property with several values reads as a list (`MultiValue::List`, the default), unless a SHACL shape declares `sh:maxCount 1`. Created nodes get a fresh IRI minted in Rust and an `rdf:type rdfs:Resource` marker, so a node without labels or properties still exists ([[decisions#D15 Fresh node IRIs from Rust]]).
 
-### Property-graph operations
+### Planning and lowering
 
-Relationship uniqueness, variable-length patterns, shortest paths and path values extend the SPARQL lowering.
+Reading clauses become one SPARQL query, compiled to SQL; the first clause SQL cannot express starts the Rust tail, and `MERGE` look-ups become optional matches of the SQL part ([[decisions#D16 Lowering to SPARQL algebra, with a Rust tail]]).
 
-- Uniqueness within a `MATCH` is pairwise inequality of relationship identities: the reifier id, or the `(s, p, o)` tuple.
-- `*m..n` reuses the property-path recursive CTE and its seeding ([[architecture#SPARQL to SQL compiler#Property paths]]), adding a depth column and a visited-edge string for trail semantics. Unbounded patterns are depth-capped, and `explain()` warns about them.
-- `shortestPath` is a breadth-first step machine, one request per frontier level, so it runs on D1.
-- Writes use the `update_buffer` pattern in one atomic request ([[architecture#Updates and atomicity]]), and Cypher constraint errors go through an `oxilite_pg_guard` table.
+- `MATCH` patterns become BGPs: the planner orders them and SQLite joins them as for SPARQL. A pattern with alternatives (undirected relationships, variable lengths) becomes a `UNION` of branches; bindings and filters that read variables of earlier clauses are applied after the join, keyed by a branch marker, because SPARQL evaluates sub-patterns on their own.
+- Variables that may be null (from `OPTIONAL MATCH`) are renamed and tied back with an equality, and property reads on them are guarded, so an unbound variable never joins with everything.
+- Relationship uniqueness is pairwise inequality of the relationship triples (and reifiers when named). Variable-length patterns expand into one branch per length with trail filters; an unbounded directed pattern without variables is reachability through a property path (a recursive CTE), which `explain()` notes.
+- `shortestPath` / `allShortestPaths` bind their ends in SQL; the job then searches breadth-first, one SQL request per level for all sources at once, so it runs on D1.
+- A pattern comprehension `[(a)-->(b) WHERE … | expr]` is its own SPARQL query: the pattern joined with the distinct values of the outer variables it reads. The job keys its rows by those values; nodes of an enclosing list comprehension key a per-row map instead.
+- Plain `RETURN` items are evaluated in Rust ([[crates/oxilite-cypher/src/eval.rs]]) — multi-valued properties become lists — while ordering and paging stay in SQL; aggregating projections compile to `GROUP BY`, or run in Rust when they need `collect()`, several `min()`/`max()` or temporal ordering.
+- Temporal values ([[crates/oxilite-cypher/src/temporal.rs]]) follow openCypher: construction from strings and maps, projection, truncation, arithmetic with durations, `duration.between`, and Java's ISO 8601 rendering; named zones use the IANA database bundled by `jiff`.
+
+### Writes
+
+A writing statement reads once, computes its changes in Rust, and applies them as one atomic request — one D1 batch; natively the read and the write share a transaction.
+
+The tail evaluates `CREATE`, `MERGE`, `SET`, `REMOVE` and `DELETE` row by row against an in-memory view of the touched entities. Before writing, two SQL probes fetch what the changes depend on: the edges of deleted nodes, whether created relationships' triples exist, and every reifier of the affected triples. The job then decides reifiers (a single plain relationship stays a triple; parallel ones all get reifiers), removes a triple with its last reifier, and rejects `DELETE` of a node that still has relationships. On D1 another writer may change the data between the read and the batch; the batch itself is atomic.
 
 ### OWL and SHACL awareness
 
-With a reasoning option, labels and relationship types are rewritten through `tbox_closure` ([[architecture#Reasoning]]). Registered SHACL shapes act as the schema that informs compilation and write guards.
+Reasoning options apply to Cypher as to SPARQL: labels match subclasses, relationship types subproperties and inverses ([[architecture#Reasoning]]). SHACL shapes stored in the dataset act as the property-graph schema ([[decisions#D17 SHACL shapes as the property-graph schema]]).
 
-The OWL rewrites are: labels match subclasses, relationship types match subproperties and inverses, and symmetric types match both directions. The shapes are used as follows ([[decisions#D17 SHACL shapes as the property-graph schema]]):
-
-- `maxCount 1` → scalar property;
-- `minCount 1` → inner join;
-- `datatype` → static type;
-- simple constraints → in-batch guards;
-- `db.labels()` and `db.schema()` answers.
-
-Complete validation stays with rudof ([[architecture#Validation]]).
+Shapes loaded with `Store::cypher_schema` (and passed in `CypherOptions::schema`) make `sh:minCount 1` properties join without `OPTIONAL`, `sh:maxCount 1` properties scalar, and `sh:datatype` a value type the compiler uses (`QueryOptions::var_types`: one typed comparison instead of one per possible type). A writing statement checks every node it creates or changes against `sh:datatype`, `sh:minCount`, `sh:maxCount`, `sh:in` and `sh:pattern` of the shapes targeting its labels before sending the batch ([[crates/oxilite-cypher/src/schema.rs#Shapes]]). `CALL db.labels()`, `db.relationshipTypes()`, `db.propertyKeys()` and `db.schema.nodeTypeProperties()` read shapes and data. Complete validation stays with rudof ([[architecture#Validation]]).
 
 ## Bindings
 
@@ -249,6 +250,16 @@ A Node.js package and a Cloudflare D1 package, both typed TypeScript, over the s
 
 `@oxilite/node` (napi-rs) wraps `blocking::Store` on rusqlite or a dlopen'ed library: `query`, `update`, `load`, `dump`, `add`/`delete`, `has`, `match`, `size`, `explain`, `optimize`, `backup`, returning RDF/JS-style term objects. `@oxilite/d1` runs the wasm core against a `D1Database` binding and exposes the same API asynchronously.
 
-`@oxilite/node` loads `oxilite.<platform>-<arch>.node` (then a local `oxilite.node` build) and fails with build instructions when no binary matches; 0.1.0 is published with the darwin-arm64 binary only.
+`@oxilite/node` loads `oxilite.<platform>-<arch>.node` (then a local `oxilite.node` build) and fails with build instructions when no binary matches; 0.1.0 and 0.2.0 are published with the darwin-arm64 binary only.
 
-Both packages share `@oxilite/common` (terms, `DataFactory`, result conversion). The native addon and the wasm engine exchange the same JSON terms and outputs (see [[crates/oxilite-core/src/json.rs]]), so a query returns identical JavaScript values on either. Oxigraph's own `store.test.ts` runs unchanged against `@oxilite/node`; its single failure is the allow-listed merge semantics of `default_graph` lists (D12). Example Workers exist in Rust (`examples/d1-worker`) and TypeScript (`examples/d1-worker-ts`), each with a Miniflare end-to-end test.
+Both packages also expose `cypher(query, params, options)` and `explainCypher()`: parameters and options travel as JSON ([[crates/oxilite-cypher/src/json.rs]]), and results are plain objects (`CypherNode`, `CypherRelationship`, `CypherPath`, temporal values as ISO strings) with `records` keyed by column. The wasm engine builds Cypher by default (feature `cypher`; `cypher-lite` leaves out the bundled time zone database).
+
+Both packages share `@oxilite/common` (terms, `DataFactory`, result conversion). The native addon and the wasm engine exchange the same JSON terms and outputs (see [[crates/oxilite-core/src/json.rs]]), so a query returns identical JavaScript values on either. Oxigraph's own `store.test.ts` runs unchanged against `@oxilite/node`; its single failure is the allow-listed merge semantics of `default_graph` lists (D12). Example Workers exist in Rust (`examples/d1-worker`) and TypeScript (`examples/d1-worker-ts`), each with a Miniflare end-to-end test. `examples/do-agent-memory-ts` runs `@oxilite/d1` on a Durable Object's SQLite: a D1-shaped adapter over `ctx.storage.sql` maps `raw()` to `exec` and `batch()` to `transactionSync`, and reports per-statement changes from `total_changes()`. It is tested on Miniflare but is not part of the W3C runs.
+
+## Project website
+
+A static site in `site/` (landing page, articles in `site/articles/`, and German Impressum, Datenschutz and AGB) is deployed to GitHub Pages by `.github/workflows/pages.yml` on pushes to `main`.
+
+The site is plain HTML and one stylesheet in a white, black and orange palette. It loads no external fonts, scripts or trackers, which keeps the Datenschutz page to GitHub's hosting logs only. The logo (`site/assets/logo.svg`, rendered to `logo.png` with `rsvg-convert`) combines a SQLite-style tile, a quill drawn as a graph, and a small edge-worker cloud.
+
+The Cypher article describes M7 from its specification and marks the Cypher syntax as planned; its RDF 1.2 and SPARQL examples are run against the current release.

@@ -20,6 +20,8 @@ dylib = ["dep:oxilite-dylib"]
 d1 = ["dep:oxilite-d1"]
 # OWL 2 RL materialization with the `reasonable` reasoner (native, in memory).
 reasonable = ["dep:oxilite-reason"]
+# openCypher over the property-graph view of the dataset.
+cypher = ["dep:oxilite-cypher"]
 
 [dependencies]
 oxilite-core.workspace = true
@@ -27,6 +29,7 @@ oxilite-rusqlite = { workspace = true, optional = true }
 oxilite-dylib = { workspace = true, optional = true }
 oxilite-d1 = { workspace = true, optional = true }
 oxilite-reason = { workspace = true, optional = true }
+oxilite-cypher = { workspace = true, optional = true }
 oxrdf.workspace = true
 oxrdfio.workspace = true
 spargebra.workspace = true

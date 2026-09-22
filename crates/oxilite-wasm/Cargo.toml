@@ -13,11 +13,19 @@ categories.workspace = true
 rust-version.workspace = true
 publish = false
 
+[features]
+default = ["cypher"]
+# openCypher over the property-graph view, with the IANA time zone database for named zones.
+cypher = ["cypher-lite", "oxilite-cypher/tzdb-bundle"]
+# The Cypher frontend without the time zone database (named zones are errors; ~0.3 MB smaller).
+cypher-lite = ["dep:oxilite-cypher"]
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 oxilite-core = { workspace = true, features = ["serde"] }
+oxilite-cypher = { workspace = true, optional = true }
 oxrdf.workspace = true
 oxrdfio.workspace = true
 spargebra.workspace = true

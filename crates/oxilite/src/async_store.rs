@@ -22,8 +22,8 @@ use std::io::{Read, Write};
 
 /// An RDF dataset in a SQLite-compatible engine reached asynchronously.
 pub struct AsyncStore<B: AsyncBackend> {
-    backend: B,
-    stats: RefCell<Stats>,
+    pub(crate) backend: B,
+    pub(crate) stats: RefCell<Stats>,
 }
 
 impl<B: AsyncBackend> AsyncStore<B> {
@@ -53,7 +53,7 @@ impl<B: AsyncBackend> AsyncStore<B> {
         &self.backend
     }
 
-    fn caps(&self) -> &Capabilities {
+    pub(crate) fn caps(&self) -> &Capabilities {
         self.backend.capabilities()
     }
 
@@ -140,7 +140,7 @@ impl<B: AsyncBackend> AsyncStore<B> {
     }
 
     /// Reloads statistics and the in-memory reasoning facts.
-    async fn reload_stats(&self) -> Result<()> {
+    pub(crate) async fn reload_stats(&self) -> Result<()> {
         let stats = run_async(&self.backend, ops::stats_job(self.caps())).await?;
         *self.stats.borrow_mut() = stats;
         Ok(())

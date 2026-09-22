@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Property graphs with Cypher – oxilite</title>
+  <meta name="description" content="How oxilite builds property graphs on RDF 1.2 and the Cypher frontend in development: one dataset, queried with both SPARQL and Cypher, on SQLite and Cloudflare D1.">
+  <meta property="og:title" content="Property graphs on oxilite: the Cypher frontend">
+  <meta property="og:image" content="../assets/logo.png">
+  <meta name="theme-color" content="#0a0a0a">
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg">
+  <link rel="icon" type="image/png" href="../assets/logo.png">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt=""><span>oxi<b>lite</b></span></a>
+      <nav class="nav" aria-label="Main">
+        <a href="../#articles">Articles</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="article">
+    <article class="wrap">
+      <span class="kicker">Cypher · Property graphs · RDF 1.2</span>
+      <h1>Property graphs on oxilite: the Cypher frontend</h1>
+      <p class="standfirst">Nodes with labels, relationships with properties, and <code>MATCH (a)-[:KNOWS]-&gt;(b)</code>, stored in the same SQLite quads that SPARQL queries. Here's how the mapping works, what you can build with it today, and what the Cypher frontend adds.</p>
+      <p class="meta">Design and status · Specification: <a href="https://github.com/Volland/oxilite/tree/main/openspec/changes/m7-cypher"><code>openspec/changes/m7-cypher</code></a></p>
+
+      <div class="callout">
+        <p><strong>Status.</strong> The Cypher frontend is milestone M7 and is in development: the parser, the vocabulary and the lowering to oxilite's compiler are being built now. The Cypher examples below follow the specification and may change before release. Everything under "Build it today" runs on the current release.</p>
+      </div>
+
+      <h2>Two graph models, one store</h2>
+      <p>Many developers think in <em>property graphs</em>: nodes with labels and properties, connected by typed relationships that carry properties of their own. Cypher is the query language most of them know. RDF describes the same world with triples, and adds things property graphs lack: global identifiers, named graphs for provenance, ontologies (OWL) and shapes (SHACL).</p>
+      <p>You usually have to pick one model, or copy data between two databases and keep them in sync. oxilite takes a different route. It stores a property graph <em>as</em> RDF 1.2 and compiles Cypher into the same SQL compiler, planner and backends that SPARQL already uses. The result is one dataset with two query languages:</p>
+      <ul>
+        <li>data written with Cypher can be read with SPARQL, and RDF loaded as Turtle can be read with Cypher;</li>
+        <li>Cypher runs everywhere oxilite runs: bundled SQLite, your own <code>libsqlite3</code>, and Cloudflare D1;</li>
+        <li>the ontology and shapes in the store also apply to Cypher queries.</li>
+      </ul>
+
+      <h2>The mapping</h2>
+      <p>RDF 1.2 added <em>triple terms</em> and <em>reifiers</em>: a node that stands for a statement and can carry properties of its own. That's exactly what a property-graph relationship needs, so the mapping is direct:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Property graph</th><th>RDF 1.2 in oxilite</th></tr></thead>
+          <tbody>
+            <tr><td>Node</td><td>An IRI or a blank node</td></tr>
+            <tr><td>Label <code>:Person</code></td><td><code>rdf:type</code> triple: <code>ex:ada a ex:Person</code></td></tr>
+            <tr><td>Node property</td><td>Literal triple: <code>ex:ada ex:name "Ada"</code></td></tr>
+            <tr><td>Relationship <code>-[:KNOWS]-&gt;</code></td><td>Asserted triple: <code>ex:ada ex:KNOWS ex:grace</code></td></tr>
+            <tr><td>Relationship property</td><td>On a reifier: <code>_:r rdf:reifies &lt;&lt;( ex:ada ex:KNOWS ex:grace )&gt;&gt; ; ex:since 2019</code></td></tr>
+            <tr><td>Parallel relationships</td><td>Several reifiers of the same triple term</td></tr>
+            <tr><td>List or map property</td><td>An <code>rdf:JSON</code> literal, handled by SQLite's JSON functions</td></tr>
+            <tr><td>Names (labels, types, keys)</td><td>IRIs from a configurable vocabulary: a base IRI, prefixes and overrides</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <figure>
+        <svg viewBox="0 0 760 300" role="img" aria-labelledby="map-title map-desc">
+          <title id="map-title">A relationship with a property, in both models</title>
+          <desc id="map-desc">On the left, the property graph: Ada knows Grace, with property since 2019. On the right, the same data in RDF 1.2: an asserted triple, used for traversal, and a reifier that points at the triple term and holds the since property.</desc>
+          <defs>
+            <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#0a0a0a"/></marker>
+            <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#ff6b1a"/></marker>
+          </defs>
+          <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14">
+            <text x="20" y="30" font-weight="700" fill="#d9520a" font-size="13">PROPERTY GRAPH</text>
+            <circle cx="70" cy="150" r="44" fill="#0a0a0a"/>
+            <text x="70" y="146" text-anchor="middle" fill="#fff" font-weight="700">Ada</text>
+            <text x="70" y="164" text-anchor="middle" fill="#ff6b1a" font-size="12">:Person</text>
+            <circle cx="290" cy="150" r="44" fill="#0a0a0a"/>
+            <text x="290" y="146" text-anchor="middle" fill="#fff" font-weight="700">Grace</text>
+            <text x="290" y="164" text-anchor="middle" fill="#ff6b1a" font-size="12">:Person</text>
+            <path d="M116 150 H240" stroke="#0a0a0a" stroke-width="2.5" marker-end="url(#a1)"/>
+            <rect x="126" y="112" width="104" height="26" rx="13" fill="#fff" stroke="#0a0a0a" stroke-width="1.5"/>
+            <text x="178" y="130" text-anchor="middle" font-weight="700" font-size="13">:KNOWS</text>
+            <text x="178" y="180" text-anchor="middle" fill="#5c5c5c" font-size="13">{since: 2019}</text>
+
+            <line x1="375" y1="30" x2="375" y2="270" stroke="#e6e6e6" stroke-width="2"/>
+
+            <text x="400" y="30" font-weight="700" fill="#d9520a" font-size="13">RDF 1.2 IN OXILITE</text>
+            <rect x="400" y="60" width="340" height="70" rx="10" fill="#0a0a0a"/>
+            <text x="416" y="86" fill="#cfcfcf" font-size="12">asserted triple: one join per hop</text>
+            <text x="416" y="112" fill="#fff" font-family="ui-monospace, Menlo, monospace" font-size="14">ex:ada ex:KNOWS ex:grace</text>
+
+            <rect x="400" y="180" width="340" height="80" rx="10" fill="#fff" stroke="#ff6b1a" stroke-width="2.5"/>
+            <text x="416" y="204" fill="#5c5c5c" font-size="12">reifier: only when needed</text>
+            <text x="416" y="228" font-family="ui-monospace, Menlo, monospace" font-size="13">_:r rdf:reifies &lt;&lt;( … )&gt;&gt;</text>
+            <text x="416" y="248" font-family="ui-monospace, Menlo, monospace" font-size="13">   ex:since 2019</text>
+            <path d="M570 178 V136" stroke="#ff6b1a" stroke-width="2.5" marker-end="url(#a2)"/>
+          </g>
+        </svg>
+        <figcaption>Traversal uses the plain triple, so a hop is one index join. The reifier exists only because this relationship has a property.</figcaption>
+      </figure>
+
+      <p>Two design choices keep this fast on SQLite, and cheap on D1, where every written index row is billed:</p>
+      <ul>
+        <li><strong>A relationship is always a plain triple.</strong> Following <code>-[:KNOWS]-&gt;</code> is one join on a covering index, the same cost as a SPARQL triple pattern. The alternative, a node per relationship, costs two joins per hop and triples the writes.</li>
+        <li><strong>A reifier is created only when needed:</strong> when the relationship has properties, when a second, parallel relationship of the same type connects the same nodes, or when a query needs the relationship's identity. Most relationships in real graphs have no properties, and they never pay for one.</li>
+      </ul>
+
+      <h2>Build it today with RDF 1.2 and SPARQL</h2>
+      <p>The storage side of the mapping already works in the current release, because oxilite supports RDF 1.2 triple terms. Here is a small company graph as a property graph, written in Turtle 1.2. The <code>~ reifier {| … |}</code> annotation syntax asserts a triple and describes it in one step.</p>
+      <span class="filename">company.ttl</span>
+<pre><code>PREFIX ex: &lt;http://ex/&gt;
+
+ex:ada   a ex:Person  ; ex:name "Ada" .
+ex:grace a ex:Person  ; ex:name "Grace" .
+ex:acme  a ex:Company ; ex:name "Acme" .
+
+ex:ada ex:KNOWS    ex:grace ~ ex:k1 {| ex:since 2019 |} .
+ex:ada ex:WORKS_AT ex:acme  ~ ex:w1 {| ex:role "engineer" ; ex:from 2021 |} .
+ex:grace ex:WORKS_AT ex:acme .                <span class="c"># a plain relationship: no reifier</span></code></pre>
+<pre><code>oxilite load -l company.sqlite -f company.ttl</code></pre>
+
+      <p>Who works at Acme, and in what role? The relationship property sits on the reifier, so it's read with an <code>OPTIONAL</code>. Grace's relationship has no properties, and she still appears:</p>
+<pre><code>PREFIX ex: &lt;http://ex/&gt;
+PREFIX rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt;
+SELECT ?name ?role WHERE {
+  ?p a ex:Person ; ex:name ?name ; ex:WORKS_AT ?c .
+  ?c ex:name "Acme" .
+  OPTIONAL { ?r rdf:reifies &lt;&lt;( ?p ex:WORKS_AT ?c )&gt;&gt; ; ex:role ?role }
+} ORDER BY ?name
+<span class="c"># name    role</span>
+<span class="c"># "Ada"   "engineer"</span>
+<span class="c"># "Grace"</span></code></pre>
+
+      <p><code>oxilite explain</code> shows the query is one SQL statement. The planner starts from the rarest pattern, the company named "Acme", and walks out from there. The reifier lookup joins through the <code>triple_terms</code> table:</p>
+<pre><code><span class="c">-- oxilite: fully compiled to SQL (2 output variable(s))</span>
+<span class="c">-- join order (statistics): ?c ex:name "Acme" (~1 rows) → ?p ex:WORKS_AT ?c (~2 rows)</span>
+<span class="c">--   → ?p rdf:type ex:Person (~1 rows) → ?p ex:name ?name (~1 rows)</span>
+<span class="c">-- join order (statistics): ?r ex:role ?role (~1 rows) → ?r rdf:reifies &lt;&lt;( ?p ex:WORKS_AT ?c )&gt;&gt; (~1 rows)</span>
+SELECT q4.o AS v1, q5.o AS v5
+FROM quads q1 CROSS JOIN quads q2 CROSS JOIN quads q3 CROSS JOIN quads q4
+LEFT JOIN (quads q5 CROSS JOIN quads q6 JOIN triple_terms tt7) ON (…)
+WHERE q1.p = … AND q1.o = … AND q2.o = q1.s AND …</code></pre>
+      <p>This is a real property graph, and you can use it now from Rust, Node.js, the CLI or a D1 Worker. What's missing is the Cypher syntax on top.</p>
+
+      <h2>The same graph in Cypher</h2>
+      <p>With the Cypher frontend, the graph above is one <code>CREATE</code>. Names map to IRIs through the store's vocabulary; with the base IRI <code>http://ex/</code>, <code>:Person</code> becomes <code>ex:Person</code> and <code>name</code> becomes <code>ex:name</code>.</p>
+      <span class="filename">planned API</span>
+<pre><code>store.cypher(<span class="s">`
+  CREATE (ada:Person {name: 'Ada'}),
+         (grace:Person {name: 'Grace'}),
+         (acme:Company {name: 'Acme'}),
+         (ada)-[:KNOWS {since: 2019}]-&gt;(grace),
+         (ada)-[:WORKS_AT {role: 'engineer', from: 2021}]-&gt;(acme),
+         (grace)-[:WORKS_AT]-&gt;(acme)
+`</span>);</code></pre>
+      <p>That statement writes the same quads the Turtle file did: two relationships with reifiers, one without. The whole statement is one atomic request, which is a single <code>batch()</code> on D1. New nodes get fresh ids computed inside SQL, with no read-back, so <code>UNWIND range(1, 100) AS i CREATE (:Item {i: i})</code> also creates 100 nodes in one batch.</p>
+
+      <p>The role query becomes:</p>
+<pre><code>MATCH (p:Person)-[w:WORKS_AT]-&gt;(:Company {name: 'Acme'})
+RETURN p.name, w.role
+ORDER BY p.name
+<span class="c">// "Ada"    "engineer"</span>
+<span class="c">// "Grace"  null</span></code></pre>
+      <p>It compiles to the same kind of single SQL statement as the SPARQL version, with the same planner choosing the join order. The specification requires this: a <code>MATCH</code> without variable-length or shortest paths must compile to one statement whenever the equivalent SPARQL would.</p>
+
+      <h3>Cypher semantics, preserved</h3>
+      <p>Cypher isn't just SPARQL with arrows. A few of its rules need their own handling, and the design covers each:</p>
+      <ul>
+        <li><strong>Relationship uniqueness.</strong> Within one <code>MATCH</code>, a relationship can't be used twice. So <code>MATCH (a:Person)-[:WORKS_AT]-&gt;(c)&lt;-[:WORKS_AT]-(b) RETURN a.name, b.name</code> finds colleagues without pairing Ada with herself. The compiler adds pairwise inequality of relationship identities: the reifier, or the <code>(s, p, o)</code> triple when there's no reifier.</li>
+        <li><strong>Variable-length paths.</strong> <code>MATCH (:Person {name: 'Ada'})-[:KNOWS*1..3]-&gt;(f) RETURN f.name</code> reuses the recursive SQL that SPARQL property paths already use. It adds a depth column and a record of visited relationships, so a path never repeats a relationship. Unbounded patterns have a depth cap, and <code>explain()</code> warns about them.</li>
+        <li><strong>Shortest paths.</strong> <code>shortestPath</code> is a breadth-first search that sends one request per frontier level. It doesn't need an interactive transaction, so it works on D1.</li>
+        <li><strong>Result values.</strong> <code>RETURN p</code> gives a node with its labels and properties, and <code>RETURN w</code> a relationship with its type, endpoints and properties. They're built in one extra batched request for all rows.</li>
+        <li><strong>Several values for one property.</strong> RDF allows <code>ex:tag "a", "b"</code>, and Cypher expects one value per key. A per-store policy reads these values as a list (the default), keeps the first, or raises an error.</li>
+      </ul>
+
+      <h3>Writes</h3>
+<pre><code>MERGE (p:Person {name: 'Linus'})
+  ON CREATE SET p.source = 'import'
+
+MATCH (a:Person {name: 'Ada'}), (l:Person {name: 'Linus'})
+CREATE (a)-[:KNOWS {since: 2024}]-&gt;(l)
+
+MATCH (n:Person {name: 'Linus'}) DETACH DELETE n</code></pre>
+      <p><code>CREATE</code>, <code>MERGE</code>, <code>SET</code>, <code>REMOVE</code>, <code>DELETE</code> and <code>DETACH DELETE</code> each run as one atomic request. They use the same staging table as SPARQL's <code>DELETE/INSERT … WHERE</code>, so the reading part is evaluated before anything changes. <code>DETACH DELETE</code> also removes the reifiers of the node's relationships. Deleting one of two parallel relationships removes only its reifier and keeps the shared triple. A <code>DELETE</code> of a node that still has relationships fails, and leaves the store unchanged.</p>
+
+      <h2>What RDF gives Cypher</h2>
+      <p>Because the property graph <em>is</em> RDF, it can use the ontology and the shapes stored beside it. That's hard to get from a native property-graph engine.</p>
+
+      <h3>OWL: smarter matching</h3>
+      <p>With the same per-query reasoning option SPARQL uses, labels and relationship types are rewritten through the ontology at compile time. That needs no extra requests and no extra writes.</p>
+<pre><code><span class="c"># in the store</span>
+ex:Employee rdfs:subClassOf ex:Person .
+ex:hasParent owl:inverseOf ex:hasChild .
+
+<span class="c">// with reasoning: "rdfs"</span>
+MATCH (p:Person) RETURN p              <span class="c">// also returns every ex:Employee</span>
+
+<span class="c">// with reasoning: "owl-ql"</span>
+MATCH (c)-[:hasParent]-&gt;(p) RETURN c, p  <span class="c">// also finds pairs stored only as p ex:hasChild c</span></code></pre>
+
+      <h3>SHACL: shapes as the schema</h3>
+      <p>Property graphs are usually schemaless. RDF has SHACL, and oxilite uses registered shapes as the property-graph schema:</p>
+      <ul>
+        <li><code>sh:maxCount 1</code> makes a property a scalar, so it's never read as a list;</li>
+        <li><code>sh:minCount 1</code> lets the compiler use an inner join instead of a <code>LEFT JOIN</code>;</li>
+        <li><code>sh:datatype</code> gives a property a static type, which simplifies generated comparisons;</li>
+        <li>simple constraints (datatype, cardinality, class, <code>sh:in</code>, simple patterns) are checked inside the same batch as a write. A <code>CREATE (:Person {age: 'old'})</code> against a shape that requires an integer age fails as a whole, on D1 too;</li>
+        <li><code>CALL db.labels()</code>, <code>db.relationshipTypes()</code> and <code>db.schema()</code> are answered from the shapes and the planner statistics.</li>
+      </ul>
+      <p>Complete SHACL and ShEx validation stays with rudof, as it does for SPARQL users today.</p>
+
+      <h2>Why not a separate graph engine?</h2>
+      <p>The obvious alternative is a native property-graph layout: <code>nodes</code> and <code>edges</code> tables with JSON properties. It would make relationship properties cheaper. It would also mean a second storage engine across four backends, a second planner, no SPARQL over the same data, and an invented OWL and SHACL layer. The project estimates that at 30–40 person-weeks, against 22–29 for the frontend, and it would win only for write-heavy workloads dominated by relationship properties that need none of RDF's features. Building Cypher as a second frontend keeps one store, one planner and one set of backends, and every improvement to them helps both languages.</p>
+
+      <h2>Roadmap</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Stage</th><th>Scope</th></tr></thead>
+          <tbody>
+            <tr><td>Mapping and parser</td><td>The vocabulary configuration; an openCypher 9 parser with a GQL-compatible syntax tree; scopes across <code>WITH</code></td></tr>
+            <tr><td>Shared compiler algebra</td><td>An internal algebra that both SPARQL and Cypher lower into, gated on the full W3C SPARQL suites staying green</td></tr>
+            <tr><td>Read MVP</td><td><code>MATCH</code>, <code>OPTIONAL MATCH</code>, <code>WITH</code>, aggregates, <code>UNWIND</code>, <code>UNION</code>, node and relationship values</td></tr>
+            <tr><td>Paths</td><td>Relationship uniqueness, variable-length patterns, shortest paths, path values</td></tr>
+            <tr><td>Writes</td><td><code>CREATE</code>, <code>MERGE</code>, <code>SET</code>, <code>REMOVE</code>, <code>DELETE</code>, generated node ids</td></tr>
+            <tr><td>OWL and SHACL</td><td>Reasoning-aware labels and types, shape-informed compilation, in-batch guards, schema procedures</td></tr>
+            <tr><td>Bindings and tests</td><td><code>cypher()</code> on every store and package; the openCypher TCK (target: at least 80% of read-only scenarios); a differential corpus that asks the same questions in SPARQL and Cypher</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Out of scope for the first release: full GQL (the syntax tree is designed to grow into it), the Bolt protocol and Neo4j drivers, <code>owl:sameAs</code>, point and duration types, and APOC-style procedures.</p>
+
+      <div class="callout">
+        <p><strong>Start now.</strong> Model your property graph in RDF 1.2 as shown above: labels as types, relationships as triples, and relationship properties on reifiers. It works with SPARQL today, and it's the layout the Cypher frontend is specified to read and write. Use the same base IRI for your names, and Cypher can read the data directly when it lands.</p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt="" width="28" height="28"><span>oxilite</span></a>
+      <span>MIT or Apache-2.0</span>
+      <nav aria-label="Rechtliches">
+        <a href="../impressum.html">Impressum</a>
+        <a href="../datenschutz.html">Datenschutz</a>
+        <a href="../agb.html">AGB</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>

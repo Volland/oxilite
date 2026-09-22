@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>oxilite: SPARQL on SQLite</title>
+  <meta name="description" content="An Oxigraph-compatible RDF database and SPARQL engine that uses SQLite as its storage engine. Runs anywhere SQLite runs, including Cloudflare D1.">
+  <meta property="og:title" content="oxilite: SPARQL on SQLite">
+  <meta property="og:description" content="An Oxigraph-compatible RDF database that runs anywhere SQLite runs, including Cloudflare D1.">
+  <meta property="og:image" content="assets/logo.png">
+  <meta name="theme-color" content="#0a0a0a">
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
+  <link rel="icon" type="image/png" href="assets/logo.png">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="./"><img src="assets/logo.svg" alt=""><span>oxi<b>lite</b></span></a>
+      <nav class="nav" aria-label="Main">
+        <a href="#features" class="hide-sm">Features</a>
+        <a href="#start" class="hide-sm">Get started</a>
+        <a href="#d1" class="hide-sm">Cloudflare D1</a>
+        <a href="#articles">Articles</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="wrap">
+        <div>
+          <span class="eyebrow">RDF · SPARQL 1.1 · SQLite</span>
+          <h1>A knowledge graph in <em>plain SQLite</em>.</h1>
+          <p class="lead">oxilite is an Oxigraph-compatible RDF database and SPARQL engine that stores everything in SQLite. It runs anywhere SQLite runs: your laptop, your app, and Cloudflare D1 at the edge.</p>
+          <div class="actions">
+            <a class="btn btn-primary" href="#start">Get started</a>
+            <a class="btn btn-ghost" href="https://github.com/Volland/oxilite">View on GitHub</a>
+          </div>
+        </div>
+        <img class="hero-logo" src="assets/logo.svg" alt="oxilite logo: a database tile with a quill drawn as a graph and a small cloud worker">
+      </div>
+    </section>
+
+    <section class="band-black">
+      <div class="wrap">
+        <h2>Oxigraph semantics, SQLite everywhere<span class="dot">.</span></h2>
+        <p class="sub">Oxigraph stores data in RocksDB, which needs native code and a filesystem. oxilite keeps the same data model, the same SPARQL semantics and the same Rust API, but uses only plain SQL on a standard SQLite. No extensions and no custom functions are required.</p>
+        <div class="backends">
+          <div class="backend"><strong>rusqlite</strong><span>Bundled SQLite, in process. The default for Rust.</span></div>
+          <div class="backend"><strong>dylib</strong><span>Your own <em>libsqlite3</em>, loaded at runtime. Any SQLite ≥ 3.37.</span></div>
+          <div class="backend"><strong>D1 · Rust</strong><span>A Rust Worker talking to <em>worker::D1</em>.</span></div>
+          <div class="backend"><strong>D1 · wasm</strong><span>The core compiled to WebAssembly with a TypeScript driver on <em>env.DB</em>.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="features">
+      <div class="wrap">
+        <h2>Built around how SQLite runs queries<span class="dot">.</span></h2>
+        <p class="sub">Using SQLite as a triple store is not new. oxilite adds a design shaped by SQLite's executor and by the cost of a <em>remote</em> SQLite, where every round-trip and every index row is billed.</p>
+        <div class="grid">
+          <div class="card"><h3>One statement per query</h3><p>Joins, OPTIONAL, UNION, MINUS, aggregates, property paths and ORDER BY compile into a single <code>SELECT</code>. A query costs 1–2 round-trips.</p></div>
+          <div class="card"><h3>Hash ids in Rust</h3><p>Each term becomes a tagged 64-bit integer. Writes never read back, and SPARQL constants become integer literals at compile time.</p></div>
+          <div class="card"><h3>Inline values</h3><p>Integers and booleans live inside the id and sort by value, so <code>FILTER(?age &gt; 30)</code> becomes an id range with no join.</p></div>
+          <div class="card"><h3>Covering indexes</h3><p><code>WITHOUT ROWID</code> quads clustered on <code>spog</code> plus <code>posg</code> and <code>ospg</code>. Every scan is index-only.</p></div>
+          <div class="card"><h3>Its own planner</h3><p>Per-predicate and per-class statistics drive join order, enforced with <code>CROSS JOIN</code>. <code>explain()</code> shows the SQL.</p></div>
+          <div class="card"><h3>Atomic writes</h3><p>Every update, including <code>DELETE/INSERT … WHERE</code>, is one self-reading batch. That fits D1, where <code>batch()</code> is the only transaction.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="band-soft">
+      <div class="wrap">
+        <h2>Tested against Oxigraph<span class="dot">.</span></h2>
+        <p class="sub">Compatibility is measured, not assumed: Oxigraph's own W3C manifest runner, its store API tests and its JavaScript tests run against oxilite, plus a differential corpus on both engines.</p>
+        <div class="stats">
+          <div class="stat"><b>100%</b><span>of the W3C SPARQL 1.1 query suite passes</span></div>
+          <div class="stat"><b>95%</b><span>of evaluations run fully as SQL</span></div>
+          <div class="stat"><b>1–2</b><span>round-trips per query, on D1 too</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="start">
+      <div class="wrap">
+        <h2>Get started<span class="dot">.</span></h2>
+        <p class="sub">Pick your platform. The API mirrors Oxigraph, so existing code usually needs only a changed import.</p>
+
+        <div class="tabs" role="tablist" aria-label="Platform">
+          <button class="tab" role="tab" id="tab-rust" aria-controls="p-rust" aria-selected="true">Rust</button>
+          <button class="tab" role="tab" id="tab-node" aria-controls="p-node" aria-selected="false" tabindex="-1">Node.js</button>
+          <button class="tab" role="tab" id="tab-cli" aria-controls="p-cli" aria-selected="false" tabindex="-1">CLI</button>
+        </div>
+
+        <div class="panel" role="tabpanel" id="p-rust" aria-labelledby="tab-rust">
+<pre><code><span class="c"># Cargo.toml: oxilite = "0.1"   (features: rusqlite (default), dylib, d1, reasonable)</span>
+<span class="k">use</span> oxilite::store::Store;             <span class="c">// was: use oxigraph::store::Store;</span>
+<span class="k">use</span> oxilite::io::RdfFormat;
+
+<span class="k">let</span> store = Store::open(<span class="s">"data.sqlite"</span>)?;
+store.load_from_reader(RdfFormat::Turtle, TURTLE.as_bytes())?;
+store.query(<span class="s">"SELECT ?s WHERE { ?s a &lt;http://schema.org/Person&gt; }"</span>)?;
+store.update(<span class="s">"INSERT DATA { &lt;http://ex/a&gt; &lt;http://ex/p&gt; 42 }"</span>)?;
+store.optimize()?;                     <span class="c">// refresh planner statistics</span></code></pre>
+        </div>
+
+        <div class="panel" role="tabpanel" id="p-node" aria-labelledby="tab-node" hidden>
+<pre><code><span class="c">// npm install @oxilite/node</span>
+<span class="k">import</span> { Store } <span class="k">from</span> <span class="s">"@oxilite/node"</span>;
+
+<span class="k">const</span> store = <span class="k">new</span> Store(<span class="s">"data.sqlite"</span>);
+store.load(<span class="s">`@prefix ex: &lt;http://ex/&gt; . ex:a ex:knows ex:b .`</span>, { format: <span class="s">"text/turtle"</span> });
+
+<span class="k">for</span> (<span class="k">const</span> row <span class="k">of</span> store.query(<span class="s">"SELECT ?x WHERE { ?x ?p ?o }"</span>)) {
+  console.log(row.get(<span class="s">"x"</span>)?.value);
+}</code></pre>
+        </div>
+
+        <div class="panel" role="tabpanel" id="p-cli" aria-labelledby="tab-cli" hidden>
+<pre><code>cargo install oxilite-cli
+oxilite load    -l data.sqlite -f dump.nt            <span class="c"># bulk load, then refresh statistics</span>
+oxilite query   -l data.sqlite -q <span class="s">'SELECT * WHERE { ?s ?p ?o } LIMIT 5'</span>
+oxilite explain -l data.sqlite -q <span class="s">'…'</span>              <span class="c"># the SQL and the join order</span>
+oxilite serve   -l data.sqlite -b 127.0.0.1:7879     <span class="c"># /query, /update, /store</span></code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="d1" class="band-black">
+      <div class="wrap">
+        <h2>SPARQL at the edge with Cloudflare D1<span class="dot">.</span></h2>
+        <p class="sub"><code>@oxilite/d1</code> runs the oxilite core as WebAssembly inside your Worker. The core compiles SPARQL to SQL, the driver sends it to <code>env.DB</code>, and the core decodes the rows. No Rust toolchain is needed in your project.</p>
+<pre><code><span class="k">import</span> { D1Store } <span class="k">from</span> <span class="s">"@oxilite/d1"</span>;
+<span class="k">import</span> wasm <span class="k">from</span> <span class="s">"@oxilite/d1/oxilite.wasm"</span>;
+
+<span class="k">export default</span> {
+  <span class="k">async</span> fetch(req: Request, env: { DB: D1Database }) {
+    <span class="k">const</span> store = <span class="k">await</span> D1Store.open(env.DB, { wasm, migrated: <span class="k">true</span> });
+    <span class="k">const</span> q = <span class="k">new</span> URL(req.url).searchParams.get(<span class="s">"query"</span>) ?? <span class="s">"ASK { ?s ?p ?o }"</span>;
+    <span class="k">return new</span> Response(<span class="k">await</span> store.queryJson(q), {
+      headers: { <span class="s">"content-type"</span>: <span class="s">"application/sparql-results+json"</span> },
+    });
+  },
+};</code></pre>
+        <p style="margin-top:20px">Every write is one D1 batch, constants are inlined to stay under the bound-parameter limit, and large UNIONs are nested to fit D1's parser limits. <a href="https://github.com/Volland/oxilite#using-oxilite-with-cloudflare-d1">Read the D1 guide →</a></p>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <h2>Reasoning and validation included<span class="dot">.</span></h2>
+        <p class="sub">The pieces a knowledge graph needs, reused from the Rust RDF ecosystem.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Capability</th><th>How</th></tr></thead>
+            <tbody>
+              <tr><td>RDFS / OWL QL</td><td>Per-query entailment by rewriting against a materialized TBox closure. Queries stay single statements.</td></tr>
+              <tr><td>OWL 2 RL</td><td><code>materialize()</code> with SQL fixpoint rules on every backend, or natively with <em>reasonable</em>.</td></tr>
+              <tr><td>SHACL / ShEx</td><td>rudof validators, unchanged, in <code>oxilite-validate</code>. Results match rudof's in-memory graph.</td></tr>
+              <tr><td>Full-text search</td><td>FTS5 behind <code>oxl:textMatch</code>, on D1 too.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+    <section id="articles" class="band-soft">
+      <div class="wrap">
+        <h2>Articles<span class="dot">.</span></h2>
+        <p class="sub">Guides and design notes: what you can build with oxilite and how it works inside.</p>
+        <div class="articles">
+          <a class="article-card" href="articles/agent-memory-durable-objects.html">
+            <span class="kicker">Cloudflare · Agents</span>
+            <h3>Graph memory for AI agents on Durable Objects</h3>
+            <p>Give every agent a private knowledge graph in a Durable Object's SQLite. A step-by-step guide covering multi-hop recall, provenance, belief revision and LLM tools.</p>
+            <span class="more">Read the guide →</span>
+          </a>
+          <a class="article-card" href="articles/property-graphs-cypher.html">
+            <span class="kicker">Cypher · RDF 1.2</span>
+            <h3>Property graphs on oxilite: the Cypher frontend</h3>
+            <p>How nodes, labels and relationship properties map onto RDF 1.2, what you can build with SPARQL today, and how Cypher compiles to the same SQL.</p>
+            <span class="more">Read the design →</span>
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <a class="brand" href="./"><img src="assets/logo.svg" alt="" width="28" height="28"><span>oxilite</span></a>
+      <span>MIT or Apache-2.0</span>
+      <nav aria-label="Rechtliches">
+        <a href="impressum.html">Impressum</a>
+        <a href="datenschutz.html">Datenschutz</a>
+        <a href="agb.html">AGB</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      var tabs = Array.prototype.slice.call(document.querySelectorAll('[role="tab"]'));
+      function select(tab) {
+        tabs.forEach(function (t) {
+          var on = t === tab;
+          t.setAttribute('aria-selected', on);
+          t.tabIndex = on ? 0 : -1;
+          document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+        });
+        tab.focus();
+      }
+      tabs.forEach(function (t, i) {
+        t.addEventListener('click', function () { select(t); });
+        t.addEventListener('keydown', function (e) {
+          if (e.key === 'ArrowRight') select(tabs[(i + 1) % tabs.length]);
+          if (e.key === 'ArrowLeft') select(tabs[(i - 1 + tabs.length) % tabs.length]);
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

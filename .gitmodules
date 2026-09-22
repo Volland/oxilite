@@ -10,3 +10,6 @@
 [submodule "bench/bsbm-tools"]
 	path = bench/bsbm-tools
 	url = https://github.com/Tpt/bsbm-tools.git
+[submodule "testsuite/openCypher"]
+	path = testsuite/openCypher
+	url = https://github.com/opencypher/openCypher.git

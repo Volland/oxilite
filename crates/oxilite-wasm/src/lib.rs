@@ -279,6 +279,112 @@ impl Engine {
         Ok(self.reloading(job, oxilite_core::reason::update_touches_schema(&u)))
     }
 
+    #[cfg(feature = "cypher-lite")]
+    /// A Cypher statement over the property-graph view (see `oxilite-cypher`). `params` and
+    /// `options` are JSON (`oxilite_cypher::json`). The result is `{"kind": "cypher",
+    /// "columns", "rows", "stats"}`; a writing statement applies its changes as one atomic
+    /// request (one D1 batch).
+    pub fn cypher(
+        &self,
+        query: &str,
+        params: Option<String>,
+        options: Option<String>,
+    ) -> Result<Job, JsError> {
+        let (job, opts) = self.cypher_job(query, params, options)?;
+        let mut sql = oxilite_cypher::SqlCypherJob::new(
+            job,
+            self.stats.borrow().clone(),
+            self.caps.clone(),
+            opts.query.clone(),
+        );
+        let stats = Rc::clone(&self.stats);
+        let caps = self.caps.clone();
+        let mut value: Option<Value> = None;
+        let mut reloader: Option<oxilite_core::job::OneShot<Stats>> = None;
+        Ok(Job {
+            step: Box::new(move |r| {
+                if let Some(j) = reloader.as_mut() {
+                    return match j.step(r)? {
+                        Step::Execute(q) => Ok(Step::Execute(q)),
+                        Step::Done(s) => {
+                            *stats.borrow_mut() = s;
+                            Ok(Step::Done(value.take().unwrap_or(Value::Null)))
+                        }
+                    };
+                }
+                let step = match sql.step(r) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        return Err(match sql.take_error() {
+                            Some(c) => Error::Other(c.to_string()),
+                            None => e,
+                        })
+                    }
+                };
+                match step {
+                    Step::Execute(q) => Ok(Step::Execute(q)),
+                    Step::Done(res) => {
+                        let mut v = res.to_json();
+                        v["kind"] = json!("cypher");
+                        if !res.schema_changed {
+                            return Ok(Step::Done(v));
+                        }
+                        // Ontology triples changed: reload the reasoning facts.
+                        value = Some(v);
+                        match reloader.insert(ops::stats_job(&caps)).step(None)? {
+                            Step::Execute(q) => Ok(Step::Execute(q)),
+                            Step::Done(s) => {
+                                *stats.borrow_mut() = s;
+                                Ok(Step::Done(value.take().unwrap_or(Value::Null)))
+                            }
+                        }
+                    }
+                }
+            }),
+        })
+    }
+
+    #[cfg(feature = "cypher-lite")]
+    fn cypher_job(
+        &self,
+        query: &str,
+        params: Option<String>,
+        options: Option<String>,
+    ) -> Result<(oxilite_cypher::CypherJob, oxilite_cypher::CypherOptions), JsError> {
+        let params = match params {
+            Some(p) => oxilite_cypher::json::params_from_json(&p).map_err(js)?,
+            None => oxilite_cypher::Params::new(),
+        };
+        let opts = match options {
+            Some(o) => oxilite_cypher::json::options_from_json(&o).map_err(js)?,
+            None => oxilite_cypher::CypherOptions::default(),
+        };
+        let job = oxilite_cypher::prepare_for(query, &params, &opts, &self.caps).map_err(js)?;
+        Ok((job, opts))
+    }
+
+    /// How a Cypher statement runs: its SPARQL, the SQL it compiles to, and what runs in Rust.
+    #[cfg(feature = "cypher-lite")]
+    #[wasm_bindgen(js_name = explainCypher)]
+    pub fn explain_cypher(
+        &self,
+        query: &str,
+        params: Option<String>,
+        options: Option<String>,
+    ) -> Result<String, JsError> {
+        let (job, opts) = self.cypher_job(query, params, options)?;
+        let mut out = job.explain();
+        let _ = &opts;
+        for (q, o) in job.queries() {
+            match compile_query(q, &self.stats.borrow(), &self.caps, &o) {
+                Ok(c) => out.push_str(&c.explain()),
+                Err(e) => out.push_str(&format!("-- oxilite: unsupported on this backend: {e}")),
+            }
+            out.push('\n');
+        }
+        Ok(out)
+    }
+
     /// How an update would run (SQL per operation).
     #[wasm_bindgen(js_name = explainUpdate)]
     pub fn explain_update(&self, sparql: &str) -> Result<String, JsError> {

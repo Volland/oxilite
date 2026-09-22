@@ -1,0 +1,8 @@
+{
+  "name": "oxilite-cypher-property-graph",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node test.mjs" },
+  "dependencies": { "@oxilite/node": "0.1.0", "@oxilite/d1": "0.1.0" },
+  "devDependencies": { "miniflare": "^4" }
+}

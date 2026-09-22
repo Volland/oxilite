@@ -6,6 +6,11 @@
 
 import { createRequire } from "node:module";
 import {
+  type CypherOptions,
+  type CypherOutput,
+  type CypherResult,
+  type CypherValue,
+  cypherResult,
   type DumpOptions,
   type LoadData,
   type LoadOptions,
@@ -24,6 +29,8 @@ export * from "@oxilite/common";
 interface NativeStoreInstance {
   query(sparql: string, options?: string | null): string;
   explain(sparql: string): string;
+  cypher(query: string, params?: string | null, options?: string | null): string;
+  explainCypher(query: string, params?: string | null, options?: string | null): string;
   update(sparql: string, baseIri?: string | null): void;
   explainUpdate(sparql: string): string;
   load(data: string, format: string, baseIri: string | null, toGraph: string | null, bulk: boolean): void;
@@ -117,6 +124,21 @@ export class Store {
   /** The SQL a query compiles to, with join orders and warnings. */
   explain(query: string): string {
     return this.native.explain(query);
+  }
+
+  /**
+   * A Cypher statement over the property-graph view of the dataset: nodes are IRIs, labels
+   * `rdf:type`, properties literal triples, relationships triples (with properties on an RDF
+   * 1.2 reifier). A writing statement is applied atomically.
+   */
+  cypher(query: string, params: Record<string, CypherValue> = {}, options: CypherOptions = {}): CypherResult {
+    const out = JSON.parse(this.native.cypher(query, JSON.stringify(params), JSON.stringify(options))) as CypherOutput;
+    return cypherResult(out);
+  }
+
+  /** How a Cypher statement runs: its SPARQL, the SQL it compiles to, and what runs in Rust. */
+  explainCypher(query: string, params: Record<string, CypherValue> = {}, options: CypherOptions = {}): string {
+    return this.native.explainCypher(query, JSON.stringify(params), JSON.stringify(options));
   }
 
   /** SPARQL update, applied atomically. */

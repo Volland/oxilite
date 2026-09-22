@@ -131,7 +131,7 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
         &self.inner.backend
     }
 
-    fn caps(&self) -> &Capabilities {
+    pub(crate) fn caps(&self) -> &Capabilities {
         self.inner.backend.capabilities()
     }
 
@@ -139,7 +139,11 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
         run_sync(&*self.inner.backend, job)
     }
 
-    fn evaluate(&self, query: &spargebra::Query, options: &QueryOptions) -> Result<QueryOutput> {
+    pub(crate) fn evaluate(
+        &self,
+        query: &spargebra::Query,
+        options: &QueryOptions,
+    ) -> Result<QueryOutput> {
         let compiled = {
             let stats = self
                 .inner
@@ -394,7 +398,7 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
         Ok(())
     }
 
-    fn reload_stats(&self) -> Result<()> {
+    pub(crate) fn reload_stats(&self) -> Result<()> {
         let stats = self.run(ops::stats_job(self.caps()))?;
         *self
             .inner

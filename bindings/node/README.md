@@ -14,4 +14,4 @@ for (const row of store.query("SELECT ?x WHERE { ?x ?p ?o }") as Map<string, Ter
 
 Beyond Oxigraph's API: `explain`, `bulkLoad`, `optimize`, `backup`, `materialize` (OWL 2 RL, SQL rules or the `reasonable` reasoner), query options `reasoning: "rdfs" | "owl-ql"` and `include_inferred`, and full-text search with `{ textIndex: true }`.
 
-**Platforms.** Version 0.1.0 ships a prebuilt binary for macOS on Apple silicon (`darwin-arm64`). On other platforms, build it from a checkout of the [oxilite repository](https://github.com/Volland/oxilite) with `npm run build:native -w @oxilite/node`.
+**Platforms.** Version 0.2.0 ships a prebuilt binary for macOS on Apple silicon (`darwin-arm64`). On other platforms, build it from a checkout of the [oxilite repository](https://github.com/Volland/oxilite) with `npm run build:native -w @oxilite/node`.
