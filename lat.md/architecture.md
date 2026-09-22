@@ -314,9 +314,11 @@ Both packages share `@oxilite/common` (terms, `DataFactory`, result conversion).
 
 ## Project website
 
-A static site in `site/` (landing page, articles in `site/articles/`, and German Impressum, Datenschutz and AGB) is served at oxilitedb.com by a Cloudflare Worker in `site-worker/`, deployed by `.github/workflows/site.yml` on pushes to `main`.
+A static site in `site/` (landing page, articles, and German Impressum, Datenschutz and AGB) is served at oxilitedb.com by a Cloudflare Worker in `site-worker/`, deployed by `.github/workflows/site.yml` on pushes to `main`.
 
 The Worker ([[site-worker/src/index.js]]) serves `site/` as static assets with `run_worker_first`, so every response gets security headers (CSP, HSTS, `X-Frame-Options`) and `X-Robots-Tag: noai`. It redirects `www` to the apex and answers 403 to AI training crawlers by user agent ([[site-worker/src/index.js#isBlockedAgent]]); `robots.txt` stays readable to all. `site/robots.txt` lists the same crawlers and sets `Content-Signal: search=yes, ai-input=yes, ai-train=no`, so search engines and AI search tools that cite the site are allowed. Bot Fight Mode and Block AI bots are Cloudflare dashboard settings, not code.
+
+Articles live in `site/articles/`, one HTML file each, behind an index at `site/articles/index.html`. Every page's menu carries an Articles entry pointing at `/articles`, where that index lists them all as cards, grouped by topic; the landing page keeps its own `#articles` section of the same cards and links through to the index. `html_handling: auto-trailing-slash` in `site-worker/wrangler.jsonc` maps `/articles` to that index.
 
 The site is plain HTML and one stylesheet in a white, black and orange palette. It loads no external fonts, scripts or trackers, which keeps the Datenschutz page to Cloudflare's hosting logs and its bot-protection cookies. The logo (`site/assets/logo.svg`, rendered to `logo.png` with `rsvg-convert`) combines a SQLite-style tile, a quill drawn as a graph, and a small edge-worker cloud.
 

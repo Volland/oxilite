@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://oxilitedb.com/</loc></url>
+  <url><loc>https://oxilitedb.com/articles</loc></url>
   <url><loc>https://oxilitedb.com/articles/agent-memory-durable-objects</loc></url>
   <url><loc>https://oxilitedb.com/articles/property-graphs-cypher</loc></url>
   <url><loc>https://oxilitedb.com/articles/verifiable-credentials-jsonld</loc></url>

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Articles – oxilite</title>
+  <meta name="description" content="Guides and design notes on oxilite: Verifiable Credentials and JSON-LD in SQLite, querying them with SPARQL and Cypher, property graphs, and graph memory for AI agents on Cloudflare Durable Objects.">
+  <meta property="og:title" content="oxilite articles">
+  <meta property="og:description" content="Guides and design notes: what you can build with oxilite and how it works inside.">
+  <meta property="og:image" content="../assets/logo.png">
+  <meta name="theme-color" content="#0a0a0a">
+  <link rel="canonical" href="https://oxilitedb.com/articles">
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg">
+  <link rel="icon" type="image/png" href="../assets/logo.png">
+  <link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt=""><span>oxi<b>lite</b></span></a>
+      <nav class="nav" aria-label="Main">
+        <a href="../">Home</a>
+        <a href="./" aria-current="page">Articles</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="index-head">
+      <div class="wrap">
+        <span class="eyebrow">Guides · design notes</span>
+        <h1>Articles<span class="dot">.</span></h1>
+        <p class="sub">What you can build with oxilite and how it works inside. Every walkthrough on this page is asserted by a runnable example in the repository, on <code>@oxilite/node</code> and on Cloudflare D1.</p>
+      </div>
+    </section>
+
+    <section class="band-soft index-list">
+      <div class="wrap">
+        <h2>JSON-LD and Verifiable Credentials<span class="dot">.</span></h2>
+        <p class="sub">Keep documents exactly as issued, and still ask questions of what they claim.</p>
+        <div class="articles">
+          <a class="article-card" href="verifiable-credentials-jsonld.html">
+            <span class="kicker">JSON-LD · Verifiable Credentials</span>
+            <h3>Verifiable Credentials and JSON-LD, in SQLite</h3>
+            <p>Keep credentials exactly as issued and query their claims with SPARQL: one named graph per credential, indexed metadata and offline contexts, on Node.js, Rust and D1.</p>
+            <span class="more">Read the walkthrough →</span>
+          </a>
+          <a class="article-card" href="querying-jsonld-credentials.html">
+            <span class="kicker">JSON-LD · SPARQL · Cypher</span>
+            <h3>Ask your credentials anything</h3>
+            <p>Query JSON-LD documents and Verifiable Credentials by provenance, joins, typed dates, RDFS reasoning and full-text search, then match them as a Cypher graph. Every query is a tested example.</p>
+            <span class="more">Take the query tour →</span>
+          </a>
+        </div>
+
+        <h2 class="group">Graphs and agents<span class="dot">.</span></h2>
+        <p class="sub">The property graph frontend, and a private knowledge graph for every agent at the edge.</p>
+        <div class="articles">
+          <a class="article-card" href="property-graphs-cypher.html">
+            <span class="kicker">Cypher · RDF 1.2</span>
+            <h3>Property graphs on oxilite, with Cypher</h3>
+            <p>Build a property graph with Cypher, read it with SPARQL, and let OWL and SHACL shape the answers. A tested walkthrough on Node.js, Rust and D1.</p>
+            <span class="more">Read the walkthrough →</span>
+          </a>
+          <a class="article-card" href="agent-memory-durable-objects.html">
+            <span class="kicker">Cloudflare · Agents</span>
+            <h3>Graph memory for AI agents on Durable Objects</h3>
+            <p>Give every agent a private knowledge graph in a Durable Object's SQLite. A step-by-step guide covering multi-hop recall, provenance, belief revision and LLM tools.</p>
+            <span class="more">Read the guide →</span>
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt="" width="28" height="28"><span>oxilite</span></a>
+      <span>MIT or Apache-2.0</span>
+      <nav aria-label="Rechtliches">
+        <a href="../impressum.html">Impressum</a>
+        <a href="../datenschutz.html">Datenschutz</a>
+        <a href="../agb.html">AGB</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>
