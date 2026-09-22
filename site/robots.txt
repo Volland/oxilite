@@ -2,7 +2,7 @@
 #
 # Search engines and AI search/answer tools that cite and link back are welcome.
 # Collecting this site's content to train or fine-tune AI models is not permitted.
-# Crawlers listed below are also refused at the server (HTTP 403).
+# Crawlers listed below are asked to stay out entirely.
 
 User-agent: GPTBot
 User-agent: ClaudeBot
