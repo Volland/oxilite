@@ -59,3 +59,21 @@ Status: done. BSBM runs against Oxigraph 0.5.11 with the official tools, results
 Done when both packages have passing test suites and typed examples in the README.
 
 Status: done. Both packages are tested with vitest (Oxigraph's own JS store tests included for `@oxilite/node`, Miniflare D1 for `@oxilite/d1`), and both example Workers pass end-to-end tests.
+
+## JSON-LD and Verifiable Credentials
+
+Store JSON-LD documents verbatim in a keyed table and their RDF in a named graph per document (by default the credential `id`), queryable with SPARQL. Change: `jsonld-vc-storage`.
+
+Two opt-in crates: `oxilite-jsonld` (generic, on the `json-ld` crate) and `oxilite-vc` (credentials profile, on `ssi-vc` and `ssi-json-ld`). Done when the offline W3C `toRdf` tests and the VC fixtures pass on rusqlite, dylib and D1.
+
+Status: planned (spec only).
+
+## M7 Cypher and property graphs
+
+openCypher reads and writes over the RDF store, with OWL-aware matching and SHACL shapes as the property-graph schema. Change: `m7-cypher`.
+
+Scope: [[architecture#Property graph frontend]] and decisions D13–D17. The read MVP needs M2 only. Writes need M3, OWL-aware matching M4 and SHACL-aware compilation M5. Estimate: 22–29 person-weeks, 9–12 of them for the read MVP, excluding M4 and M5.
+
+Done when at least 80% of the read-only openCypher TCK scenarios pass on rusqlite, dylib and D1 (the rest allow-listed), and a differential corpus gives the same answers through SPARQL and Cypher.
+
+Status: planned (spec only).

@@ -71,3 +71,33 @@ SPARQL leaves the relative order of incomparable literals undefined. Oxigraph so
 When a query's default graph is the merge of several graphs (several `FROM` clauses, or the union-default-graph option), a triple present in more than one of them matches once.
 
 This is the RDF merge the SPARQL specification requires. Oxigraph concatenates the graphs and can return duplicate solutions; the divergence is allow-listed in the compatibility harness (`corpus:from-two`).
+
+## D13 Cypher as a second frontend over the RDF store
+
+Cypher is lowered into the same compiler, planner and backends as SPARQL, over the same quads. It does not run on a separate engine with a native property-graph layout. Planned in M7.
+
+OWL and SHACL are defined over RDF, so they apply to property graphs only when those graphs are stored as RDF. A native layout (`nodes` and `edges` tables with JSON properties) would make relationship properties cheaper, but it would duplicate four backends and the planner, lose SPARQL interop, and need an invented OWL/SHACL mapping. It is estimated at 30–40 person-weeks, against 22–29. See [[architecture#Property graph frontend]].
+
+## D14 Relationships as asserted triples, with reifiers only when needed
+
+A relationship `(a)-[:T]->(b)` is always the triple `a :T b`, so a hop is one join. An RDF 1.2 reifier is added only for relationship properties, parallel relationships or relationship identity.
+
+Parallel relationships are several reifiers of one triple term. The asserted triple is deleted with its last reifier, checked in the same batch. Modelling every relationship as an intermediate node was rejected: it costs two joins per hop and triples write billing on D1. Reaching a traversed triple's reifier needs an optional `triple_terms(s, p, o)` index, kept optional as in [[decisions#D3 Three covering permutations plus optional graph index]].
+
+## D15 Inline generated node ids
+
+Nodes created by Cypher get a new inline GeneratedNode tag (tag 8) whose random payload determines the IRI `urn:oxilite:n:<hex>`, so SQL can create fresh nodes per row.
+
+D1 has no UDFs, so SQL cannot compute xxh3. An inline tag avoids both a `terms` row and a read-back, as inline integers do in [[decisions#D2 Tagged 64-bit hash ids with inline small values]]. The encoder maps every IRI of that form to the tag, so one IRI never has two ids.
+
+## D16 Internal compiler algebra shared by SPARQL and Cypher
+
+The compiler gets an internal `Op` algebra that both `spargebra` and Cypher lower into. It adds property-graph operations SPARQL lacks: relationship uniqueness, trail variable-length paths, shortest path, path values, lists and maps.
+
+Today the compiler matches on `spargebra::GraphPattern` directly. Encoding property-graph operations as special `SERVICE` patterns was rejected as fragile. The refactor lands first, alone, and is gated on the W3C suites and the differential corpus.
+
+## D17 SHACL shapes as the property-graph schema
+
+Registered SHACL shapes act as the Cypher schema. `maxCount 1` makes a property scalar, `minCount 1` allows inner joins and `datatype` gives static types. Simple constraints are checked inside the write batch.
+
+Guards abort the whole D1 batch through an `oxilite_pg_guard` CHECK table, which is the same pattern `oxilite_guard` uses for SPARQL UPDATE. Complete SHACL and ShEx remain rudof's job ([[decisions#D8 rudof engines unchanged through srdf traits]]). The shapes also drive `db.labels()` and `db.schema()`.

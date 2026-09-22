@@ -21,6 +21,7 @@ The workspace splits a pure, I/O-free core from thin backends and bindings, so t
 | `oxilite-compat` (`testsuite/`) | Compatibility harness: Oxigraph's W3C runner and store tests run on oxilite, see [[test-plan#Oxigraph compatibility harness]] |
 | `oxilite-reason` (M4) | TBox closure, query rewriting, OWL 2 RL materialization |
 | `oxilite-validate` (M5) | rudof `srdf` trait implementation and D1 prefetch adapter |
+| `oxilite-cypher` (M7) | openCypher parser, semantic pass, lowering to the core algebra, property-graph result decoding, see [[architecture#Property graph frontend]] |
 
 Upstream reuse: `oxrdf`, `oxrdfio`/`oxttl`, `spargebra`, `spareval`, `sparesults`, `oxsdatatypes` (Oxigraph 0.5 family, `rdf-12`/`sparql-12` on), rudof's `srdf`/`shacl_*`/`shex_*` (same Oxigraph family), and `reasonable` for OWL 2 RL.
 
@@ -206,6 +207,41 @@ It depends on the umbrella crate, so it is added next to it rather than behind a
 `StoreGraph` implements `Rdf + NeighsRDF + QueryRDF` over a blocking `Store` (default graph, or all graphs merged): neighbourhood lookups are SQL pattern scans and rudof's SPARQL-mode validation runs through the oxilite compiler. SHACL uses rudof's `shacl` crate (native and SPARQL engines), ShEx `shex_validation` with compact shape maps. On the W3C SHACL core suite and the shexTest validation suite, reports over a store equal rudof's over its in-memory graph, on bundled SQLite and the system `libsqlite3`.
 
 rudof's validators are compiled out on wasm32, so D1 is validated from native code over any `AsyncBackend` (D1's HTTP API, or the Miniflare sidecar in tests). A prefetch loads what the shapes need into rudof's in-memory graph: targets (target classes, nodes, subjects/objects of target predicates with their triples, implicit class targets), the class hierarchy, and a breadth-first neighbourhood (outgoing triples, incoming ones for inverse-path predicates) to a configured depth, one request per hop and chunk of nodes. Beyond `max_triples` it fails with `Error::TooLarge` (limit and size found) instead of truncating.
+
+## Property graph frontend
+
+Cypher over the same quads as SPARQL: property graphs are an RDF 1.2 view, compiled by the same planner and backends. It is planned in M7 (change `m7-cypher`); see [[decisions#D13 Cypher as a second frontend over the RDF store]].
+
+Pipeline: Cypher text → parser (openCypher 9, GQL-compatible AST) → semantic pass (scopes across `WITH`, vocabulary) → the core `Op` algebra shared with SPARQL ([[decisions#D16 Internal compiler algebra shared by SPARQL and Cypher]]) → blocks, planner and Shallow SQL → a result step that materialises nodes, relationships and paths.
+
+### Mapping
+
+Nodes are IRIs or blank nodes, labels are `rdf:type`, node properties are literal triples, and relationships are asserted triples. Relationship properties and parallel relationships live on RDF 1.2 reifiers.
+
+A reifier is created only when needed ([[decisions#D14 Relationships as asserted triples, with reifiers only when needed]]). Names map to IRIs through a configurable vocabulary (base IRI in `oxilite_meta`, overrides, and names derived from SHACL). Lists and maps are `rdf:JSON` literals, handled by SQLite JSON1. A property with several RDF values follows a `multi_value` policy (`list`, `first` or `error`). New nodes use the inline GeneratedNode tag ([[decisions#D15 Inline generated node ids]]).
+
+### Property-graph operations
+
+Relationship uniqueness, variable-length patterns, shortest paths and path values extend the SPARQL lowering.
+
+- Uniqueness within a `MATCH` is pairwise inequality of relationship identities: the reifier id, or the `(s, p, o)` tuple.
+- `*m..n` reuses the property-path recursive CTE and its seeding ([[architecture#SPARQL to SQL compiler#Property paths]]), adding a depth column and a visited-edge string for trail semantics. Unbounded patterns are depth-capped, and `explain()` warns about them.
+- `shortestPath` is a breadth-first step machine, one request per frontier level, so it runs on D1.
+- Writes use the `update_buffer` pattern in one atomic request ([[architecture#Updates and atomicity]]), and Cypher constraint errors go through an `oxilite_pg_guard` table.
+
+### OWL and SHACL awareness
+
+With a reasoning option, labels and relationship types are rewritten through `tbox_closure` ([[architecture#Reasoning]]). Registered SHACL shapes act as the schema that informs compilation and write guards.
+
+The OWL rewrites are: labels match subclasses, relationship types match subproperties and inverses, and symmetric types match both directions. The shapes are used as follows ([[decisions#D17 SHACL shapes as the property-graph schema]]):
+
+- `maxCount 1` → scalar property;
+- `minCount 1` → inner join;
+- `datatype` → static type;
+- simple constraints → in-batch guards;
+- `db.labels()` and `db.schema()` answers.
+
+Complete validation stays with rudof ([[architecture#Validation]]).
 
 ## Bindings
 
