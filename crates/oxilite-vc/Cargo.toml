@@ -9,7 +9,7 @@ homepage.workspace = true
 documentation = "https://docs.rs/oxilite-vc"
 readme = "README.md"
 authors.workspace = true
-keywords = ["verifiable-credentials", "json-ld", "rdf", "sqlite", "w3c"]
+keywords = ["credentials", "json-ld", "rdf", "sqlite", "w3c"]
 categories = ["database-implementations", "cryptography"]
 rust-version.workspace = true
 
