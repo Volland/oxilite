@@ -7,4 +7,7 @@ const root = fileURLToPath(new URL("../../..", import.meta.url));
 const profile = process.argv.includes("--debug") ? "debug" : "release";
 execFileSync("cargo", ["build", "-p", "oxilite-node", ...(profile === "release" ? ["--release"] : [])], { cwd: root, stdio: "inherit" });
 const file = { darwin: "liboxilite_node.dylib", win32: "oxilite_node.dll" }[process.platform] ?? "liboxilite_node.so";
-copyFileSync(`${root}/target/${profile}/${file}`, fileURLToPath(new URL("../oxilite.node", import.meta.url)));
+const built = `${root}/target/${profile}/${file}`;
+copyFileSync(built, fileURLToPath(new URL("../oxilite.node", import.meta.url)));
+// The published package carries one prebuilt binary per platform.
+copyFileSync(built, fileURLToPath(new URL(`../oxilite.${process.platform}-${process.arch}.node`, import.meta.url)));

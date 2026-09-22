@@ -44,7 +44,23 @@ interface Native {
   schemaSql(options?: string | null): string;
 }
 
-const native = createRequire(import.meta.url)("../oxilite.node") as Native;
+/** The prebuilt addon for this platform (`oxilite.<platform>-<arch>.node`), or a local build. */
+function loadNative(): Native {
+  const require = createRequire(import.meta.url);
+  const target = `${process.platform}-${process.arch}`;
+  for (const file of [`../oxilite.${target}.node`, "../oxilite.node"]) {
+    try {
+      return require(file) as Native;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "MODULE_NOT_FOUND") throw e;
+    }
+  }
+  throw new Error(
+    `@oxilite/node has no prebuilt binary for ${target}; build it from source with \`npm run build:native\` in a checkout of https://github.com/Volland/oxilite`,
+  );
+}
+
+const native = loadNative();
 
 /** How to open a store. */
 export interface StoreOptions {

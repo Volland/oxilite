@@ -7,17 +7,58 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "node": "./dist/node.js", "default": "./dist/index.js" },
-    "./node": { "types": "./dist/node.d.ts", "default": "./dist/node.js" },
+    ".": {
+      "types": "./dist/index.d.ts",
+      "node": "./dist/node.js",
+      "default": "./dist/index.js"
+    },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "default": "./dist/node.js"
+    },
     "./oxilite.wasm": "./wasm/web/oxilite_wasm_bg.wasm"
   },
-  "bin": { "oxilite-d1": "bin/oxilite-d1.mjs" },
-  "files": ["dist", "wasm", "bin"],
+  "bin": {
+    "oxilite-d1": "bin/oxilite-d1.mjs"
+  },
+  "files": [
+    "dist",
+    "wasm",
+    "bin"
+  ],
   "scripts": {
     "build:wasm": "cargo build -p oxilite-wasm --target wasm32-unknown-unknown --profile wasm-release && wasm-bindgen --target nodejs --out-dir wasm/node ../../target/wasm32-unknown-unknown/wasm-release/oxilite_wasm.wasm && wasm-bindgen --target web --out-dir wasm/web ../../target/wasm32-unknown-unknown/wasm-release/oxilite_wasm.wasm && echo {\\\"type\\\":\\\"commonjs\\\"} > wasm/node/package.json",
     "build": "tsc -p .",
     "test": "vitest run"
   },
-  "dependencies": { "@oxilite/common": "0.1.0" },
-  "devDependencies": { "miniflare": "^4" }
+  "dependencies": {
+    "@oxilite/common": "0.1.0"
+  },
+  "devDependencies": {
+    "miniflare": "^4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Volland/oxilite.git",
+    "directory": "packages/d1"
+  },
+  "homepage": "https://github.com/Volland/oxilite#readme",
+  "bugs": "https://github.com/Volland/oxilite/issues",
+  "author": "Volodymyr Pavlyshyn",
+  "keywords": [
+    "rdf",
+    "sparql",
+    "sqlite",
+    "oxigraph",
+    "rdfjs",
+    "cloudflare",
+    "d1",
+    "workers"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  }
 }

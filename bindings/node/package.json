@@ -6,13 +6,46 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
-  "files": ["dist", "oxilite.node"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "oxilite.*-*.node"
+  ],
   "scripts": {
     "build:native": "node scripts/build-native.mjs",
     "build": "tsc -p .",
     "test": "vitest run --reporter=default --reporter=json --outputFile=test-results.json; node scripts/check-results.mjs test-results.json"
   },
-  "dependencies": { "@oxilite/common": "0.1.0" },
-  "devDependencies": { "@rdfjs/data-model": "^2" }
+  "dependencies": {
+    "@oxilite/common": "0.1.0"
+  },
+  "devDependencies": {
+    "@rdfjs/data-model": "^2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Volland/oxilite.git",
+    "directory": "bindings/node"
+  },
+  "homepage": "https://github.com/Volland/oxilite#readme",
+  "bugs": "https://github.com/Volland/oxilite/issues",
+  "author": "Volodymyr Pavlyshyn",
+  "keywords": [
+    "rdf",
+    "sparql",
+    "sqlite",
+    "oxigraph",
+    "rdfjs"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  }
 }

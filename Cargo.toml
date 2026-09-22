@@ -6,7 +6,11 @@ members = ["crates/oxilite-core", "crates/oxilite-rusqlite", "crates/oxilite-dyl
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/pavlyshyn/oxilite"
+repository = "https://github.com/Volland/oxilite"
+homepage = "https://github.com/Volland/oxilite"
+authors = ["Volodymyr Pavlyshyn"]
+keywords = ["rdf", "sparql", "sqlite", "oxigraph", "cloudflare-d1"]
+categories = ["database-implementations"]
 rust-version = "1.85"
 
 [workspace.dependencies]

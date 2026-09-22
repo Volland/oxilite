@@ -14,3 +14,4 @@ node_modules/
 /examples/d1-worker-ts/build/
 .wrangler/
 bench/bsbm-tools/td_data/
+/bindings/node/oxilite.*.node

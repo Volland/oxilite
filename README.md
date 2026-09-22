@@ -117,6 +117,15 @@ The filter is applied right after the first scan, before any join. The unary `+`
 
 ## Usage
 
+```bash
+cargo add oxilite                      # Rust (features: rusqlite (default), dylib, d1, reasonable)
+cargo install oxilite-cli              # the `oxilite` command and SPARQL endpoint
+npm install @oxilite/node              # Node.js (prebuilt for macOS arm64 in 0.1.0)
+npm install @oxilite/d1                # Cloudflare D1 (WebAssembly)
+```
+
+Companion crates: `oxilite-validate` (SHACL/ShEx with rudof), `oxilite-reason` (OWL 2 RL with `reasonable`).
+
 ### Rust: drop-in for `oxigraph::store::Store`
 
 ```toml

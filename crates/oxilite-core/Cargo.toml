@@ -1,8 +1,15 @@
 [package]
 name = "oxilite-core"
+description = "The I/O-free core of oxilite: SPARQL to SQL compiler, term encoding and SQLite schema (sans-IO jobs for any SQLite backend)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 oxrdf.workspace = true

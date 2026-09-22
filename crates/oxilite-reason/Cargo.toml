@@ -5,11 +5,19 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+rust-version.workspace = true
+
 [dependencies]
 oxilite-core.workspace = true
 oxrdf.workspace = true
 reasonable = { version = "0.5.0-a1", features = ["rdf-12"] }
 
 [dev-dependencies]
-oxilite = { workspace = true, features = ["rusqlite"] }
+# Path-only (stripped when publishing): `oxilite` optionally depends on this crate.
+oxilite = { path = "../oxilite", features = ["rusqlite"] }
 oxrdfio.workspace = true

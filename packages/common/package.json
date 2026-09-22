@@ -6,6 +6,31 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist"],
-  "scripts": { "build": "tsc -p ." }
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p ."
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Volland/oxilite.git",
+    "directory": "packages/common"
+  },
+  "homepage": "https://github.com/Volland/oxilite#readme",
+  "bugs": "https://github.com/Volland/oxilite/issues",
+  "author": "Volodymyr Pavlyshyn",
+  "keywords": [
+    "rdf",
+    "sparql",
+    "sqlite",
+    "oxigraph",
+    "rdfjs"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  }
 }
