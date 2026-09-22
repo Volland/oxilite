@@ -160,6 +160,18 @@ Through the wasm core on Miniflare D1, `cypher()` creates a chain per row, finds
 
 RDFS subclass chains, an OWL transitive property and SQL-rule materialization (one D1 batch per round) work on a Miniflare D1 database.
 
+### SQL values survive arbitrary-precision JSON
+
+`SqlValue` deserializes numbers both as plain JSON and in the map form serde_json uses when `arbitrary_precision` is enabled (as the `ssi` crates do), so D1 responses decode in builds with `vc`.
+
+### JSON-LD documents on D1
+
+`@oxilite/d1` stores, replaces and removes JSON-LD documents on Miniflare D1, loads persisted contexts, reports JSON-LD error codes, and includes the JSON-LD tables in the migration schema.
+
+### Credentials on D1
+
+`@oxilite/d1` stores credentials with the bundled W3C contexts, stores a presentation's embedded credentials, finds them by issuer and validity, and rejects invalid credentials.
+
 ## Reasoning
 
 Query-time RDFS / OWL QL rewriting and OWL 2 RL materialization, each test run on the bundled SQLite and on the system `libsqlite3`, see [[architecture#Reasoning]].
@@ -228,6 +240,128 @@ The 1161 shexTest validation tests that rudof can parse give the same statuses o
 
 On a D1-like async backend (and the Miniflare D1 sidecar with `OXILITE_D1_URL`), prefetch-based SHACL and ShEx validation match full validation, and a too-small limit fails with `TooLarge` stating the limit and size found.
 
+## JSON-LD documents
+
+Specification scenarios of `oxilite-jsonld`, run on bundled SQLite, the system `libsqlite3`, the D1 code path and (with `OXILITE_D1_URL`) Miniflare D1. See [[architecture#JSON-LD documents]].
+
+### Documents round-trip verbatim
+
+A stored document comes back byte for byte (key order, whitespace, escapes), with its SHA-256, its graph and a store time; an unknown key reads as absent.
+
+### Key strategies
+
+The default key is the top-level id; a JSON Pointer or explicit key can replace it; a missing key is rejected by default, and the content-hash fallback is stable, so storing twice keeps one document.
+
+### Graph strategies
+
+A template graph substitutes the percent-encoded key; a key that is not an IRI is refused as a graph name; the default-graph strategy records the default graph as the target.
+
+### Invalid JSON-LD is rejected atomically
+
+Invalid JSON and invalid JSON-LD fail with distinct errors (the latter with its JSON-LD error code) and write neither the document nor any quad.
+
+### Graph containers are owned by the document
+
+A property declared `@container: @graph` puts its triples in a blank-node graph listed among the document's graphs; removing the document removes both graphs and their names.
+
+### Blank nodes are document-scoped
+
+Two documents with the same anonymous node yield two distinct blank nodes, and re-storing a document leaves the quad count unchanged.
+
+### Replace is atomic
+
+Replacing a document drops its old triples; a replace that fails (its graph is owned by another document) leaves the previous version, row and triples, untouched.
+
+### Remove clears owned graphs only
+
+Removing a document deletes its row and owned graphs and reports that it existed; other graphs and default-graph data stay; removing again reports false.
+
+### Shared graphs delete exact triples
+
+With the fixed-graph and default-graph strategies, replacing or removing a document deletes exactly its previous triples and nothing of the other documents in the graph.
+
+### Contexts load offline
+
+A document with an unknown remote context fails naming the IRI; a context registered on the handle or persisted with `put_context` makes it convert without network access.
+
+### Nested contexts load in rounds
+
+A persisted context that imports another persisted context is resolved in successive reads.
+
+### SPARQL finds documents
+
+A document's graph answers `GRAPH <key>` queries, and graphs bound by SPARQL map back to their documents (or to none for plain graphs).
+
+### Check and rebuild repair drift
+
+After a SPARQL UPDATE edits a document's graph, `check_documents` reports the missing and extra quads, and `rebuild_graph` restores the conversion of the stored JSON.
+
+### Metadata lookup
+
+Documents are found by issuer, validity instant, one element of their types and keyset paging, from the metadata columns.
+
+### Tables are created on demand
+
+A store gets the three JSON-LD tables and the default metadata indexes only when a JSON-LD handle is opened, with its schema version and data unchanged.
+
+### Large documents stay atomic
+
+A document far above the SQL-length limit is written in chunks and reads back identical; a write that needs more statements than one batch allows fails with `DocumentTooLarge`.
+
+### W3C toRdf suite
+
+The W3C JSON-LD 1.1 `toRdf` tests run through `put_document`, with remote contexts served from the local checkout; outputs must be isomorphic to the expected N-Quads.
+
+Allow-listed `json-ld` 0.21 limitations are tolerated, and the test fails when a listed entry starts passing.
+
+## Verifiable Credentials
+
+Specification scenarios of `oxilite-vc` on the same engines as the JSON-LD tests, with W3C VCDM example credentials as fixtures. See [[architecture#JSON-LD documents#Verifiable Credentials]].
+
+### Credential id is key and graph
+
+A VCDM 2.0 credential is stored under its `id`, read back verbatim, and its triples (type, issuer) are in the named graph of the same IRI.
+
+### Key and graph are configurable
+
+A JSON Pointer key and a template graph override the defaults for credentials.
+
+### Credentials without id
+
+A credential without `id` gets a stable content-hash key; with the reject policy it fails, and an explicit key stores it.
+
+### Structure is checked
+
+Credentials whose first context is not a W3C credentials context, without an issuer, or without the `VerifiableCredential` type are rejected with the violated rule and write nothing; VCDM 1.1 and 2.0 are recorded as `vc1` and `vc2`.
+
+### Proofs live in owned graphs
+
+A Data Integrity proof is in its own graph, linked from the credential graph, which holds no `proofValue`; removing the credential removes everything.
+
+### Presentations store embedded credentials
+
+A presentation is stored verbatim with profile `vp2`, and each embedded credential is stored under its own id and found by issuer; they outlive the presentation, and embedding can be switched off.
+
+### Metadata across data model versions
+
+Issuer, subject, types and validity are extracted from VCDM 1.1 (`issuanceDate`, `expirationDate`) and 2.0 (`validFrom`, `validUntil`) as epoch seconds.
+
+### Metadata indexes are configurable
+
+With no metadata indexes, no JSON-LD index exists but the metadata columns are still filled.
+
+### Find valid credentials
+
+Filtering by issuer and a validity instant returns only unexpired credentials; type filters and limits apply.
+
+### SPARQL selects credentials
+
+A SPARQL query over all graphs finds the credential holding a degree claim, and its graph maps back to the stored credential.
+
+### Blank-node labels are stable
+
+The blank-node labels and quad count of a reference credential are pinned, so a relabelling change in `json-ld` is noticed.
+
 ## Node
 
 `@oxilite/node` tests over the napi-rs addon, next to the verbatim port of Oxigraph's `js/test/store.test.ts`, see [[architecture#Bindings]]. The port's failures must match `js:` entries of `testsuite/allowlist.toml`.
@@ -247,6 +381,14 @@ A child Node process writes a quad to a SQLite file; a store reopened on that fi
 ### Cypher reads and writes the same dataset
 
 `store.cypher()` creates nodes and a relationship with a property that SPARQL then finds, reads data inserted by SPARQL UPDATE, returns typed node and relationship objects, and `explainCypher()` shows the SQL.
+
+### JSON-LD documents round-trip and query
+
+`@oxilite/node` stores a document verbatim in its own graph, queryable with SPARQL and mapped back from its graph; options select pointer keys and template graphs; removal reports existence.
+
+### Credentials are stored and found
+
+`@oxilite/node` stores credentials under their id with validity as `Date`s, stores a presentation's credentials, finds them by issuer, validity and type, and raises `JsonLdError` codes for invalid credentials.
 
 ## Cypher
 

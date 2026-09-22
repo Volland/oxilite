@@ -1,0 +1,26 @@
+// Worker that serves oxilitedb.com from ../site. Deploy: `npx wrangler@4 deploy` from this
+// directory, or push to main (.github/workflows/site.yml).
+{
+  "$schema": "https://unpkg.com/wrangler@4.136.2/config-schema.json",
+  "name": "oxilite-site",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-22",
+  "assets": {
+    "directory": "../site",
+    "binding": "ASSETS",
+    // Every request goes through the Worker so crawler blocking and security headers apply
+    // to static files too.
+    "run_worker_first": true,
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "none"
+  },
+  // Custom domains need the oxilitedb.com zone in the same Cloudflare account; Wrangler
+  // creates the DNS records and certificates.
+  "routes": [
+    { "pattern": "oxilitedb.com", "custom_domain": true },
+    { "pattern": "www.oxilitedb.com", "custom_domain": true }
+  ],
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": { "enabled": true }
+}

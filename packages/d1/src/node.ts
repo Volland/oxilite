@@ -3,7 +3,13 @@ import { createRequire } from "node:module";
 import { D1Store as Base, type D1DatabaseLike, type D1StoreOptions, type EngineConstructor } from "./driver.js";
 
 export * from "@oxilite/common";
-export { OxiliteCollisionError, type D1DatabaseLike, type D1StoreOptions } from "./driver.js";
+export {
+  OxiliteCollisionError,
+  D1Credentials,
+  D1JsonLdDocuments,
+  type D1DatabaseLike,
+  type D1StoreOptions,
+} from "./driver.js";
 
 const require = createRequire(import.meta.url);
 const { Engine } = require("../wasm/node/oxilite_wasm.js") as { Engine: EngineConstructor };
@@ -13,7 +19,12 @@ export class D1Store {
     return Base.openWith(Engine, db, options);
   }
 
-  static schemaSql(options: { graphIndex?: boolean } = {}): string {
-    return new Engine(null, JSON.stringify({ graphIndex: options.graphIndex ?? true })).schemaSql();
+  /** The schema as SQL; `jsonld` adds the JSON-LD document tables. */
+  static schemaSql(
+    options: { graphIndex?: boolean; jsonld?: boolean | { issuer?: boolean; subject?: boolean; validUntil?: boolean } } = {},
+  ): string {
+    const e = new Engine(null, JSON.stringify({ graphIndex: options.graphIndex ?? true }));
+    if (options.jsonld) return e.jsonldSchemaSql(JSON.stringify(options.jsonld === true ? {} : options.jsonld));
+    return e.schemaSql();
   }
 }

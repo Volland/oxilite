@@ -53,6 +53,29 @@ console.log(store.explainCypher("MATCH (n:Person) RETURN n", {}, opts));
 
 Nodes are IRIs, labels are `rdf:type`, properties are literal triples, relationships are triples (with an RDF 1.2 reifier for their properties), so SPARQL sees everything Cypher writes. With `reasoning: "rdfs"`, labels follow class hierarchies; SHACL shapes in the store check every write.
 
+## JSON-LD documents and Verifiable Credentials
+
+```ts
+// Any JSON-LD document: stored byte for byte, its RDF in a named graph (by default its @id).
+const docs = store.jsonld();
+docs.put(`{"@context": {"name": "http://schema.org/name"}, "@id": "urn:uuid:1234", "name": "Ada"}`);
+store.query('ASK { GRAPH <urn:uuid:1234> { ?s <http://schema.org/name> "Ada" } }');   // true
+docs.get("urn:uuid:1234")?.json;                         // the exact text you stored
+
+// Verifiable Credentials (VCDM 1.1 and 2.0), W3C contexts bundled, proofs in their own graphs.
+const vcs = store.credentials();
+const id = vcs.put(credentialJson);                      // key = the credential's id
+vcs.putPresentation(presentationJson);                   // also stores the embedded credentials
+vcs.find({ issuer: "did:example:issuer", validAt: new Date() });   // indexed, no SPARQL
+```
+
+Options select how documents are keyed and where their triples go:
+- `key`: `"id"` (the default), `{ pointer: "/credentialSubject/id" }`, `"contentHash"` or `"explicit"`;
+- `graph`: `"key"` (the default), `{ template: "https://ex.org/g/{key}" }`, `{ fixed: iri }` or `"default"`;
+- `contexts` (in memory), `network: true` (download unknown contexts), `indexes`.
+
+Contexts can also be persisted with `docs.putContext(iri, context)`. Errors are `JsonLdError` with a `code`, such as `loading remote context failed`, `missing-key`, `invalid` or `graph-owned`. `docs.check()` and `docs.rebuild(key)` repair document graphs edited with SPARQL UPDATE. Proofs are not verified.
+
 ## API
 
 | Method | Does |
@@ -64,6 +87,8 @@ Nodes are IRIs, labels are `rdf:type`, properties are literal triples, relations
 | `dump(options)` | Serialize the store or one graph |
 | `add`, `addAll`, `delete`, `has`, `match`, `size` | Quad-level access with RDF/JS terms |
 | `cypher(query, params?, options?)` | openCypher read or write; returns `{ columns, rows, records, stats }` |
+| `jsonld(options?)` | JSON-LD documents: `put`, `putAll`, `get`, `remove`, `list`, `find`, `graphs`, `documentForGraph`, `putContext`, `removeContext`, `contexts`, `check`, `rebuild` |
+| `credentials(options?)` | Verifiable Credentials: `put`, `putPresentation`, `get`, `remove`, `find`, and `documents` for the rest |
 | `explain(sparql)`, `explainUpdate`, `explainCypher` | The SQL a statement compiles to, with the planner's notes |
 | `materialize({ engine? })`, `clearInferences()` | OWL 2 RL closure (`"sql"` or `"reasonable"`) |
 | `optimize()`, `backup(path)`, `clear()` | Refresh planner statistics, `VACUUM INTO` a copy, empty the store |
@@ -86,6 +111,8 @@ oxilite is an Oxigraph-compatible RDF database and SPARQL 1.1 engine that stores
 | [`oxilite-dylib`](https://crates.io/crates/oxilite-dylib) | Backend that loads your own `libsqlite3` at runtime |
 | [`oxilite-d1`](https://crates.io/crates/oxilite-d1) | Cloudflare D1 backend for Rust Workers |
 | [`oxilite-cypher`](https://crates.io/crates/oxilite-cypher) | openCypher over the same data, OWL- and SHACL-aware |
+| [`oxilite-jsonld`](https://crates.io/crates/oxilite-jsonld) | JSON-LD documents stored verbatim, one named graph each |
+| [`oxilite-vc`](https://crates.io/crates/oxilite-vc) | Verifiable Credentials: stored under their id, indexed, queryable |
 | [`oxilite-reason`](https://crates.io/crates/oxilite-reason) | OWL 2 RL materialization with `reasonable` |
 | [`oxilite-validate`](https://crates.io/crates/oxilite-validate) | SHACL and ShEx validation with rudof |
 | [`oxilite-cli`](https://crates.io/crates/oxilite-cli) | The `oxilite` command and a SPARQL endpoint like `oxigraph serve` |

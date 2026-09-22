@@ -101,3 +101,27 @@ Lowering to the existing algebra reuses the planner, the reasoning rewrites and 
 The dataset's SHACL shapes are the Cypher schema: mandatory properties join without `OPTIONAL`, single-valued ones read as scalars, datatypes type comparisons, and writes are checked before the batch is sent.
 
 The checks run in Rust on the final state of every node the statement touches (datatype, cardinality, `sh:in`, `sh:pattern`), so an invalid statement sends nothing. Shapes are read once per writing statement, or once per store with `cypher_schema()`. Complete SHACL and ShEx remain rudof's job ([[decisions#D8 rudof engines unchanged through srdf traits]]).
+
+## D18 The raw document is the source of truth
+
+A JSON-LD document is kept byte for byte; its RDF is derived data that can be checked against and rebuilt from it.
+
+Credentials are presented, re-signed and audited as JSON, so the stored bytes must come back unchanged — re-serializing from RDF would lose member order, formatting and anything JSON-LD drops. Graphs stay ordinary RDF that SPARQL may update; instead of triggers on `quads` (a write cost on every quad, billed on D1), `check_documents()` detects drift and `rebuild_graph()` repairs it.
+
+## D19 Credential id as key and named graph
+
+By default a document is keyed by its `@id`/`id` and its triples go to the named graph of that IRI; both are configurable.
+
+One graph per credential makes "which credential says this" a `GRAPH ?g` pattern, lets replace and remove clear exactly the credential's triples without reading them, and matches how credentials are referenced. Credentials without an `id` (optional in VCDM 2.0) get a content-hash key by default, so storing one twice keeps one copy. Proofs, which JSON-LD puts in `@graph` containers, stay in their own graphs owned by the credential rather than being merged into the claims.
+
+## D20 json-ld and ssi, in two crates
+
+JSON-LD processing uses the `json-ld` crate; the credentials profile uses `ssi-vc` and `ssi-json-ld`, in a separate crate so generic JSON-LD users do not pay for it.
+
+`json-ld` implements JSON-LD 1.1 with pluggable loaders (Oxigraph's `oxjsonld` streams RDF but has no expansion API or loader hook), and `ssi` builds on it, so both crates share one JSON-LD stack. `ssi-vc` models VCDM 1.1 and 2.0 and `ssi-json-ld` bundles the W3C contexts, which makes credentials convert offline, on D1 too. The cost: `ssi-vc` pulls in about 430 crates, `reqwest`, and serde_json's `arbitrary_precision` feature, which is unified across a build; oxilite's `SqlValue` deserializer accepts that number form, and the workspace test suite runs with it enabled.
+
+## D21 Document-scoped deterministic blank nodes
+
+Blank nodes of a document are labelled from a hash of its key and their position in `json-ld`'s relabelling, never from a global counter.
+
+Documents therefore never share blank nodes (two credentials' anonymous nodes stay distinct), and re-storing a document produces the same ids, so a repeated put is idempotent. A different relabelling order in a future `json-ld` release would only change labels on the next put of each document; a test pins the labels of a reference credential.

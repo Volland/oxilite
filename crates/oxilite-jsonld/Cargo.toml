@@ -1,0 +1,46 @@
+[package]
+name = "oxilite-jsonld"
+description = "JSON-LD documents in oxilite: verbatim storage, one named graph per document, SPARQL over the RDF (native and Cloudflare D1)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/oxilite-jsonld"
+readme = "README.md"
+authors.workspace = true
+keywords = ["json-ld", "rdf", "linked-data", "sqlite", "sparql"]
+categories = ["database-implementations", "encoding"]
+rust-version.workspace = true
+
+[dependencies]
+oxilite-core.workspace = true
+oxrdf.workspace = true
+oxiri.workspace = true
+xxhash-rust.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+json-ld.workspace = true
+json-syntax.workspace = true
+iref.workspace = true
+rdf-types.workspace = true
+serde_json = { version = "1", optional = true }
+
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+ureq = { version = "2", optional = true }
+
+[features]
+default = []
+# JSON forms of options and results, for the JavaScript bindings.
+json = ["dep:serde_json"]
+# Fetch unknown remote contexts over HTTP (native only; off by default).
+network = ["dep:ureq"]
+
+[dev-dependencies]
+oxilite = { path = "../oxilite", features = ["rusqlite", "dylib", "jsonld"] }
+oxrdf.workspace = true
+futures = { version = "0.3", default-features = false, features = ["executor"] }
+oxilite-core = { workspace = true, features = ["serde"] }
+ureq = { version = "2", features = ["json"] }
+serde_json = "1"
+oxrdfio.workspace = true

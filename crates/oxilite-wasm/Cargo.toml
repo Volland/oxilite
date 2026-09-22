@@ -14,7 +14,11 @@ rust-version.workspace = true
 publish = false
 
 [features]
-default = ["cypher"]
+default = ["cypher", "vc"]
+# JSON-LD documents (verbatim storage, one named graph per document); ~0.7 MB.
+jsonld = ["dep:oxilite-jsonld"]
+# Verifiable Credentials on top of `jsonld` (ssi-vc, bundled W3C contexts); ~0.9 MB more.
+vc = ["jsonld", "dep:oxilite-vc"]
 # openCypher over the property-graph view, with the IANA time zone database for named zones.
 cypher = ["cypher-lite", "oxilite-cypher/tzdb-bundle"]
 # The Cypher frontend without the time zone database (named zones are errors; ~0.3 MB smaller).
@@ -26,6 +30,8 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 oxilite-core = { workspace = true, features = ["serde"] }
 oxilite-cypher = { workspace = true, optional = true }
+oxilite-jsonld = { workspace = true, optional = true, features = ["json"] }
+oxilite-vc = { workspace = true, optional = true }
 oxrdf.workspace = true
 oxrdfio.workspace = true
 spargebra.workspace = true

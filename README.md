@@ -11,7 +11,7 @@
 
 **[oxilitedb.com](https://oxilitedb.com)** · [crates.io](https://crates.io/crates/oxilite) · [docs.rs](https://docs.rs/oxilite) · [npm](https://www.npmjs.com/package/@oxilite/node)
 
-> **Status: milestones M1–M7 implemented** — M1 (storage core), M2 (full SPARQL 1.1 query compiled to SQL), M3 (atomic SPARQL Update, Cloudflare D1), the TypeScript packages, M4 (RDFS / OWL reasoning), M5 (SHACL / ShEx validation with rudof), M6 (BSBM benchmarks, planner tuning, full-text search) and M7 (openCypher over the same data). See [Roadmap](#roadmap).
+> **Status: milestones M1–M7 implemented** — M1 (storage core), M2 (full SPARQL 1.1 query compiled to SQL), M3 (atomic SPARQL Update, Cloudflare D1), the TypeScript packages, M4 (RDFS / OWL reasoning), M5 (SHACL / ShEx validation with rudof), M6 (BSBM benchmarks, planner tuning, full-text search) M7 (openCypher over the same data) and JSON-LD / Verifiable Credentials storage. See [Roadmap](#roadmap).
 
 ---
 
@@ -143,6 +143,8 @@ Every package has its own README with installation, examples and its API:
 | [`oxilite-dylib`](crates/oxilite-dylib/README.md) | Backend that loads your own `libsqlite3` at runtime |
 | [`oxilite-d1`](crates/oxilite-d1/README.md) | Cloudflare D1 backend for Rust Workers |
 | [`oxilite-cypher`](crates/oxilite-cypher/README.md) | openCypher over the same data, OWL- and SHACL-aware |
+| [`oxilite-jsonld`](crates/oxilite-jsonld/README.md) | JSON-LD documents stored verbatim, one named graph each |
+| [`oxilite-vc`](crates/oxilite-vc/README.md) | Verifiable Credentials: stored under their id, indexed, queryable |
 | [`oxilite-reason`](crates/oxilite-reason/README.md) | OWL 2 RL materialization with `reasonable` |
 | [`oxilite-validate`](crates/oxilite-validate/README.md) | SHACL and ShEx validation with rudof |
 | [`oxilite-cli`](crates/oxilite-cli/README.md) | The `oxilite` command and a SPARQL endpoint like `oxigraph serve` |
@@ -439,6 +441,30 @@ await d1store.cypher("UNWIND $rows AS row MERGE (p:Person {id: row.id}) SET p.na
 - **OWL and SHACL aware.** With `reasoning: "rdfs"` / `"owl-ql"`, labels match subclasses and relationship types their subproperties and inverses. SHACL shapes stored in the dataset are the graph's schema: writes that break `sh:datatype`, cardinality, `sh:in` or `sh:pattern` are rejected before anything is written, `sh:minCount 1` properties join without `OPTIONAL`, `sh:datatype` types comparisons for the compiler, and `CALL db.labels()` / `db.schema.nodeTypeProperties()` read shapes and data.
 - **Coverage.** 3728 of the 3880 [openCypher TCK](https://github.com/opencypher/openCypher/tree/main/tck) scenarios pass (read-only 96.3%, temporal functions 100%), on the bundled SQLite; the failures (user-defined procedures, reading after a write in one statement, errors on deleted entities…) are listed in [`crates/oxilite-cypher/tck-allowlist.txt`](crates/oxilite-cypher/tck-allowlist.txt).
 
+## JSON-LD and Verifiable Credentials
+
+oxilite stores JSON-LD documents and W3C Verifiable Credentials as they are, and makes their RDF queryable (features `jsonld` and `vc`, crates [`oxilite-jsonld`](crates/oxilite-jsonld/README.md) and [`oxilite-vc`](crates/oxilite-vc/README.md)). Each document is kept **byte for byte** in a keyed table, and its RDF goes into a **named graph of its own**. By default the key and the graph are both the document's `id`, so a credential is found under its own IRI in both.
+
+```rust
+let vcs = store.credentials()?;
+let id = vcs.put_credential(credential_json)?;           // checked (VCDM 1.1 / 2.0), stored, converted
+store.query(format!("SELECT * WHERE {{ GRAPH <{id}> {{ ?s ?p ?o }} }}"))?;  // the claims
+let raw = vcs.get_credential(&id)?.unwrap().json;        // the exact bytes, e.g. to verify
+let valid = vcs.find_credentials(&CredentialFilter { issuer: Some(did), valid_at: Some(now), ..Default::default() })?;
+```
+
+```ts
+const vcs = store.credentials();                         // @oxilite/node (sync) or @oxilite/d1 (async)
+await vcs.put(credential);
+await vcs.putPresentation(presentation);                 // stores the embedded credentials too
+await vcs.find({ issuer: "did:example:issuer", validAt: new Date() });
+```
+
+- **Configurable keys and graphs.** The key can be the `id` (the default), a JSON Pointer such as `/credentialSubject/id`, a content hash or an explicit value. The graph can be the key (the default), an IRI template, one fixed graph or the default graph. Credentials without an `id` get `urn:oxilite:doc:sha256:<hex>`.
+- **Built for credentials.** Proofs live in their own graphs, owned by the credential, so claims never mix with signatures. Issuer, subject, types and validity are indexed columns, and which indexes exist is configurable, since D1 bills index writes. Presentations also store each embedded credential. The W3C credential, security and DID contexts are bundled, so nothing needs the network, on D1 either. Proofs are **not** verified.
+- **Standard JSON-LD.** Conversion uses the [`json-ld`](https://crates.io/crates/json-ld) crate: 450 tests of the W3C JSON-LD 1.1 `toRdf` suite pass (4 allow-listed crate limitations). Contexts load offline. Register them in memory, or persist them in the store with `putContext`. Network loading is opt-in, and Node-only on the JavaScript side.
+- **Atomic and consistent.** Put, replace and remove are each one atomic request (one D1 batch) and clear exactly the document's triples. The JSON is the source of truth: `check_documents()` finds graphs edited by SPARQL UPDATE, and `rebuild_graph()` restores them.
+
 ---
 
 ## Roadmap
@@ -454,6 +480,7 @@ await d1store.cypher("UNWIND $rows AS row MERGE (p:Person {id: row.id}) SET p.na
 | **M5** Validation | rudof SHACL/ShEx | rudof suites over oxilite | ✅ done: W3C SHACL core and shexTest results identical to rudof in memory; bounded D1 prefetch |
 | **M6** Performance | BSBM vs Oxigraph, tuning, FTS5 | published comparison | ✅ done: BSBM results in [Performance](#performance), D1 write-cost report, FTS5 text search |
 | **M7** Cypher | openCypher over the RDF store, OWL- and SHACL-aware | ≥ 80% of read-only TCK scenarios | ✅ done: 96.1% of the TCK (read-only 96.3%), on bundled SQLite, system SQLite and D1 |
+| JSON-LD / VC | verbatim JSON-LD documents and Verifiable Credentials, a named graph each | W3C `toRdf` suite + VC scenarios on every backend | ✅ done: 450 `toRdf` tests pass, scenarios pass on bundled SQLite, system SQLite and Miniflare D1 |
 
 ---
 

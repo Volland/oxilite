@@ -58,7 +58,7 @@ The system SHALL convert each document to RDF following the JSON-LD 1.1 Processi
 
 #### Scenario: Invalid JSON-LD rejected atomically
 - **WHEN** a document with an invalid `@context` (for example, a number) is stored
-- **THEN** the store fails with the JSON-LD error code `invalid local context` and neither the document nor any quad is stored
+- **THEN** the store fails with a JSON-LD processing error that carries its JSON-LD error code, and neither the document nor any quad is stored
 
 ### Requirement: Nested named graphs are owned by the document
 The system SHALL store the named graphs that a document itself defines (via `@graph` containers or a top-level `@graph` with an `@id`), and SHALL record them as owned by the document. Blank-node graph names MUST be kept as blank-node graph names, scoped to the document as described in "Blank-node isolation". The list of owned graphs MUST be retrievable from the document key.

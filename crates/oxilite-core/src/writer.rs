@@ -159,6 +159,24 @@ impl EncodedQuads {
     }
 }
 
+/// One atomic request: `prefix`, the inserts of `quads`, then `suffix`. Atomicity forbids
+/// splitting it, so `Err(n)` reports its `n` statements when they exceed the backend's
+/// per-request limit (each statement is already below the SQL-length limit).
+pub fn atomic_request(
+    prefix: Vec<Statement>,
+    quads: &EncodedQuads,
+    suffix: Vec<Statement>,
+    caps: &Capabilities,
+) -> std::result::Result<crate::sql::Request, usize> {
+    let mut s = prefix;
+    s.extend(quads.insert_statements(caps));
+    s.extend(suffix);
+    if s.len() > caps.max_statements {
+        return Err(s.len());
+    }
+    Ok(crate::sql::Request::atomic(s))
+}
+
 /// `INSERT OR IGNORE INTO quads` statements.
 pub fn quad_insert_statements(quads: &[[i64; 4]], caps: &Capabilities) -> Vec<Statement> {
     insert_statements_into("quads", quads, caps)

@@ -1,0 +1,6 @@
+# W3C JSON-LD 1.1 toRdf tests that fail with json-ld 0.21 (the JSON-LD processor oxilite uses).
+# Format: <test id> <reason>. The suite fails if a listed test starts passing.
+tdi11 json-ld 0.21 does not emit rdf:CompoundLiteral nodes for rdfDirection compound-literal (non-normative)
+tdi12 json-ld 0.21 does not emit rdf:CompoundLiteral nodes for rdfDirection compound-literal (non-normative)
+te122 json-ld 0.21 keeps IRIs that look like keywords (@ignoreMe) instead of ignoring them
+tli12 json-ld 0.21 rejects an invalid @base in a context instead of ignoring the relative IRIs it cannot resolve

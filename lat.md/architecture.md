@@ -244,6 +244,56 @@ Reasoning options apply to Cypher as to SPARQL: labels match subclasses, relatio
 
 Shapes loaded with `Store::cypher_schema` (and passed in `CypherOptions::schema`) make `sh:minCount 1` properties join without `OPTIONAL`, `sh:maxCount 1` properties scalar, and `sh:datatype` a value type the compiler uses (`QueryOptions::var_types`: one typed comparison instead of one per possible type). A writing statement checks every node it creates or changes against `sh:datatype`, `sh:minCount`, `sh:maxCount`, `sh:in` and `sh:pattern` of the shapes targeting its labels before sending the batch ([[crates/oxilite-cypher/src/schema.rs#Shapes]]). `CALL db.labels()`, `db.relationshipTypes()`, `db.propertyKeys()` and `db.schema.nodeTypeProperties()` read shapes and data. Complete validation stays with rudof ([[architecture#Validation]]).
 
+## JSON-LD documents
+
+JSON-LD documents are stored verbatim in a keyed table and converted to RDF in a named graph per document, so SPARQL queries them and the exact JSON comes back. Crates `oxilite-jsonld` (generic) and `oxilite-vc` (credentials).
+
+Both crates are sans-IO like the core: operations are jobs ([[crates/oxilite-jsonld/src/jobs.rs#WriteJob]], [[crates/oxilite-jsonld/src/jobs.rs#CheckJob]], [[crates/oxilite-jsonld/src/jobs.rs#RebuildJob]]) that yield SQL requests. The umbrella crate drives them from `Store::jsonld()` / `Store::credentials()` and their async twins (features `jsonld`, `vc`) — handles over the store rather than methods on it, so `Store` stays a drop-in for Oxigraph's. The raw document is the source of truth and graphs are derived data ([[decisions#D18 The raw document is the source of truth]]).
+
+### Keys and graphs
+
+A document's key comes from a key strategy (top-level `@id`/`id` by default, a JSON Pointer, a content hash, or explicit); its default-graph triples go to a graph chosen by a graph strategy (the key itself by default).
+
+See [[crates/oxilite-jsonld/src/options.rs#JsonLdOptions]] and [[decisions#D19 Credential id as key and named graph]]. Template graphs substitute the percent-encoded key into `{key}`; fixed and default-graph strategies make documents share a graph. When no key is found, the missing-key policy rejects the document (generic default) or falls back to `urn:oxilite:doc:sha256:<hex>` of the bytes (credentials default).
+
+### Tables
+
+Three tables are created when a JSON-LD handle is first opened, so stores that never use JSON-LD are unchanged and `schema_version` stays put.
+
+- `jsonld_documents(key, graph, doc, sha256, profile, issuer, subject, types, valid_from, valid_until, refs, stored_at)` — the verbatim JSON plus metadata that profiles fill (credentials: issuer, first subject id, types, validity as epoch seconds, a presentation's embedded keys). Partial indexes on issuer, subject and `valid_until` are configurable ([[crates/oxilite-jsonld/src/options.rs#MetadataIndexes]]), since D1 bills every index entry.
+- `jsonld_graphs(key, g)` — the graphs a document owns: its target graph when it has one of its own, plus the graphs it defines (proofs). `UNIQUE(g)`: a graph has one owner.
+- `jsonld_contexts(iri, doc)` — persisted remote contexts.
+
+`sha256` is hex TEXT and `types`/`refs` are JSON arrays, because the SQL value model has no BLOBs. See [[crates/oxilite-jsonld/src/schema.rs#schema_statements]].
+
+### Context loading
+
+Context loading never does I/O inside the JSON-LD processor: the loader chain answers from memory and records misses, which the job reads from `jsonld_contexts` and retries.
+
+Order: contexts registered on the handle, the first loader (the bundled W3C contexts of `ssi-json-ld` for credentials, none otherwise), then persisted contexts read by the job in rounds (a context may import others; at most 8 rounds). A fetcher callback may download what is still missing — `http_fetcher()` with the `network` feature, native only — and `cache_fetched` persists the result. Because every loader answers immediately, `json-ld`'s futures complete on their first poll ([[crates/oxilite-jsonld/src/loader.rs]]).
+
+### Conversion
+
+The `json-ld` crate expands the document and converts it to RDF; the result is mapped to `oxrdf` quads with the default graph rewritten to the target graph.
+
+Blank nodes are labelled `d<16 hex of xxh3-128(key)>_<n>` ([[crates/oxilite-jsonld/src/convert.rs#blank_prefix]]), so documents never share one and re-storing a document is a no-op ([[decisions#D21 Document-scoped deterministic blank nodes]]). Generalized RDF (blank predicates) is dropped. `rdfDirection: i18n-datatype` IRIs are normalized to JSON-LD 1.1's form, which `json-ld` 0.21 predates. On the W3C `toRdf` suite, 450 tests pass; 4 are allow-listed limitations of `json-ld` 0.21 (compound-literal direction, keyword-like IRIs, an invalid `@base`) and 13 are out of scope (1.0-only, generalized RDF, `expandContext`).
+
+### Write path
+
+A put, replace or remove is one atomic request — one D1 batch — built without reading back, except for strategies where documents share a graph.
+
+The request deletes the quads and graph names of every graph the key owns, deletes its ownership rows, inserts terms, quads, graph names and ownership rows, and writes the document row (long documents are appended in chunks with `doc = doc || …` so each statement stays under the SQL-length limit). A request with more statements than the backend allows fails with `DocumentTooLarge` instead of being split. For fixed and default-graph strategies the previous version is read and its exact triples deleted, natively inside a transaction. `check_documents()` compares every document's graphs with a fresh conversion, and `rebuild_graph()` re-puts the stored bytes; SPARQL UPDATE may edit document graphs, and this is how drift is found and repaired.
+
+### Verifiable Credentials
+
+`oxilite-vc` stores VCDM 1.1 and 2.0 credentials and presentations under their `id`, in the named graph of the same IRI, after a structural check with `ssi-vc`; proofs are not verified.
+
+[[crates/oxilite-vc/src/lib.rs#credential_input]] picks the data model from the first `@context`, parses with `ssi_vc::v1`/`v2` (context order, required types, issuer, subject) and extracts metadata (`issuanceDate`/`validFrom`, `expirationDate`/`validUntil`). JSON-LD `@graph` containers put each proof in its own blank-node graph, owned by the credential, so claims queried from the credential graph contain no `proofValue`. [[crates/oxilite-vc/src/lib.rs#presentation_inputs]] also stores each embedded credential with an id as its own document, in the same batch, and records their keys in the presentation's `refs`. Lookups by issuer, subject, type, validity instant and profile read the indexed columns ([[crates/oxilite-jsonld/src/jobs.rs#find_sql]]); type matching uses `instr` on the JSON array, so it needs no JSON1.
+
+`examples/verifiable-credentials` runs the website's walkthrough on `@oxilite/node` and on Miniflare D1.
+
+The `ssi` crates enable serde_json's `arbitrary_precision` for the whole build, which changes how numbers deserialize; `SqlValue` therefore has a hand-written deserializer that accepts both forms ([[decisions#D20 json-ld and ssi, in two crates]]).
+
 ## Bindings
 
 A Node.js package and a Cloudflare D1 package, both typed TypeScript, over the same core.
@@ -256,12 +306,16 @@ Every published crate and npm package has its own README (absolute links and log
 
 Both packages also expose `cypher(query, params, options)` and `explainCypher()`: parameters and options travel as JSON ([[crates/oxilite-cypher/src/json.rs]]), and results are plain objects (`CypherNode`, `CypherRelationship`, `CypherPath`, temporal values as ISO strings) with `records` keyed by column. The wasm engine builds Cypher by default (feature `cypher`; `cypher-lite` leaves out the bundled time zone database). When the database is bundled (`tzdb-bundle`, on by default), native builds use it too instead of `/usr/share/zoneinfo`, since distributions differ on pre-1970 history (Ubuntu keeps `backzone`) and results must not depend on the host.
 
+Both packages also expose JSON-LD documents and Verifiable Credentials: `store.jsonld(options)` and `store.credentials(options)` return handles (`put`, `get`, `remove`, `find`, `graphs`, `documentForGraph`, `putContext`, `check`, `rebuild`; `putPresentation` for credentials), synchronous on Node and asynchronous on D1. Options, filters and stored documents travel as JSON ([[crates/oxilite-jsonld/src/json.rs]]); errors arrive as `JsonLdError` with the JSON-LD error code. The wasm engine builds them by default (feature `vc`): the D1 bundle grows from 3.3 MB to 5.0 MB (1.4 MB gzipped), within the Workers limits. Network context loading exists only on Node.
+
 Both packages share `@oxilite/common` (terms, `DataFactory`, result conversion). The native addon and the wasm engine exchange the same JSON terms and outputs (see [[crates/oxilite-core/src/json.rs]]), so a query returns identical JavaScript values on either. Oxigraph's own `store.test.ts` runs unchanged against `@oxilite/node`; its single failure is the allow-listed merge semantics of `default_graph` lists (D12). Example Workers exist in Rust (`examples/d1-worker`) and TypeScript (`examples/d1-worker-ts`), each with a Miniflare end-to-end test. `examples/do-agent-memory-ts` runs `@oxilite/d1` on a Durable Object's SQLite: a D1-shaped adapter over `ctx.storage.sql` maps `raw()` to `exec` and `batch()` to `transactionSync`, and reports per-statement changes from `total_changes()`. It is tested on Miniflare but is not part of the W3C runs.
 
 ## Project website
 
-A static site in `site/` (landing page, articles in `site/articles/`, and German Impressum, Datenschutz and AGB) is deployed to GitHub Pages by `.github/workflows/pages.yml` on pushes to `main`.
+A static site in `site/` (landing page, articles in `site/articles/`, and German Impressum, Datenschutz and AGB) is served at oxilitedb.com by a Cloudflare Worker in `site-worker/`, deployed by `.github/workflows/site.yml` on pushes to `main`.
 
-The site is plain HTML and one stylesheet in a white, black and orange palette. It loads no external fonts, scripts or trackers, which keeps the Datenschutz page to GitHub's hosting logs only. The logo (`site/assets/logo.svg`, rendered to `logo.png` with `rsvg-convert`) combines a SQLite-style tile, a quill drawn as a graph, and a small edge-worker cloud.
+The Worker ([[site-worker/src/index.js]]) serves `site/` as static assets with `run_worker_first`, so every response gets security headers (CSP, HSTS, `X-Frame-Options`) and `X-Robots-Tag: noai`. It redirects `www` to the apex and answers 403 to AI training crawlers by user agent ([[site-worker/src/index.js#isBlockedAgent]]); `robots.txt` stays readable to all. `site/robots.txt` lists the same crawlers and sets `Content-Signal: search=yes, ai-input=yes, ai-train=no`, so search engines and AI search tools that cite the site are allowed. Bot Fight Mode and Block AI bots are Cloudflare dashboard settings, not code.
+
+The site is plain HTML and one stylesheet in a white, black and orange palette. It loads no external fonts, scripts or trackers, which keeps the Datenschutz page to Cloudflare's hosting logs and its bot-protection cookies. The logo (`site/assets/logo.svg`, rendered to `logo.png` with `rsvg-convert`) combines a SQLite-style tile, a quill drawn as a graph, and a small edge-worker cloud.
 
 The Cypher article walks through the M7 frontend; its steps are asserted by `examples/cypher-property-graph` on `@oxilite/node` and on Miniflare D1.

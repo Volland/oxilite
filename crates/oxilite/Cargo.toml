@@ -23,6 +23,14 @@ d1 = ["dep:oxilite-d1"]
 reasonable = ["dep:oxilite-reason"]
 # openCypher over the property-graph view of the dataset.
 cypher = ["dep:oxilite-cypher"]
+# JSON-LD documents: verbatim storage, one named graph per document.
+jsonld = ["dep:oxilite-jsonld"]
+# Verifiable Credentials on top of `jsonld` (pulls in the `ssi` crates).
+vc = ["jsonld", "dep:oxilite-vc"]
+# Fetch unknown JSON-LD contexts over HTTP when a handle opts in (native only).
+jsonld-network = ["jsonld", "oxilite-jsonld/network"]
+# JSON forms of JSON-LD options and results (JavaScript bindings).
+jsonld-json = ["jsonld", "oxilite-jsonld/json"]
 
 [dependencies]
 oxilite-core.workspace = true
@@ -31,6 +39,8 @@ oxilite-dylib = { workspace = true, optional = true }
 oxilite-d1 = { workspace = true, optional = true }
 oxilite-reason = { workspace = true, optional = true }
 oxilite-cypher = { workspace = true, optional = true }
+oxilite-jsonld = { workspace = true, optional = true }
+oxilite-vc = { workspace = true, optional = true }
 oxrdf.workspace = true
 oxrdfio.workspace = true
 spargebra.workspace = true

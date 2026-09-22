@@ -7,7 +7,13 @@ import init, { Engine, initSync } from "../wasm/web/oxilite_wasm.js";
 import { D1Store as Base, type D1DatabaseLike, type D1StoreOptions, type EngineConstructor } from "./driver.js";
 
 export * from "@oxilite/common";
-export { OxiliteCollisionError, type D1DatabaseLike, type D1StoreOptions } from "./driver.js";
+export {
+  OxiliteCollisionError,
+  D1Credentials,
+  D1JsonLdDocuments,
+  type D1DatabaseLike,
+  type D1StoreOptions,
+} from "./driver.js";
 
 let ready = false;
 
@@ -32,10 +38,20 @@ export class D1Store {
     return Base.openWith(Engine as unknown as EngineConstructor, db, options);
   }
 
-  /** The schema as SQL (for `wrangler d1 migrations`). */
-  static async schemaSql(options: { graphIndex?: boolean; wasm?: WebAssembly.Module | BufferSource } = {}): Promise<string> {
+  /**
+   * The schema as SQL (for `wrangler d1 migrations`); `jsonld` adds the JSON-LD document
+   * tables (`true`, or the metadata indexes to create).
+   */
+  static async schemaSql(
+    options: {
+      graphIndex?: boolean;
+      jsonld?: boolean | { issuer?: boolean; subject?: boolean; validUntil?: boolean };
+      wasm?: WebAssembly.Module | BufferSource;
+    } = {},
+  ): Promise<string> {
     await initOxilite(options.wasm);
     const e = new (Engine as unknown as EngineConstructor)(null, JSON.stringify({ graphIndex: options.graphIndex ?? true }));
+    if (options.jsonld) return e.jsonldSchemaSql(JSON.stringify(options.jsonld === true ? {} : options.jsonld));
     return e.schemaSql();
   }
 }

@@ -22,6 +22,7 @@
         <a href="#features" class="hide-sm">Features</a>
         <a href="#start" class="hide-sm">Get started</a>
         <a href="#d1" class="hide-sm">Cloudflare D1</a>
+        <a href="#credentials" class="hide-sm">Credentials</a>
         <a href="#articles">Articles</a>
         <a href="https://github.com/Volland/oxilite">GitHub</a>
       </nav>
@@ -161,11 +162,30 @@ oxilite serve   -l data.sqlite -b 127.0.0.1:7879     <span class="c"># /query, /
               <tr><td>OWL 2 RL</td><td><code>materialize()</code> with SQL fixpoint rules on every backend, or natively with <em>reasonable</em>.</td></tr>
               <tr><td>SHACL / ShEx</td><td>rudof validators, unchanged, in <code>oxilite-validate</code>. Results match rudof's in-memory graph.</td></tr>
               <tr><td>Full-text search</td><td>FTS5 behind <code>oxl:textMatch</code>, on D1 too.</td></tr>
+              <tr><td>JSON-LD / Verifiable Credentials</td><td>Documents kept byte for byte, RDF in a named graph each, via <em>json-ld</em> and <em>ssi-vc</em> in <code>oxilite-jsonld</code> and <code>oxilite-vc</code>.</td></tr>
             </tbody>
           </table>
         </div>
       </div>
     </section>
+    <section id="credentials" class="band-black">
+      <div class="wrap">
+        <h2>Verifiable Credentials and JSON-LD<span class="dot">.</span></h2>
+        <p class="sub">Store a credential and keep it twice over: the exact JSON under its <code>id</code>, and its claims as RDF in a named graph of the same IRI. SPARQL can query the graph, and indexed columns answer lookups by issuer, subject, type and validity.</p>
+        <div class="backends">
+          <div class="backend"><strong>Byte for byte</strong><span>The JSON as issued, with its SHA-256, ready to present or verify.</span></div>
+          <div class="backend"><strong>A graph each</strong><span>Claims in <em>GRAPH &lt;id&gt;</em>, proofs in their own graphs. Keys and graphs are configurable.</span></div>
+          <div class="backend"><strong>Offline contexts</strong><span>W3C credential contexts bundled, your own persisted in the store. It works on D1 too.</span></div>
+          <div class="backend"><strong>Atomic</strong><span>Put, replace and remove are each one batch and clear exactly the document's triples.</span></div>
+        </div>
+<pre style="margin-top:20px"><code><span class="k">const</span> vcs = store.credentials();
+<span class="k">const</span> id = <span class="k">await</span> vcs.put(credential);                  <span class="c">// checked (VCDM 1.1 / 2.0), stored, converted</span>
+<span class="k">await</span> store.query(<span class="s">`SELECT * WHERE { GRAPH &lt;${id}&gt; { ?s ?p ?o } }`</span>);
+<span class="k">await</span> vcs.find({ issuer: <span class="s">"did:example:issuer"</span>, validAt: <span class="k">new</span> Date() });</code></pre>
+        <p style="margin-top:20px"><a href="articles/verifiable-credentials-jsonld.html">Read the walkthrough →</a></p>
+      </div>
+    </section>
+
     <section id="articles" class="band-soft">
       <div class="wrap">
         <h2>Articles<span class="dot">.</span></h2>
@@ -176,6 +196,12 @@ oxilite serve   -l data.sqlite -b 127.0.0.1:7879     <span class="c"># /query, /
             <h3>Graph memory for AI agents on Durable Objects</h3>
             <p>Give every agent a private knowledge graph in a Durable Object's SQLite. A step-by-step guide covering multi-hop recall, provenance, belief revision and LLM tools.</p>
             <span class="more">Read the guide →</span>
+          </a>
+          <a class="article-card" href="articles/verifiable-credentials-jsonld.html">
+            <span class="kicker">JSON-LD · Verifiable Credentials</span>
+            <h3>Verifiable Credentials and JSON-LD, in SQLite</h3>
+            <p>Keep credentials exactly as issued and query their claims with SPARQL: one named graph per credential, indexed metadata and offline contexts, on Node.js, Rust and D1.</p>
+            <span class="more">Read the walkthrough →</span>
           </a>
           <a class="article-card" href="articles/property-graphs-cypher.html">
             <span class="kicker">Cypher · RDF 1.2</span>

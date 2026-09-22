@@ -1,0 +1,7 @@
+{
+  "@context": ["https://www.w3.org/ns/credentials/v2", "https://www.w3.org/ns/credentials/examples/v2"],
+  "type": ["VerifiableCredential", "ExampleMembershipCredential"],
+  "issuer": "did:example:club",
+  "validFrom": "2024-06-01T00:00:00Z",
+  "credentialSubject": {"id": "did:example:bob", "memberOf": "Chess Club"}
+}

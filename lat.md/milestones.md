@@ -66,7 +66,7 @@ Store JSON-LD documents verbatim in a keyed table and their RDF in a named graph
 
 Two opt-in crates: `oxilite-jsonld` (generic, on the `json-ld` crate) and `oxilite-vc` (credentials profile, on `ssi-vc` and `ssi-json-ld`). Done when the offline W3C `toRdf` tests and the VC fixtures pass on rusqlite, dylib and D1.
 
-Status: planned (spec only).
+Status: done. 450 W3C `toRdf` tests pass (4 allow-listed `json-ld` 0.21 limitations, 13 out of scope); the specification scenarios pass on bundled SQLite, the system `libsqlite3`, the D1 code path and Miniflare D1; `@oxilite/node` and `@oxilite/d1` expose `jsonld()` and `credentials()`.
 
 ## M7 Cypher and property graphs
 

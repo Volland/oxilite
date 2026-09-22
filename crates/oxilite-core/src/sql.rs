@@ -11,14 +11,79 @@ use crate::error::{Error, Result};
 use std::fmt::Write;
 
 /// A SQL value, the subset of SQLite storage classes oxilite uses.
+///
+/// In JSON (JavaScript drivers, D1 over HTTP) it is `null`, a number or a string. The
+/// deserializer is written by hand: an untagged derive breaks when another crate in the build
+/// enables serde_json's `arbitrary_precision` (as the `ssi` crates behind `oxilite-vc` do).
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(untagged))]
 pub enum SqlValue {
     Null,
     Integer(i64),
     Real(f64),
     Text(String),
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for SqlValue {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> std::result::Result<Self, D::Error> {
+        struct V;
+        impl<'de> serde::de::Visitor<'de> for V {
+            type Value = SqlValue;
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("null, a number or a string")
+            }
+            fn visit_unit<E>(self) -> std::result::Result<SqlValue, E> {
+                Ok(SqlValue::Null)
+            }
+            fn visit_none<E>(self) -> std::result::Result<SqlValue, E> {
+                Ok(SqlValue::Null)
+            }
+            fn visit_some<D: serde::Deserializer<'de>>(
+                self,
+                d: D,
+            ) -> std::result::Result<SqlValue, D::Error> {
+                d.deserialize_any(self)
+            }
+            fn visit_bool<E>(self, v: bool) -> std::result::Result<SqlValue, E> {
+                Ok(SqlValue::Integer(i64::from(v)))
+            }
+            fn visit_i64<E>(self, v: i64) -> std::result::Result<SqlValue, E> {
+                Ok(SqlValue::Integer(v))
+            }
+            fn visit_u64<E: serde::de::Error>(self, v: u64) -> std::result::Result<SqlValue, E> {
+                i64::try_from(v)
+                    .map(SqlValue::Integer)
+                    .or(Ok(SqlValue::Real(v as f64)))
+            }
+            fn visit_f64<E>(self, v: f64) -> std::result::Result<SqlValue, E> {
+                Ok(SqlValue::Real(v))
+            }
+            fn visit_str<E>(self, v: &str) -> std::result::Result<SqlValue, E> {
+                Ok(SqlValue::Text(v.to_owned()))
+            }
+            fn visit_string<E>(self, v: String) -> std::result::Result<SqlValue, E> {
+                Ok(SqlValue::Text(v))
+            }
+            // serde_json with `arbitrary_precision` hands numbers over as a one-entry map.
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> std::result::Result<SqlValue, A::Error> {
+                let Some((_, n)) = map.next_entry::<String, String>()? else {
+                    return Err(serde::de::Error::custom("empty map is not a SQL value"));
+                };
+                if let Ok(i) = n.parse::<i64>() {
+                    return Ok(SqlValue::Integer(i));
+                }
+                n.parse::<f64>()
+                    .map(SqlValue::Real)
+                    .map_err(serde::de::Error::custom)
+            }
+        }
+        d.deserialize_any(V)
+    }
 }
 
 impl SqlValue {
@@ -297,5 +362,31 @@ mod tests {
         assert_eq!(sql_str("a\0b"), "CAST(X'610062' AS TEXT)");
         assert_eq!(sql_f64(1.0), "1.0");
         assert_eq!(sql_f64(1e300), "1e300");
+    }
+
+    // @lat: [[tests#D1#SQL values survive arbitrary-precision JSON]]
+    #[cfg(feature = "serde")]
+    #[test]
+    fn sql_values_survive_arbitrary_precision_json() {
+        let plain: Vec<SqlValue> = serde_json::from_str(r#"[null, 7, 1.5, "x"]"#).unwrap();
+        assert_eq!(
+            plain,
+            [
+                SqlValue::Null,
+                SqlValue::Integer(7),
+                SqlValue::Real(1.5),
+                SqlValue::Text("x".into())
+            ]
+        );
+        // The shape serde_json hands numbers over in when `arbitrary_precision` is enabled.
+        let token = r#"[{"$serde_json::private::Number": "1.5"}, {"$serde_json::private::Number": "9007199254740993"}]"#;
+        let v: Vec<SqlValue> = serde_json::from_str(token).unwrap();
+        assert_eq!(
+            v,
+            [
+                SqlValue::Real(1.5),
+                SqlValue::Integer(9_007_199_254_740_993)
+            ]
+        );
     }
 }

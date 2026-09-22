@@ -111,6 +111,19 @@ let r = store.cypher_with("MATCH (a:Person)-[k:KNOWS]->(b) RETURN b.name, k.sinc
 
 Property graphs are a view of the RDF data, so SPARQL and Cypher see the same graph. See [`oxilite-cypher`](https://crates.io/crates/oxilite-cypher).
 
+## JSON-LD documents and Verifiable Credentials
+
+```rust
+// features = ["vc"]  (or ["jsonld"] for JSON-LD without the credentials profile)
+let vcs = store.credentials()?;
+let id = vcs.put_credential(credential_json)?;          // checked, stored verbatim, RDF in graph <id>
+let raw = vcs.get_credential(&id)?.unwrap().json;       // the exact bytes
+let docs = store.jsonld()?;                              // any JSON-LD document
+docs.put_document(r#"{"@context": {"name": "http://schema.org/name"}, "@id": "urn:x", "name": "x"}"#)?;
+```
+
+Each document is stored byte for byte, and its RDF goes into a named graph of its own (by default its `id`), which SPARQL queries. Keys, graphs, contexts and metadata indexes are configurable. See [`oxilite-jsonld`](https://crates.io/crates/oxilite-jsonld) and [`oxilite-vc`](https://crates.io/crates/oxilite-vc).
+
 ## Full-text search
 
 Create the store with `StoreOptions { text_index: true, .. }` and match literals with FTS5:
@@ -124,7 +137,7 @@ SELECT ?doc WHERE { ?doc rdfs:label ?label FILTER(oxl:textMatch(?label, "graph d
 
 - [How it works](https://github.com/Volland/oxilite#how-it-works): the sans-IO core, the storage schema and what a query compiles to
 - [Performance](https://github.com/Volland/oxilite#performance): BSBM results against Oxigraph and D1 write costs
-- [Reasoning and validation](https://github.com/Volland/oxilite#reasoning-and-validation), [Cypher and property graphs](https://github.com/Volland/oxilite#cypher-and-property-graphs)
+- [Reasoning and validation](https://github.com/Volland/oxilite#reasoning-and-validation), [Cypher and property graphs](https://github.com/Volland/oxilite#cypher-and-property-graphs), [JSON-LD and Verifiable Credentials](https://github.com/Volland/oxilite#json-ld-and-verifiable-credentials)
 - [Design decisions](https://github.com/Volland/oxilite/blob/main/lat.md/decisions.md) and [architecture](https://github.com/Volland/oxilite/blob/main/lat.md/architecture.md)
 
 ## The oxilite family
@@ -139,6 +152,8 @@ oxilite is an Oxigraph-compatible RDF database and SPARQL 1.1 engine that stores
 | [`oxilite-dylib`](https://crates.io/crates/oxilite-dylib) | Backend that loads your own `libsqlite3` at runtime |
 | [`oxilite-d1`](https://crates.io/crates/oxilite-d1) | Cloudflare D1 backend for Rust Workers |
 | [`oxilite-cypher`](https://crates.io/crates/oxilite-cypher) | openCypher over the same data, OWL- and SHACL-aware |
+| [`oxilite-jsonld`](https://crates.io/crates/oxilite-jsonld) | JSON-LD documents stored verbatim, one named graph each |
+| [`oxilite-vc`](https://crates.io/crates/oxilite-vc) | Verifiable Credentials: stored under their id, indexed, queryable |
 | [`oxilite-reason`](https://crates.io/crates/oxilite-reason) | OWL 2 RL materialization with `reasonable` |
 | [`oxilite-validate`](https://crates.io/crates/oxilite-validate) | SHACL and ShEx validation with rudof |
 | [`oxilite-cli`](https://crates.io/crates/oxilite-cli) | The `oxilite` command and a SPARQL endpoint like `oxigraph serve` |

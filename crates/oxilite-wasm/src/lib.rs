@@ -25,6 +25,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 
+#[cfg(feature = "jsonld")]
+mod jsonld;
+
 fn js(e: impl std::fmt::Display) -> JsError {
     JsError::new(&e.to_string())
 }
@@ -34,7 +37,7 @@ type Stepper = Box<dyn FnMut(Option<Response>) -> oxilite_core::Result<Step<Valu
 /// A resumable operation (see the crate documentation).
 #[wasm_bindgen]
 pub struct Job {
-    step: Stepper,
+    pub(crate) step: Stepper,
 }
 
 #[wasm_bindgen]
@@ -102,6 +105,33 @@ impl Engine {
             options,
             stats: Rc::default(),
         })
+    }
+
+    /// A JSON-LD document or (with `"credentials": true` in `options`) Verifiable Credentials
+    /// operation: `schema`, `put`, `get`, `remove`, `list`, `find`, `graphs`,
+    /// `documentForGraph`, `putContext`, `removeContext`, `contexts`, `rebuild`, `check`,
+    /// `putCredential`, `putPresentation`. `args` and `options` are JSON
+    /// (`oxilite_jsonld::json`); errors read `oxilite-jsonld:{"code", "message"}`.
+    #[cfg(feature = "jsonld")]
+    pub fn jsonld(&self, op: &str, args: &str, options: Option<String>) -> Result<Job, JsError> {
+        let args: Value = serde_json::from_str(args).map_err(js)?;
+        let opts: Value = match options {
+            Some(o) => serde_json::from_str(&o).map_err(js)?,
+            None => Value::Null,
+        };
+        jsonld::jsonld_job(op, &args, &opts, &self.caps).map_err(js)
+    }
+
+    /// The schema with the JSON-LD tables, as a SQL script; `indexes` (JSON) picks the
+    /// metadata indexes.
+    #[cfg(feature = "jsonld")]
+    #[wasm_bindgen(js_name = jsonldSchemaSql)]
+    pub fn jsonld_schema_sql(&self, indexes: Option<String>) -> Result<String, JsError> {
+        let indexes: Value = match indexes {
+            Some(i) => serde_json::from_str(&i).map_err(js)?,
+            None => json!({}),
+        };
+        jsonld::schema_sql(&self.options, &indexes).map_err(js)
     }
 
     /// The schema as a SQL script (for `wrangler d1 migrations`).

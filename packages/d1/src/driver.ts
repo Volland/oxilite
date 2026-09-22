@@ -9,7 +9,21 @@ import {
   type CypherOutput,
   type CypherResult,
   type CypherValue,
+  type CredentialOptions,
+  type DocumentFilter,
+  type Drift,
+  type JsonLdOptions,
+  JsonLdError,
+  type PresentationKeys,
+  type StoredDocument,
+  type Term,
+  type TermJson,
   cypherResult,
+  documentText,
+  filterJson,
+  fromJson,
+  jsonLdError,
+  storedDocument,
   type DumpOptions,
   type LoadData,
   type LoadOptions,
@@ -64,6 +78,8 @@ export interface WasmEngine {
   materialize(): WasmJob;
   clearInferences(): WasmJob;
   schemaSql(): string;
+  jsonld(op: string, args: string, options?: string | null): WasmJob;
+  jsonldSchemaSql(indexes?: string | null): string;
 }
 export type EngineConstructor = new (capabilities?: string | null, options?: string | null) => WasmEngine;
 
@@ -87,6 +103,9 @@ function mapError(e: unknown): Error {
   if (message.includes("oxilite: term hash collision")) return new OxiliteCollisionError(message);
   if (message.includes("graph_does_not_exist")) return new Error("the graph does not exist");
   if (message.includes("graph_already_exists")) return new Error("the graph already exists");
+  if (message.includes("jsonld_graphs.g")) {
+    return new JsonLdError("graph-owned", `a graph of this document is already owned by another document: ${message}`);
+  }
   if (message.includes("computed_value_not_storable")) {
     return new Error("an update template stores a computed non-integer value, which cannot be done on D1");
   }
@@ -144,6 +163,41 @@ export class D1Store {
     } finally {
       job.free?.();
     }
+  }
+
+  /**
+   * JSON-LD documents: each stored verbatim under a key (by default its `@id`), its RDF in a
+   * named graph (by default the key). Every write is one D1 batch. Contexts load offline:
+   * persist the ones your documents use with `putContext`.
+   */
+  jsonld(options: JsonLdOptions & { migrated?: boolean } = {}): D1JsonLdDocuments {
+    return new D1JsonLdDocuments(this.jsonldCall(options));
+  }
+
+  /**
+   * Verifiable Credentials (VCDM 1.1 and 2.0) stored under their `id`, RDF in the graph of the
+   * same IRI; the W3C credential contexts are bundled. Proofs are not verified.
+   */
+  credentials(options: CredentialOptions & { migrated?: boolean } = {}): D1Credentials {
+    return new D1Credentials(this.jsonldCall({ ...options, credentials: true }));
+  }
+
+  private jsonldCall(options: JsonLdOptions & { migrated?: boolean; credentials?: boolean }): AsyncCall {
+    const { migrated, ...opts } = options;
+    const json = JSON.stringify(opts);
+    let ready: Promise<unknown> | null = migrated ? Promise.resolve() : null;
+    const call = async (op: string, args: object): Promise<unknown> => {
+      try {
+        return await this.run(this.engine.jsonld(op, JSON.stringify(args), json));
+      } catch (e) {
+        throw jsonLdError(e);
+      }
+    };
+    return async (op, args) => {
+      ready ??= call("schema", {});
+      await ready;
+      return call(op, args);
+    };
   }
 
   /**
@@ -269,5 +323,102 @@ export class D1Store {
   /** The schema SQL of this store (for `wrangler d1 migrations`). */
   schemaSql(): string {
     return this.engine.schemaSql();
+  }
+}
+
+type AsyncCall = (op: string, args: object) => Promise<unknown>;
+
+/** JSON-LD documents of a D1 store (see `D1Store.jsonld`). */
+export class D1JsonLdDocuments {
+  constructor(private readonly call: AsyncCall) {}
+
+  /** Stores a document (replacing one with the same key) and returns its key. JSON text is stored byte for byte. */
+  async put(document: string | object, key?: string): Promise<string> {
+    return (await this.putAll([{ document, key }]))[0] as string;
+  }
+
+  /** Stores several documents in one D1 batch; returns their keys. */
+  async putAll(documents: { document: string | object; key?: string }[]): Promise<string[]> {
+    const out = (await this.call("put", {
+      documents: documents.map((d) => ({ json: documentText(d.document), key: d.key })),
+    })) as { keys: string[] };
+    return out.keys;
+  }
+
+  async get(key: string): Promise<StoredDocument | null> {
+    return storedDocument((await this.call("get", { key })) as Record<string, unknown> | null);
+  }
+
+  /** Removes a document and the graphs it owns; false when it was not stored. */
+  async remove(key: string): Promise<boolean> {
+    return (await this.call("remove", { key })) as boolean;
+  }
+
+  async list(options: { after?: string; limit?: number } = {}): Promise<StoredDocument[]> {
+    return ((await this.call("list", options)) as Record<string, unknown>[]).map((d) => storedDocument(d) as StoredDocument);
+  }
+
+  async find(filter: DocumentFilter = {}): Promise<StoredDocument[]> {
+    return ((await this.call("find", filterJson(filter))) as Record<string, unknown>[]).map((d) => storedDocument(d) as StoredDocument);
+  }
+
+  async graphs(key: string): Promise<Term[]> {
+    return ((await this.call("graphs", { key })) as TermJson[]).map(fromJson);
+  }
+
+  async documentForGraph(graph: TermLike): Promise<StoredDocument | null> {
+    return storedDocument((await this.call("documentForGraph", { graph: toJson(graph) })) as Record<string, unknown> | null);
+  }
+
+  /** Persists a context in D1, so documents that reference `iri` convert offline. */
+  async putContext(iri: string, context: object | string): Promise<void> {
+    await this.call("putContext", { iri, context });
+  }
+
+  async removeContext(iri: string): Promise<void> {
+    await this.call("removeContext", { iri });
+  }
+
+  async contexts(): Promise<string[]> {
+    return (await this.call("contexts", {})) as string[];
+  }
+
+  async rebuild(key: string): Promise<boolean> {
+    return (await this.call("rebuild", { key })) as boolean;
+  }
+
+  async check(): Promise<Drift[]> {
+    return (await this.call("check", {})) as Drift[];
+  }
+}
+
+/** Verifiable Credentials of a D1 store (see `D1Store.credentials`). */
+export class D1Credentials {
+  readonly documents: D1JsonLdDocuments;
+
+  constructor(private readonly call: AsyncCall) {
+    this.documents = new D1JsonLdDocuments(call);
+  }
+
+  /** Checks and stores a credential; returns its key. */
+  async put(credential: string | object, key?: string): Promise<string> {
+    return (await this.call("putCredential", { json: documentText(credential), key })) as string;
+  }
+
+  /** Stores a presentation and each credential it embeds, in one D1 batch. */
+  async putPresentation(presentation: string | object): Promise<PresentationKeys> {
+    return (await this.call("putPresentation", { json: documentText(presentation) })) as PresentationKeys;
+  }
+
+  get(key: string): Promise<StoredDocument | null> {
+    return this.documents.get(key);
+  }
+
+  remove(key: string): Promise<boolean> {
+    return this.documents.remove(key);
+  }
+
+  async find(filter: DocumentFilter = {}): Promise<StoredDocument[]> {
+    return ((await this.call("find", filterJson(filter))) as Record<string, unknown>[]).map((d) => storedDocument(d) as StoredDocument);
   }
 }

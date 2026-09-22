@@ -38,7 +38,9 @@ crates/oxilite          features: jsonld = [oxilite-jsonld], vc = [jsonld, oxili
 
 ### 2. Handles, not new methods on `Store`
 
-`JsonLdStore<'a, B>` wraps `&Store<B>` (and `AsyncJsonLdStore` wraps `&AsyncStore<B>`) and holds `JsonLdOptions`. `CredentialStore` wraps a `JsonLdStore` configured with the VC defaults. This keeps `Store` a drop-in replacement for `oxigraph::store::Store`: its API surface stays identical, which protects the compat harness.
+`JsonLdStore<'a, B>` wraps `&Store<B>` (and `AsyncJsonLdStore` wraps `&AsyncStore<B>`) and holds `JsonLdOptions`. `CredentialStore` wraps a `JsonLdStore` configured with the VC defaults. `Store` gains only the constructors `jsonld()` / `credentials()`, so its query and update API stays identical to `oxigraph::store::Store`, which protects the compat harness.
+
+*As built:* the handles live in the umbrella crate (`crates/oxilite/src/jsonld_store.rs`, `vc_store.rs`), like `cypher_store.rs`, because `oxilite-jsonld` cannot depend on `oxilite` (the umbrella re-exports it). `oxilite-jsonld` and `oxilite-vc` stay sans-IO and expose jobs (`WriteJob`, `RebuildJob`, `CheckJob`, read jobs) that both stores and the wasm engine drive. `JsonLdOptions` also has `processing_mode` (JSON-LD 1.0 / 1.1), used by the W3C runner.
 
 ```rust
 pub struct JsonLdOptions {
@@ -62,7 +64,7 @@ CREATE TABLE IF NOT EXISTS jsonld_documents (
   key         TEXT PRIMARY KEY,
   graph       INTEGER NOT NULL,        -- term id of target graph (0 = default graph)
   doc         TEXT NOT NULL,           -- raw JSON, verbatim
-  sha256      BLOB NOT NULL,
+  sha256      TEXT NOT NULL,           -- hex (the SQL value model has no BLOBs)
   profile     TEXT NOT NULL,           -- 'jsonld' | 'vc1' | 'vc2' | 'vp1' | 'vp2'
   issuer      TEXT, subject TEXT,      -- VC metadata (NULL for generic docs)
   types       TEXT,                    -- JSON array
@@ -95,6 +97,8 @@ CREATE INDEX IF NOT EXISTS jsonld_valid_until ON jsonld_documents(valid_until)  
 5. **Encode and emit** one `Atomic` request: the delete prefix (§7), the writer's term, graph and quad inserts, `INSERT INTO jsonld_graphs`, and `INSERT OR REPLACE INTO jsonld_documents`.
 
 Because the loaders never really await, the futures complete on the first poll. The sync `Store` drives them with a minimal `block_on` (`pollster`), and `AsyncStore` simply `.await`s. The `reqwest` loader is only compiled with `features = ["network"]` on non-wasm targets.
+
+*As built:* the job polls the futures itself with a no-op waker (`poll_ready`), for sync and async stores alike, so no executor dependency is needed. Network loading is a synchronous `ContextFetcher` callback (`http_fetcher()` on `ureq`, feature `network`, native only) that the job calls after the database round, instead of an async `ReqwestLoader`, so the processor's futures still never wait. When `cache_fetched` is set, fetched contexts are persisted in the same batch.
 
 **Alternative considered:** pre-scanning `@context` for IRIs and loading them before expansion. This misses contexts imported from other contexts and scoped contexts, so the retry loop is more accurate for the same cost.
 
@@ -132,11 +136,20 @@ We do not add triggers on `quads`: that would add a write cost to every quad on 
 
 ### 9. `find_credentials`
 
-This compiles to a single `SELECT key, doc FROM jsonld_documents WHERE …` query, with inlined, escaped literals (the store's no-bound-parameters rule), keyset paging (`key > '<after>' ORDER BY key LIMIT n`), and type matching through `EXISTS (SELECT 1 FROM json_each(types) WHERE value = '…')`. SQLite's JSON1 is available on bundled builds and on D1; on a dylib SQLite without JSON1, the type filter is applied in Rust. `valid_at(t)` becomes `(valid_from IS NULL OR valid_from <= t) AND (valid_until IS NULL OR valid_until > t)`.
+This compiles to a single `SELECT key, doc FROM jsonld_documents WHERE …` query, with inlined, escaped literals (the store's no-bound-parameters rule), keyset paging (`key > '<after>' ORDER BY key LIMIT n`), and type matching through `instr(types, '"<type>"') > 0` on the JSON array text: an exact element match that needs no JSON1, so every backend runs the same SQL. `valid_at(t)` becomes `(valid_from IS NULL OR valid_from <= t) AND (valid_until IS NULL OR valid_until > t)`.
+
+### 10. Implementation notes
+
+- `json-ld` 0.21 emits `rdfDirection: i18n-datatype` IRIs in an older form (`i18n#rtl`, language case kept); the conversion normalizes them to JSON-LD 1.1's `i18n#<lang>_<dir>`.
+- `json-ld` reports `"@context": 42` as `invalid context entry`, not the `invalid local context` of the W3C suite; the spec scenario only requires that the JSON-LD error code is surfaced.
+- The ownership conflict (`UNIQUE(g)` on `jsonld_graphs`) surfaces as a backend error; `JsonLdError::from_store` and the D1 driver map it to `GraphOwned` / `graph-owned`.
+- Errors cross the `oxilite_core::Job` boundary as `Error::Other("oxilite-jsonld:…")` and are decoded back by `from_core`; the JavaScript bindings receive `{"code", "message"}` JSON and raise `JsonLdError`.
 
 ## Risks / Trade-offs
 
-- **[`ssi-*` size and churn]** → Only `oxilite-vc` depends on `ssi-*`, and the umbrella feature is off by default. Versions are pinned in the workspace. Wasm exposure (`@oxilite/d1`) only ships if the Workers bundle stays under 10 MB (tracked in tasks).
+- **[`ssi-*` size and churn]** → Only `oxilite-vc` depends on `ssi-*`, and the umbrella feature is off by default. Versions are pinned in the workspace. Measured: the `@oxilite/d1` wasm grows from 3.3 MB to 5.0 MB (1.43 MB gzipped), within the Workers limits (3 MB compressed free, 10 MB paid), so the wasm engine builds `vc` by default.
+- **[`arbitrary_precision` leaks into the build]** → `ssi-vc` enables serde_json's `arbitrary_precision`, which broke the untagged `SqlValue` deserialization of REAL values from D1 JSON. `SqlValue` now has a hand-written deserializer accepting both number forms; the workspace test suite and the D1 sidecar runs pass with the feature unified.
+- **[`getrandom` 0.2 on wasm32]** → the `ssi` crates need getrandom 0.2's `js` backend on `wasm32-unknown-unknown`; `oxilite-vc` enables it for that target.
 - **[`json-ld` 0.21 vs `ssi-json-ld` version skew]** → The workspace pins the `json-ld` version that `ssi-json-ld` resolves to, so a single copy is compiled. CI fails on duplicates (`cargo tree -d`).
 - **[Large documents exceed a D1 batch]** → Chunking would break atomicity, so documents whose encoded request exceeds the backend's limits fail with `DocumentTooLarge` instead. The limit is documented; VCs are typically well below 1 000 quads.
 - **[Expansion order changes across `json-ld` releases would change blank labels]** → Existing data stays valid, but a re-put would then replace blank nodes rather than no-op. This is covered by a regression test that fixes the labels for a reference credential.
@@ -150,4 +163,4 @@ This change is additive. Opening a `JsonLdStore` runs `CREATE TABLE IF NOT EXIST
 ## Open Questions
 
 - Should multi-subject credentials get a `jsonld_subjects(key, subject)` side table? This can be added later as another optional index without changing the specs; for now, lookups use the first subject plus SPARQL.
-- Should the Node and D1 TypeScript bindings expose `JsonLdStore` only, or `CredentialStore` too? This depends on the measured wasm size (task 7.2).
+- *Resolved:* both TypeScript packages expose `jsonld()` and `credentials()`; the measured wasm size fits the Workers limits.

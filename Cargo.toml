@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/oxilite-core", "crates/oxilite-rusqlite", "crates/oxilite-dylib", "crates/oxilite", "testsuite", "crates/oxilite-wasm", "crates/oxilite-d1", "bindings/node", "crates/oxilite-reason", "crates/oxilite-validate", "crates/oxilite-cypher", "crates/oxilite-cli", "bench"]
+members = ["crates/oxilite-core", "crates/oxilite-rusqlite", "crates/oxilite-dylib", "crates/oxilite", "testsuite", "crates/oxilite-wasm", "crates/oxilite-d1", "bindings/node", "crates/oxilite-reason", "crates/oxilite-validate", "crates/oxilite-cypher", "crates/oxilite-cli", "bench", "crates/oxilite-jsonld", "crates/oxilite-vc"]
 
 [workspace.package]
 version = "0.2.1"
@@ -36,6 +36,15 @@ oxilite = { path = "crates/oxilite", version = "0.2.1" }
 oxilite-d1 = { path = "crates/oxilite-d1", version = "0.2.1" }
 oxilite-reason = { path = "crates/oxilite-reason", version = "0.2.1" }
 oxilite-cypher = { path = "crates/oxilite-cypher", version = "0.2.1", default-features = false }
+oxilite-jsonld = { path = "crates/oxilite-jsonld", version = "0.2.1" }
+oxilite-vc = { path = "crates/oxilite-vc", version = "0.2.1" }
+# JSON-LD 1.1 processing; pinned to the version ssi-json-ld resolves to (one copy in the tree).
+json-ld = "0.21.4"
+json-syntax = "0.12.5"
+iref = "3.2.2"
+rdf-types = "0.22.3"
+ssi-vc = "0.9.2"
+ssi-json-ld = "0.3.3"
 
 # Small WebAssembly builds for Workers (1 MB / 10 MB script limits).
 [profile.wasm-release]

@@ -23,8 +23,12 @@ mod async_store;
 mod common;
 #[cfg(feature = "cypher")]
 mod cypher_store;
+#[cfg(feature = "jsonld")]
+mod jsonld_store;
 mod partial;
 pub mod store;
+#[cfg(feature = "vc")]
+mod vc_store;
 
 pub use async_store::AsyncStore;
 pub use oxilite_core as core;
@@ -71,6 +75,21 @@ pub mod sparql {
 #[cfg(feature = "cypher")]
 pub mod cypher {
     pub use oxilite_cypher::*;
+}
+
+/// JSON-LD documents: verbatim storage, one named graph per document (`Store::jsonld`).
+#[cfg(feature = "jsonld")]
+pub mod jsonld {
+    pub use crate::jsonld_store::{AsyncJsonLdStore, JsonLdStore};
+    pub use oxilite_jsonld::*;
+}
+
+/// Verifiable Credentials: stored under their id, RDF in a graph per credential
+/// (`Store::credentials`).
+#[cfg(feature = "vc")]
+pub mod vc {
+    pub use crate::vc_store::{AsyncCredentialStore, CredentialStore};
+    pub use oxilite_vc::*;
 }
 
 /// The in-process SQLite backend (bundled SQLite, UDFs).

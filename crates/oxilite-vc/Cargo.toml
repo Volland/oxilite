@@ -1,0 +1,36 @@
+[package]
+name = "oxilite-vc"
+description = "Verifiable Credentials in oxilite: credentials stored verbatim under their id, RDF in a named graph per credential, indexed metadata"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/oxilite-vc"
+readme = "README.md"
+authors.workspace = true
+keywords = ["verifiable-credentials", "json-ld", "rdf", "sqlite", "w3c"]
+categories = ["database-implementations", "cryptography"]
+rust-version.workspace = true
+
+[dependencies]
+oxilite-core.workspace = true
+oxilite-jsonld.workspace = true
+oxrdf.workspace = true
+ssi-vc.workspace = true
+ssi-json-ld.workspace = true
+json-ld.workspace = true
+json-syntax.workspace = true
+iref.workspace = true
+serde_json = "1"
+thiserror.workspace = true
+
+# The ssi crates use getrandom 0.2, which needs its `js` backend on wasm32-unknown-unknown.
+[target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
+getrandom02 = { package = "getrandom", version = "0.2", features = ["js"] }
+
+[dev-dependencies]
+oxilite = { path = "../oxilite", features = ["rusqlite", "dylib", "vc"] }
+futures = { version = "0.3", default-features = false, features = ["executor"] }
+oxilite-core = { workspace = true, features = ["serde"] }
+ureq = { version = "2", features = ["json"] }

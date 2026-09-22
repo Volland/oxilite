@@ -13,3 +13,6 @@
 [submodule "testsuite/openCypher"]
 	path = testsuite/openCypher
 	url = https://github.com/opencypher/openCypher.git
+[submodule "testsuite/json-ld-api"]
+	path = testsuite/json-ld-api
+	url = https://github.com/w3c/json-ld-api.git

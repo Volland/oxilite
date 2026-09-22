@@ -10,7 +10,19 @@ import {
   type CypherOutput,
   type CypherResult,
   type CypherValue,
+  type CredentialOptions,
+  type DocumentFilter,
+  type Drift,
+  type JsonLdOptions,
+  type PresentationKeys,
+  type StoredDocument,
+  type Term,
   cypherResult,
+  documentText,
+  filterJson,
+  fromJson,
+  jsonLdError,
+  storedDocument,
   type DumpOptions,
   type LoadData,
   type LoadOptions,
@@ -18,6 +30,7 @@ import {
   type Quad,
   type QueryOptions,
   type QueryResult,
+  type TermJson,
   type TermLike,
   loadDataToString,
   outputToResult,
@@ -45,6 +58,7 @@ interface NativeStoreInstance {
   clearInferences(): void;
   clear(): void;
   backup(path: string): void;
+  jsonld(op: string, args: string, options?: string | null): string;
 }
 interface Native {
   NativeStore: new (path?: string | null, library?: string | null, options?: string | null) => NativeStoreInstance;
@@ -226,6 +240,30 @@ export class Store {
     this.native.backup(path);
   }
 
+  /**
+   * JSON-LD documents: each stored verbatim under a key (by default its `@id`), its RDF in a
+   * named graph (by default the key) that SPARQL queries like any other graph.
+   */
+  jsonld(options: JsonLdOptions = {}): JsonLdDocuments {
+    return new JsonLdDocuments((op, args) => this.call(op, args, options));
+  }
+
+  /**
+   * Verifiable Credentials (VCDM 1.1 and 2.0): stored verbatim under their `id`, RDF in the
+   * graph of the same IRI, issuer/subject/type/validity indexed. Proofs are not verified.
+   */
+  credentials(options: CredentialOptions = {}): Credentials {
+    return new Credentials((op, args) => this.call(op, args, { ...options, credentials: true }));
+  }
+
+  private call(op: string, args: object, options: object): unknown {
+    try {
+      return JSON.parse(this.native.jsonld(op, JSON.stringify(args), JSON.stringify(options)));
+    } catch (e) {
+      throw jsonLdError(e);
+    }
+  }
+
   /** The schema as SQL. */
   static schemaSql(options: { graphIndex?: boolean } = {}): string {
     return native.schemaSql(JSON.stringify({ graphIndex: options.graphIndex ?? true }));
@@ -234,4 +272,111 @@ export class Store {
 
 function isIterable(x: unknown): x is Iterable<TermLike> {
   return typeof x === "object" && x !== null && Symbol.iterator in x;
+}
+
+type Call = (op: string, args: object) => unknown;
+
+/** JSON-LD documents of a store (see `Store.jsonld`). Every write is atomic. */
+export class JsonLdDocuments {
+  constructor(private readonly call: Call) {}
+
+  /** Stores a document (replacing one with the same key) and returns its key. JSON text is stored byte for byte. */
+  put(document: string | object, key?: string): string {
+    return this.putAll([{ document, key }])[0];
+  }
+
+  /** Stores several documents in one atomic write; returns their keys. */
+  putAll(documents: { document: string | object; key?: string }[]): string[] {
+    const out = this.call("put", {
+      documents: documents.map((d) => ({ json: documentText(d.document), key: d.key })),
+    }) as { keys: string[] };
+    return out.keys;
+  }
+
+  /** The stored document, or null. */
+  get(key: string): StoredDocument | null {
+    return storedDocument(this.call("get", { key }) as Record<string, unknown> | null);
+  }
+
+  /** Removes a document and the graphs it owns; false when it was not stored. */
+  remove(key: string): boolean {
+    return this.call("remove", { key }) as boolean;
+  }
+
+  /** Documents ordered by key (keyset paging with `after`). */
+  list(options: { after?: string; limit?: number } = {}): StoredDocument[] {
+    return (this.call("list", options) as Record<string, unknown>[]).map((d) => storedDocument(d) as StoredDocument);
+  }
+
+  /** Documents matching metadata filters. */
+  find(filter: DocumentFilter = {}): StoredDocument[] {
+    return (this.call("find", filterJson(filter)) as Record<string, unknown>[]).map((d) => storedDocument(d) as StoredDocument);
+  }
+
+  /** The graphs a document owns (its own graph and the graphs it defines, such as proofs). */
+  graphs(key: string): Term[] {
+    return (this.call("graphs", { key }) as TermJson[]).map(fromJson);
+  }
+
+  /** The document behind a graph, e.g. a `?g` bound by SPARQL. */
+  documentForGraph(graph: TermLike): StoredDocument | null {
+    return storedDocument(this.call("documentForGraph", { graph: toJson(graph) }) as Record<string, unknown> | null);
+  }
+
+  /** Persists a context, so documents that reference `iri` convert offline. */
+  putContext(iri: string, context: object | string): void {
+    this.call("putContext", { iri, context });
+  }
+
+  removeContext(iri: string): void {
+    this.call("removeContext", { iri });
+  }
+
+  /** IRIs of the persisted contexts. */
+  contexts(): string[] {
+    return this.call("contexts", {}) as string[];
+  }
+
+  /** Regenerates a document's graphs from its stored JSON; false when it is not stored. */
+  rebuild(key: string): boolean {
+    return this.call("rebuild", { key }) as boolean;
+  }
+
+  /** Documents whose graphs no longer match their JSON (e.g. after a SPARQL UPDATE). */
+  check(): Drift[] {
+    return this.call("check", {}) as Drift[];
+  }
+}
+
+/** Verifiable Credentials of a store (see `Store.credentials`). */
+export class Credentials {
+  /** The document operations (graphs, contexts, check, rebuild…) with the bundled credential contexts. */
+  readonly documents: JsonLdDocuments;
+
+  constructor(private readonly call: Call) {
+    this.documents = new JsonLdDocuments(call);
+  }
+
+  /** Checks and stores a credential; returns its key (its `id`, or a content hash without one). */
+  put(credential: string | object, key?: string): string {
+    return this.call("putCredential", { json: documentText(credential), key }) as string;
+  }
+
+  /** Stores a presentation and each credential it embeds, atomically. */
+  putPresentation(presentation: string | object): PresentationKeys {
+    return this.call("putPresentation", { json: documentText(presentation) }) as PresentationKeys;
+  }
+
+  get(key: string): StoredDocument | null {
+    return this.documents.get(key);
+  }
+
+  remove(key: string): boolean {
+    return this.documents.remove(key);
+  }
+
+  /** Credentials by issuer, subject, type, validity instant and profile (indexed; no SPARQL). */
+  find(filter: DocumentFilter = {}): StoredDocument[] {
+    return (this.call("find", filterJson(filter)) as Record<string, unknown>[]).map((d) => storedDocument(d) as StoredDocument);
+  }
 }

@@ -403,3 +403,142 @@ export function cypherResult(out: CypherOutput): CypherResult {
     stats: out.stats,
   };
 }
+
+// ---------------------------------------------------------------------------------------------
+// JSON-LD documents and Verifiable Credentials (see `oxilite_jsonld::json`).
+
+/** Where a document's key comes from. */
+export type KeyStrategy = "id" | "contentHash" | "explicit" | { pointer: string };
+
+/** Which graph a document's triples go to: the key itself (default), an IRI template with `{key}`, one fixed graph, or the default graph. */
+export type GraphStrategy = "key" | "default" | { template: string } | { fixed: string };
+
+/** Options of a JSON-LD document handle. */
+export interface JsonLdOptions {
+  /** Default `"id"`: the top-level `@id` / `id`. */
+  key?: KeyStrategy;
+  /** When the key strategy finds nothing: fail (default for documents) or use `urn:oxilite:doc:sha256:<hex>` (default for credentials). */
+  onMissingKey?: "reject" | "contentHash";
+  /** Default `"key"`: one named graph per document, named after its key. */
+  graph?: GraphStrategy;
+  /** Base IRI for relative IRIs in documents. */
+  baseIri?: string;
+  rdfDirection?: "i18n-datatype" | "compound-literal";
+  processingMode?: "json-ld-1.0" | "json-ld-1.1";
+  /** Contexts available in memory: IRI → context document. */
+  contexts?: Record<string, object | string>;
+  /** Fetch unknown remote contexts over HTTP (Node only; default false: no network access). */
+  network?: boolean;
+  /** Persist fetched contexts in the store, so later loads work offline. */
+  cacheFetched?: boolean;
+  /** Metadata indexes created with the tables (all default true). */
+  indexes?: { issuer?: boolean; subject?: boolean; validUntil?: boolean };
+}
+
+/** Options of a credentials handle. */
+export interface CredentialOptions extends JsonLdOptions {
+  /** Also store each credential embedded in a presentation on its own (default true). */
+  embedCredentials?: boolean;
+}
+
+/** A stored document (or credential). */
+export interface StoredDocument {
+  key: string;
+  /** The graph its default-graph triples were written to. */
+  graph: Term;
+  /** The JSON exactly as it was stored. */
+  json: string;
+  /** Hex SHA-256 of `json`. */
+  sha256: string;
+  /** `jsonld`, or `vc1` / `vc2` / `vp1` / `vp2` for credentials and presentations. */
+  profile: string;
+  issuer: string | null;
+  subject: string | null;
+  types: string[];
+  validFrom: Date | null;
+  validUntil: Date | null;
+  /** Keys of the credentials a presentation embeds. */
+  refs: string[];
+  storedAt: Date;
+}
+
+/** Metadata filter of `find`. */
+export interface DocumentFilter {
+  issuer?: string;
+  subject?: string;
+  /** One value of the `type` array. */
+  type?: string;
+  /** Valid at this instant (validFrom ≤ t < validUntil; open ends allowed). */
+  validAt?: Date | number;
+  profile?: string;
+  /** Keyset paging: keys after this one. */
+  after?: string;
+  limit?: number;
+}
+
+/** A document whose graphs differ from a fresh conversion of its JSON. */
+export interface Drift {
+  key: string;
+  missing: number;
+  extra: number;
+}
+
+/** Keys written by `putPresentation`. */
+export interface PresentationKeys {
+  key: string;
+  credentials: string[];
+}
+
+/** A JSON-LD or credential error; `code` is the JSON-LD error code (e.g. `invalid local context`) or `missing-key`, `invalid-graph-name`, `graph-owned`, `document-too-large`, `invalid`, `json`, `store`. */
+export class JsonLdError extends Error {
+  readonly code: string;
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = "JsonLdError";
+    this.code = code;
+  }
+}
+
+/** Rethrows an error of the core's JSON-LD operations as a `JsonLdError`. */
+export function jsonLdError(e: unknown): unknown {
+  const message = e instanceof Error ? e.message : String(e);
+  const at = message.indexOf("oxilite-jsonld:");
+  if (at < 0) return e;
+  try {
+    const { code, message: m } = JSON.parse(message.slice(at + "oxilite-jsonld:".length)) as { code: string; message: string };
+    return new JsonLdError(code, m);
+  } catch {
+    return e;
+  }
+}
+
+/** A stored document from the core's JSON (epoch seconds become `Date`s). */
+export function storedDocument(j: Record<string, unknown> | null): StoredDocument | null {
+  if (!j) return null;
+  const date = (v: unknown) => (typeof v === "number" ? new Date(v * 1000) : null);
+  return {
+    key: j.key as string,
+    graph: fromJson(j.graph as TermJson),
+    json: j.json as string,
+    sha256: j.sha256 as string,
+    profile: j.profile as string,
+    issuer: (j.issuer as string | null) ?? null,
+    subject: (j.subject as string | null) ?? null,
+    types: (j.types as string[]) ?? [],
+    validFrom: date(j.validFrom),
+    validUntil: date(j.validUntil),
+    refs: (j.refs as string[]) ?? [],
+    storedAt: date(j.storedAt) as Date,
+  };
+}
+
+/** A filter in the core's JSON form. */
+export function filterJson(f: DocumentFilter): Record<string, unknown> {
+  const t = f.validAt;
+  return { ...f, validAt: t === undefined ? undefined : (t instanceof Date ? t.getTime() : t) / 1000 };
+}
+
+/** A document argument: JSON text is stored verbatim, objects are serialized. */
+export function documentText(doc: string | object): string {
+  return typeof doc === "string" ? doc : JSON.stringify(doc);
+}

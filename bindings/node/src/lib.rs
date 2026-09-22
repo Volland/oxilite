@@ -54,6 +54,121 @@ fn cypher_args(
     Ok((params, opts))
 }
 
+/// The error of a JSON-LD operation, as `oxilite-jsonld:{"code", "message"}` for the wrapper.
+fn jsonld_err(e: oxilite::jsonld::JsonLdError) -> Error {
+    err(format!(
+        "oxilite-jsonld:{}",
+        oxilite::jsonld::json::error_to_json(&e)
+    ))
+}
+
+fn jsonld_options(o: &Value) -> Result<oxilite::jsonld::JsonLdOptions> {
+    jsonld_options_from(o, oxilite::jsonld::JsonLdOptions::default())
+}
+
+fn jsonld_options_from(
+    o: &Value,
+    base: oxilite::jsonld::JsonLdOptions,
+) -> Result<oxilite::jsonld::JsonLdOptions> {
+    let mut opts = oxilite::jsonld::json::options_from_json(o, base).map_err(jsonld_err)?;
+    if o.get("network").and_then(Value::as_bool).unwrap_or(false) {
+        opts.fetcher = Some(oxilite::jsonld::http_fetcher());
+    }
+    Ok(opts)
+}
+
+/// One operation of a document handle; `args` is the operation's JSON arguments.
+fn document_op<B, S>(
+    h: &oxilite::jsonld::JsonLdStore<'_, B, S>,
+    op: &str,
+    args: &Value,
+) -> std::result::Result<Value, oxilite::jsonld::JsonLdError>
+where
+    B: oxilite_core::SyncBackend + Send + Sync + 'static,
+    S: oxilite::jsonld::Loader,
+{
+    use oxilite::jsonld::json::*;
+    use oxilite::jsonld::JsonLdError;
+    let s = |k: &str| args.get(k).and_then(Value::as_str);
+    let key = || s("key").ok_or_else(|| JsonLdError::Invalid("missing `key`".into()));
+    Ok(match op {
+        "put" => outcome_to_json(&h.put_documents(inputs_from_json(&args["documents"])?)?),
+        "get" => h
+            .get_document(key()?)?
+            .as_ref()
+            .map_or(Value::Null, document_to_json),
+        "remove" => json!(h.remove_document(key()?)?),
+        "list" => documents_to_json(&h.list_documents(
+            s("after"),
+            args.get("limit").and_then(Value::as_u64).unwrap_or(100) as usize,
+        )?),
+        "find" => documents_to_json(&h.find_documents(&filter_from_json(args)?)?),
+        "graphs" => graphs_to_json(&h.document_graphs(key()?)?),
+        "documentForGraph" => {
+            let g = json_to_graph(&args["graph"]).map_err(JsonLdError::Store)?;
+            h.document_for_graph(&g)?
+                .as_ref()
+                .map_or(Value::Null, document_to_json)
+        }
+        "putContext" => {
+            let ctx = match &args["context"] {
+                Value::String(t) => t.clone(),
+                v => v.to_string(),
+            };
+            h.put_context(s("iri").unwrap_or_default(), &ctx)?;
+            Value::Null
+        }
+        "removeContext" => {
+            h.remove_context(s("iri").unwrap_or_default())?;
+            Value::Null
+        }
+        "contexts" => json!(h.contexts()?),
+        "rebuild" => json!(h.rebuild_graph(key()?)?),
+        "check" => drifts_to_json(&h.check_documents()?),
+        other => return Err(JsonLdError::Invalid(format!("unknown operation {other}"))),
+    })
+}
+
+/// A JSON-LD or (with `"credentials": true` in the options) a Verifiable Credentials operation.
+fn jsonld_op<B>(store: &Store<B>, op: &str, args: &Value, opts: &Value) -> Result<Value>
+where
+    B: oxilite_core::SyncBackend + Send + Sync + 'static,
+{
+    use oxilite::jsonld::json::documents_to_json;
+    if opts
+        .get("credentials")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        let mut co = oxilite::vc::CredentialOptions::default();
+        co.jsonld = jsonld_options_from(opts, co.jsonld)?;
+        co.embed_presentation_credentials = opts
+            .get("embedCredentials")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
+        let h = store.credentials_with(co).map_err(jsonld_err)?;
+        let json = || args.get("json").and_then(Value::as_str).unwrap_or_default();
+        let r = match op {
+            "putCredential" => match args.get("key").and_then(Value::as_str) {
+                Some(k) => h.put_credential_with_key(k, json()).map(|k| json!(k)),
+                None => h.put_credential(json()).map(|k| json!(k)),
+            },
+            "putPresentation" => h
+                .put_presentation(json())
+                .map(|k| json!({"key": k.key, "credentials": k.credentials})),
+            "find" => oxilite::jsonld::json::filter_from_json(args)
+                .and_then(|f| h.find_credentials(&f))
+                .map(|d| documents_to_json(&d)),
+            _ => document_op(h.documents(), op, args),
+        };
+        return r.map_err(jsonld_err);
+    }
+    let h = store
+        .jsonld_with(jsonld_options(opts)?)
+        .map_err(jsonld_err)?;
+    document_op(&h, op, args).map_err(jsonld_err)
+}
+
 enum Backend {
     Native(Store),
     Library(Store<DylibBackend>),
@@ -319,6 +434,21 @@ impl NativeStore {
     #[napi]
     pub fn clear(&self) -> Result<()> {
         with_store!(self, s => s.clear()).map_err(err)
+    }
+
+    /// A JSON-LD document or credential operation (`put`, `get`, `remove`, `list`, `find`,
+    /// `graphs`, `documentForGraph`, `putContext`, `removeContext`, `contexts`, `rebuild`,
+    /// `check`, `putCredential`, `putPresentation`); arguments, options and result are JSON.
+    #[napi]
+    pub fn jsonld(&self, op: String, args: String, options: Option<String>) -> Result<String> {
+        let args: Value = parse(&args)?;
+        let opts: Value = options
+            .as_deref()
+            .map(parse)
+            .transpose()?
+            .unwrap_or(Value::Null);
+        let v = with_store!(self, s => jsonld_op(s, &op, &args, &opts))?;
+        Ok(v.to_string())
     }
 
     /// Writes a consistent copy of the database to `path` (`VACUUM INTO`).
