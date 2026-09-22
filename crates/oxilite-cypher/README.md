@@ -64,7 +64,7 @@ println!("{}", store.explain_cypher("MATCH (n:Person) RETURN n", &Params::new(),
 - **Paths:** variable-length relationships with Cypher's relationship uniqueness, path values, `shortestPath` and `allShortestPaths`.
 - **Writing:** `CREATE`, `MERGE` (with `ON CREATE` / `ON MATCH`), `SET`, `REMOVE`, `DELETE`, `DETACH DELETE`, applied as **one atomic request** (one D1 batch).
 - **Temporal types:** `date`, `time`, `localtime`, `datetime`, `localdatetime`, `duration` and their functions, stored as XSD literals.
-- **Coverage:** 3728 of the 3880 [openCypher TCK](https://github.com/opencypher/openCypher/tree/main/tck) scenarios pass (read-only 96.3%). The rest are listed with reasons in [`tck-allowlist.txt`](https://github.com/Volland/oxilite/blob/main/crates/oxilite-cypher/tck-allowlist.txt).
+- **Coverage:** 3733 of the 3880 [openCypher TCK](https://github.com/opencypher/openCypher/tree/main/tck) scenarios pass (read-only 96.4%). The rest are listed with reasons in [`tck-allowlist.txt`](https://github.com/Volland/oxilite/blob/main/crates/oxilite-cypher/tck-allowlist.txt).
 
 ## OWL- and SHACL-aware
 

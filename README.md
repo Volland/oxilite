@@ -439,7 +439,7 @@ await d1store.cypher("UNWIND $rows AS row MERGE (p:Person {id: row.id}) SET p.na
 
 - **How it runs.** Reading clauses become one SPARQL query, compiled to SQL by the same compiler and planner (reasoning and the fallback included). What SQL cannot express — writes, lists, maps, `collect()`, temporal arithmetic — runs in Rust over the rows. A writing statement reads once and applies its changes as **one atomic request** (one D1 batch). `shortestPath` is a breadth-first search, one SQL request per level, so it works on D1. `explain_cypher()` shows the SPARQL and the SQL.
 - **OWL and SHACL aware.** With `reasoning: "rdfs"` / `"owl-ql"`, labels match subclasses and relationship types their subproperties and inverses. SHACL shapes stored in the dataset are the graph's schema: writes that break `sh:datatype`, cardinality, `sh:in` or `sh:pattern` are rejected before anything is written, `sh:minCount 1` properties join without `OPTIONAL`, `sh:datatype` types comparisons for the compiler, and `CALL db.labels()` / `db.schema.nodeTypeProperties()` read shapes and data.
-- **Coverage.** 3728 of the 3880 [openCypher TCK](https://github.com/opencypher/openCypher/tree/main/tck) scenarios pass (read-only 96.3%, temporal functions 100%), on the bundled SQLite; the failures (user-defined procedures, reading after a write in one statement, errors on deleted entities…) are listed in [`crates/oxilite-cypher/tck-allowlist.txt`](crates/oxilite-cypher/tck-allowlist.txt).
+- **Coverage.** 3733 of the 3880 [openCypher TCK](https://github.com/opencypher/openCypher/tree/main/tck) scenarios pass (read-only 96.4%, temporal functions 100%), on the bundled SQLite; the failures (user-defined procedures, reading after a write in one statement, errors on deleted entities…) are listed in [`crates/oxilite-cypher/tck-allowlist.txt`](crates/oxilite-cypher/tck-allowlist.txt).
 
 ## JSON-LD and Verifiable Credentials
 
@@ -479,7 +479,7 @@ await vcs.find({ issuer: "did:example:issuer", validAt: new Date() });
 | **M4** Reasoning | TBox closure, rewriting, OWL 2 RL | entailment tests; agreement with `reasonable` | ✅ done: RDFS/OWL QL rewriting, SQL OWL 2 RL rules on every backend, identical to `reasonable` |
 | **M5** Validation | rudof SHACL/ShEx | rudof suites over oxilite | ✅ done: W3C SHACL core and shexTest results identical to rudof in memory; bounded D1 prefetch |
 | **M6** Performance | BSBM vs Oxigraph, tuning, FTS5 | published comparison | ✅ done: BSBM results in [Performance](#performance), D1 write-cost report, FTS5 text search |
-| **M7** Cypher | openCypher over the RDF store, OWL- and SHACL-aware | ≥ 80% of read-only TCK scenarios | ✅ done: 96.1% of the TCK (read-only 96.3%), on bundled SQLite, system SQLite and D1 |
+| **M7** Cypher | openCypher over the RDF store, OWL- and SHACL-aware | ≥ 80% of read-only TCK scenarios | ✅ done: 96.2% of the TCK (read-only 96.4%), on bundled SQLite, system SQLite and D1 |
 | JSON-LD / VC | verbatim JSON-LD documents and Verifiable Credentials, a named graph each | W3C `toRdf` suite + VC scenarios on every backend | ✅ done: 450 `toRdf` tests pass, scenarios pass on bundled SQLite, system SQLite and Miniflare D1 |
 
 ---

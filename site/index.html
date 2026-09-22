@@ -182,7 +182,7 @@ oxilite serve   -l data.sqlite -b 127.0.0.1:7879     <span class="c"># /query, /
 <span class="k">const</span> id = <span class="k">await</span> vcs.put(credential);                  <span class="c">// checked (VCDM 1.1 / 2.0), stored, converted</span>
 <span class="k">await</span> store.query(<span class="s">`SELECT * WHERE { GRAPH &lt;${id}&gt; { ?s ?p ?o } }`</span>);
 <span class="k">await</span> vcs.find({ issuer: <span class="s">"did:example:issuer"</span>, validAt: <span class="k">new</span> Date() });</code></pre>
-        <p style="margin-top:20px"><a href="articles/verifiable-credentials-jsonld.html">Read the walkthrough →</a></p>
+        <p style="margin-top:20px"><a href="articles/verifiable-credentials-jsonld.html">Read the walkthrough →</a> · <a href="articles/querying-jsonld-credentials.html">Query tour with SPARQL and Cypher →</a></p>
       </div>
     </section>
 
@@ -202,6 +202,12 @@ oxilite serve   -l data.sqlite -b 127.0.0.1:7879     <span class="c"># /query, /
             <h3>Verifiable Credentials and JSON-LD, in SQLite</h3>
             <p>Keep credentials exactly as issued and query their claims with SPARQL: one named graph per credential, indexed metadata and offline contexts, on Node.js, Rust and D1.</p>
             <span class="more">Read the walkthrough →</span>
+          </a>
+          <a class="article-card" href="articles/querying-jsonld-credentials.html">
+            <span class="kicker">JSON-LD · SPARQL · Cypher</span>
+            <h3>Ask your credentials anything</h3>
+            <p>Query JSON-LD documents and Verifiable Credentials by provenance, joins, typed dates, RDFS reasoning and full-text search, then match them as a Cypher graph. Every query is a tested example.</p>
+            <span class="more">Take the query tour →</span>
           </a>
           <a class="article-card" href="articles/property-graphs-cypher.html">
             <span class="kicker">Cypher · RDF 1.2</span>

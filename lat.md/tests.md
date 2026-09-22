@@ -510,6 +510,14 @@ Writes that break shape datatype, required-property or `sh:in` constraints fail 
 
 Dates, zoned datetimes and durations created by Cypher are `xsd:date`/`xsd:duration` literals for SPARQL, and read back with arithmetic, components, week dates and `duration.between`.
 
+### Union default graph reads every graph
+
+With `union_default_graph`, patterns, labels and properties come from every named graph, so Cypher reads JSON-LD documents and credentials; a triple stored in two graphs counts once.
+
+### Ordering by an aggregate
+
+`RETURN p.name, count(f) AS n ORDER BY n DESC` sorts the grouped rows: the compiler seals the grouped block before sorting by its aggregates, which SQLite cannot sort in place.
+
 ### Pattern comprehensions
 
 `[(p)-[:KNOWS]->(f) WHERE … | f.name]` gives each row the list of its own matches (empty when none), with path variables and `size()` over the list.
@@ -527,6 +535,8 @@ Over one dataset (labels, multi-valued and temporal properties, reified and para
 The openCypher TCK (`testsuite/openCypher`, 3880 scenarios) runs through a Gherkin runner with result tables, expected errors and side effects diffed from graph snapshots; failures must match `tck-allowlist.txt`.
 
 The test fails when an unlisted scenario fails or a listed one passes, so the list only shrinks. `OXILITE_TCK_REPORT=1` prints each failure with its query.
+
+The runner uses its own 16 MiB thread: path-heavy scenarios (Match6/7/9, Pattern2) compile to algebra about a hundred joins deep, which overflows the 2 MiB default test stack in debug builds.
 
 ## Planner benchmark
 

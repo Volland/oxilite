@@ -116,19 +116,15 @@ impl Engine {
     }
 
     fn load(&self, turtle: &str) {
+        self.load_as(RdfFormat::Turtle, turtle);
+    }
+
+    fn load_as(&self, format: RdfFormat, data: &str) {
         match self {
-            Self::Native(s) => s
-                .load_from_slice(RdfFormat::Turtle, turtle.as_bytes())
-                .unwrap(),
-            Self::Dylib(s) => s
-                .load_from_slice(RdfFormat::Turtle, turtle.as_bytes())
-                .unwrap(),
-            Self::D1(s) => {
-                block_on(s.load_from_slice(RdfFormat::Turtle, turtle.as_bytes())).unwrap()
-            }
-            Self::Miniflare(s, _) => {
-                block_on(s.load_from_slice(RdfFormat::Turtle, turtle.as_bytes())).unwrap()
-            }
+            Self::Native(s) => s.load_from_slice(format, data.as_bytes()).unwrap(),
+            Self::Dylib(s) => s.load_from_slice(format, data.as_bytes()).unwrap(),
+            Self::D1(s) => block_on(s.load_from_slice(format, data.as_bytes())).unwrap(),
+            Self::Miniflare(s, _) => block_on(s.load_from_slice(format, data.as_bytes())).unwrap(),
         }
     }
 
@@ -976,5 +972,71 @@ fn pattern_comprehensions() {
             "{}",
             e.name()
         );
+    }
+}
+
+// @lat: [[tests#Cypher#Union default graph reads every graph]]
+#[test]
+fn union_default_graph() {
+    for e in Engine::all() {
+        e.load_as(
+            RdfFormat::TriG,
+            r#"@prefix ex: <http://example.com/> .
+            ex:acme ex:name "ACME" .
+            ex:g1 { ex:c1 a ex:Credential ; ex:issuer ex:acme ; ex:subject ex:alice . ex:alice ex:job "Engineer" . }
+            ex:g2 { ex:c2 a ex:Credential ; ex:issuer ex:acme ; ex:subject ex:bob . ex:bob ex:job "Analyst" . }
+            ex:g3 { ex:c2 ex:issuer ex:acme . }"#,
+        );
+        let q = "MATCH (c:Credential)-[:subject]->(s), (c)-[:issuer]->(i) RETURN s.job AS job, i.name AS issuer, labels(c) AS l ORDER BY job";
+        let default = e.run(q, &Params::new(), &ex_opts()).unwrap();
+        assert!(default.rows.is_empty(), "{}", e.name());
+        let mut opts = ex_opts();
+        opts.query.union_default_graph = true;
+        let r = e.run(q, &Params::new(), &opts).unwrap();
+        let l = Value::List(vec![s("Credential")]);
+        assert_eq!(
+            r.rows,
+            vec![
+                vec![s("Analyst"), s("ACME"), l.clone()],
+                vec![s("Engineer"), s("ACME"), l],
+            ],
+            "{}",
+            e.name()
+        );
+        // ex:c2's issuer triple is in two graphs: still two credentials, not three.
+        let r = e
+            .run(
+                "MATCH (c:Credential)-[:issuer]->(i) RETURN i.name AS issuer, count(c) AS n",
+                &Params::new(),
+                &opts,
+            )
+            .unwrap();
+        assert_eq!(r.rows, vec![vec![s("ACME"), i(2)]], "{}", e.name());
+    }
+}
+
+// @lat: [[tests#Cypher#Ordering by an aggregate]]
+#[test]
+fn order_by_aggregate() {
+    for e in Engine::all() {
+        social(&e);
+        let r = e.cypher(
+            "MATCH (p:Person)-[:KNOWS]->(f) RETURN p.name AS name, count(f) AS n ORDER BY n DESC, name",
+        );
+        assert_eq!(
+            r.rows,
+            vec![
+                vec![s("Ada"), i(2)],
+                vec![s("Alan"), i(1)],
+                vec![s("Grace"), i(1)],
+                vec![s("Linus"), i(1)],
+            ],
+            "{}",
+            e.name()
+        );
+        let r = e.cypher(
+            "MATCH (p:Person)-[:KNOWS]->(f) RETURN p.name AS name, count(f) AS n ORDER BY n DESC LIMIT 1",
+        );
+        assert_eq!(r.rows, vec![vec![s("Ada"), i(2)]], "{}", e.name());
     }
 }

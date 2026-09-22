@@ -116,6 +116,8 @@ When the path is joined with a pattern that binds one endpoint (`?c a ex:C . ?c 
 
 GROUP BY, aggregates, ORDER BY, DISTINCT and LIMIT/OFFSET compile into one SELECT when their SPARQL order allows it, sealing into subqueries otherwise.
 
+An ORDER BY placed directly on a grouped block (algebra built without the parser's `Extend`, as Cypher lowering does) seals the block first when a sort key reads an aggregate, because the sort keys' scalar subqueries cannot contain an aggregate in SQLite.
+
 `COUNT` produces inline integer ids arithmetically. `SUM`/`AVG` track the numeric type rank for type promotion; an integer `AVG` also returns the exact sum and count so the decoder divides with Oxigraph's decimal precision. `MIN`/`MAX` over stored terms use SQLite's bare-column rule to return the actual term. ORDER BY follows [[decisions#D11 Total order for incomparable literals]]. `REDUCED` behaves like `DISTINCT`, as in Oxigraph.
 
 ### Fallback evaluator
@@ -212,7 +214,7 @@ rudof's validators are compiled out on wasm32, so D1 is validated from native co
 
 Cypher over the same quads as SPARQL: property graphs are an RDF 1.2 view of the dataset, queried through the same compiler, planner and backends. Delivered in M7 by `oxilite-cypher`; see [[decisions#D13 Cypher as a second frontend over the RDF store]].
 
-Pipeline: Cypher text → parser ([[crates/oxilite-cypher/src/parser.rs#parse]]) → validation of scopes and static rules → planning into a SQL part and a Rust *tail* ([[crates/oxilite-cypher/src/plan.rs]]) → lowering of the SQL part to `spargebra` algebra ([[crates/oxilite-cypher/src/lower.rs]]) → the existing SPARQL-to-SQL compiler → the job ([[crates/oxilite-cypher/src/exec.rs#CypherJob]]), which materializes nodes and relationships, runs the tail and applies writes. `Store::cypher`, `AsyncStore::cypher`, the wasm engine and both JavaScript packages drive the same job.
+Pipeline: Cypher text → parser ([[crates/oxilite-cypher/src/parser.rs#parse]]) → validation of scopes and static rules → planning into a SQL part and a Rust *tail* ([[crates/oxilite-cypher/src/plan.rs]]) → lowering of the SQL part to `spargebra` algebra ([[crates/oxilite-cypher/src/lower.rs]]) → the existing SPARQL-to-SQL compiler → the job ([[crates/oxilite-cypher/src/exec.rs#CypherJob]]), which materializes nodes and relationships, runs the tail and applies writes. `Store::cypher`, `AsyncStore::cypher`, the wasm engine and both JavaScript packages drive the same job. With `union_default_graph` (`useDefaultGraphAsUnion` in JavaScript), the materialization and shortest-path reads also span every graph, so JSON-LD documents and credentials read as one property graph; writes stay in the default graph.
 
 ### Mapping
 
@@ -300,7 +302,7 @@ A Node.js package and a Cloudflare D1 package, both typed TypeScript, over the s
 
 `@oxilite/node` (napi-rs) wraps `blocking::Store` on rusqlite or a dlopen'ed library: `query`, `update`, `load`, `dump`, `add`/`delete`, `has`, `match`, `size`, `explain`, `optimize`, `backup`, returning RDF/JS-style term objects. `@oxilite/d1` runs the wasm core against a `D1Database` binding and exposes the same API asynchronously.
 
-`@oxilite/node` loads `oxilite.<platform>-<arch>.node` (then a local `oxilite.node` build) and fails with build instructions when no binary matches; Releases up to 0.2.1 are published with the darwin-arm64 binary only.
+`@oxilite/node` loads `oxilite.<platform>-<arch>.node` (then a local `oxilite.node` build) and fails with build instructions when no binary matches; Releases up to 0.2.2 are published with the darwin-arm64 binary only.
 
 Every published crate and npm package has its own README (absolute links and logo, so it renders on crates.io and npm) with install, examples, API and a shared table of the oxilite family; the website is https://oxilitedb.com, set as `homepage` everywhere, and each crate's `documentation` points to docs.rs.
 
@@ -318,4 +320,4 @@ The Worker ([[site-worker/src/index.js]]) serves `site/` as static assets with `
 
 The site is plain HTML and one stylesheet in a white, black and orange palette. It loads no external fonts, scripts or trackers, which keeps the Datenschutz page to Cloudflare's hosting logs and its bot-protection cookies. The logo (`site/assets/logo.svg`, rendered to `logo.png` with `rsvg-convert`) combines a SQLite-style tile, a quill drawn as a graph, and a small edge-worker cloud.
 
-The Cypher article walks through the M7 frontend; its steps are asserted by `examples/cypher-property-graph` on `@oxilite/node` and on Miniflare D1.
+The Cypher article walks through the M7 frontend; its steps are asserted by `examples/cypher-property-graph` on `@oxilite/node` and on Miniflare D1. The JSON-LD query tour (`site/articles/querying-jsonld-credentials.html`) queries credentials and a JSON-LD issuer registry with SPARQL (provenance through `GRAPH`, joins, aggregates, typed validity dates, RDFS reasoning, FTS5), metadata lookups and Cypher over the union default graph; every query is asserted by `examples/jsonld-queries` on both packages. It explains that proofs are verified outside oxilite, on the stored JSON.

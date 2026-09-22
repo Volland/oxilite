@@ -74,4 +74,4 @@ openCypher reads and writes over the RDF store, with OWL-aware matching and SHAC
 
 Scope: [[architecture#Property graph frontend]] and decisions D13–D17. Done when at least 80% of the read-only openCypher TCK scenarios pass (the rest allow-listed), and the specification scenarios pass on rusqlite, dylib and D1.
 
-Status: done. 3728 of 3880 TCK scenarios pass (96.1%; read-only 96.3%, temporal 100%), with the rest in `crates/oxilite-cypher/tck-allowlist.txt`. The specification scenarios pass on bundled SQLite, the system `libsqlite3`, the D1 code path and Miniflare D1; `@oxilite/node` and `@oxilite/d1` expose `cypher()`.
+Status: done. 3733 of 3880 TCK scenarios pass (96.2%; read-only 96.4%, temporal 100%), with the rest in `crates/oxilite-cypher/tck-allowlist.txt`. The specification scenarios pass on bundled SQLite, the system `libsqlite3`, the D1 code path and Miniflare D1; `@oxilite/node` and `@oxilite/d1` expose `cypher()`.

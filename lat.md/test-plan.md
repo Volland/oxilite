@@ -52,7 +52,7 @@ Milestone done-criteria measured with the harness, see [[milestones]].
 - M2: ≥95% of W3C SPARQL 1.1 query evaluation tests; zero unlisted divergences on the corpus.
 - M3: W3C SPARQL 1.1 update suite on rusqlite and D1; the corpus on D1.
 - M5: rudof SHACL/ShEx suites over an oxilite-backed store equal rudof over an in-memory graph.
-- M7: ≥80% of read-only openCypher TCK scenarios (96.3% today); the specification scenarios on rusqlite, dylib and D1.
+- M7: ≥80% of read-only openCypher TCK scenarios (96.4% today); the specification scenarios on rusqlite, dylib and D1.
 
 ## Storage unit tests
 

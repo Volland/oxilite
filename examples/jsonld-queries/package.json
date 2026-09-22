@@ -1,5 +1,5 @@
 {
-  "name": "oxilite-cypher-property-graph",
+  "name": "oxilite-jsonld-queries",
   "private": true,
   "type": "module",
   "scripts": { "test": "node test.mjs" },

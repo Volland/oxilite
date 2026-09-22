@@ -1,6 +1,6 @@
 {
   "name": "@oxilite/node",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "oxilite for Node.js: an Oxigraph-compatible SPARQL 1.1 and openCypher store on SQLite",
   "license": "MIT OR Apache-2.0",
   "type": "module",
@@ -22,7 +22,7 @@
     "test": "vitest run --reporter=default --reporter=json --outputFile=test-results.json; node scripts/check-results.mjs test-results.json"
   },
   "dependencies": {
-    "@oxilite/common": "0.2.1"
+    "@oxilite/common": "0.2.2"
   },
   "devDependencies": {
     "@rdfjs/data-model": "^2"

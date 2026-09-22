@@ -779,7 +779,19 @@ impl<'a> Compiler<'a> {
             } => self.values(variables, bindings),
             GraphPattern::OrderBy { inner, expression } => {
                 let mut b = self.pattern(inner)?;
-                if b.stage > Stage::Grouped {
+                // Sort keys over an aggregate of this block would put the aggregate inside
+                // the keys' scalar subqueries (a SQLite error): sort a sealed block instead.
+                let reads_aggregate = b.stage == Stage::Grouped
+                    && expression.iter().any(|oe| {
+                        let (OrderExpression::Asc(e) | OrderExpression::Desc(e)) = oe;
+                        expr_mentions(e, &mut |v| {
+                            self.vars
+                                .get(v)
+                                .and_then(|i| b.cols.get(i))
+                                .is_some_and(|c| c.computed)
+                        })
+                    });
+                if b.stage > Stage::Grouped || reads_aggregate {
                     b = self.seal(b);
                 }
                 for oe in expression {
@@ -1522,4 +1534,35 @@ fn triple_order_keys(v: &V) -> Vec<String> {
         "(CASE WHEN ({}) = {K_TRIPLE} THEN (SELECT sk FROM triple_terms WHERE id = {id}) END)",
         v.kind
     )]
+}
+
+/// Whether `e` mentions a variable for which `f` holds (`EXISTS` counts as mentioning).
+fn expr_mentions(e: &Expression, f: &mut impl FnMut(&Variable) -> bool) -> bool {
+    match e {
+        Expression::NamedNode(_) | Expression::Literal(_) => false,
+        Expression::Variable(v) | Expression::Bound(v) => f(v),
+        Expression::Or(a, b)
+        | Expression::And(a, b)
+        | Expression::Equal(a, b)
+        | Expression::SameTerm(a, b)
+        | Expression::Greater(a, b)
+        | Expression::GreaterOrEqual(a, b)
+        | Expression::Less(a, b)
+        | Expression::LessOrEqual(a, b)
+        | Expression::Add(a, b)
+        | Expression::Subtract(a, b)
+        | Expression::Multiply(a, b)
+        | Expression::Divide(a, b) => expr_mentions(a, f) || expr_mentions(b, f),
+        Expression::UnaryPlus(a) | Expression::UnaryMinus(a) | Expression::Not(a) => {
+            expr_mentions(a, f)
+        }
+        Expression::In(a, l) => expr_mentions(a, f) || l.iter().any(|x| expr_mentions(x, f)),
+        Expression::If(a, b, c) => {
+            expr_mentions(a, f) || expr_mentions(b, f) || expr_mentions(c, f)
+        }
+        Expression::Coalesce(l) | Expression::FunctionCall(_, l) => {
+            l.iter().any(|x| expr_mentions(x, f))
+        }
+        Expression::Exists(_) => true,
+    }
 }

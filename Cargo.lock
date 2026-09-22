@@ -2899,7 +2899,7 @@ dependencies = [
 
 [[package]]
 name = "oxilite"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "oxilite",
  "oxilite-core",
@@ -2920,7 +2920,7 @@ dependencies = [
 
 [[package]]
 name = "oxilite-bench"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "oxilite",
  "oxilite-core",
@@ -2931,7 +2931,7 @@ dependencies = [
 
 [[package]]
 name = "oxilite-cli"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "clap",
  "form_urlencoded",
@@ -2948,7 +2948,7 @@ dependencies = [
 
 [[package]]
 name = "oxilite-compat"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "dissimilar",
@@ -2973,7 +2973,7 @@ dependencies = [
 
 [[package]]
 name = "oxilite-core"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "getrandom 0.3.4",
  "oxiri 0.2.11",
@@ -2991,7 +2991,7 @@ dependencies = [
 
 [[package]]
 name = "oxilite-cypher"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "futures",
  "jiff",
@@ -3008,7 +3008,7 @@ dependencies = [
 
 [[package]]
 name = "oxilite-d1"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "js-sys",
  "oxilite-core",
@@ -3021,7 +3021,7 @@ dependencies = [
 
 [[package]]
 name = "oxilite-dylib"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "libloading 0.8.9",
  "oxilite-core",
@@ -3029,7 +3029,7 @@ dependencies = [
 
 [[package]]
 name = "oxilite-jsonld"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "futures",
  "iref",
@@ -3050,7 +3050,7 @@ dependencies = [
 
 [[package]]
 name = "oxilite-node"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "napi",
  "napi-build",
@@ -3066,7 +3066,7 @@ dependencies = [
 
 [[package]]
 name = "oxilite-reason"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "oxilite",
  "oxilite-core",
@@ -3077,7 +3077,7 @@ dependencies = [
 
 [[package]]
 name = "oxilite-rusqlite"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "md-5 0.10.6",
  "oxilite-core",
@@ -3089,7 +3089,7 @@ dependencies = [
 
 [[package]]
 name = "oxilite-validate"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "futures",
  "oxilite",
@@ -3109,7 +3109,7 @@ dependencies = [
 
 [[package]]
 name = "oxilite-vc"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "futures",
  "getrandom 0.2.17",
@@ -3129,7 +3129,7 @@ dependencies = [
 
 [[package]]
 name = "oxilite-wasm"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "oxilite-core",
  "oxilite-cypher",

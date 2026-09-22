@@ -678,6 +678,17 @@ impl CypherJob {
         )
     }
 
+    /// The graph condition of reads (materialization, shortest-path expansion): every graph
+    /// when the default graph is the union of all graphs, as in the main query. Writes and
+    /// their fix-ups stay in the default graph.
+    fn read_graph_cond(&self, t: &str) -> String {
+        if self.opts.query.union_default_graph {
+            "1".into()
+        } else {
+            self.graph_cond(t)
+        }
+    }
+
     // ----- materialization -----
 
     fn after_main(&mut self) -> Result<CypherStep> {
@@ -765,7 +776,7 @@ impl CypherJob {
             )
         };
         let cols = spo_cols(&self.caps, "q");
-        let g = self.graph_cond("q");
+        let g = self.read_graph_cond("q");
         let mut stmts = Vec::new();
         for chunk in frontier.chunks(CHUNK) {
             let l = id_list(chunk);
@@ -926,7 +937,7 @@ impl CypherJob {
         let reifies_id = named_node_id(REIFIES);
         let mut stmts = Vec::new();
         let (cols, joins) = with_terms(&self.caps, "q");
-        let g = self.graph_cond("q");
+        let g = self.read_graph_cond("q");
         let nodes: Vec<i64> = nodes.into_iter().collect();
         let rels: Vec<i64> = rels.into_iter().collect();
         // Labels and literal properties (objects that are not IRIs, blank nodes or triples).
@@ -999,7 +1010,10 @@ impl CypherJob {
                     }
                 }
             } else if matches!(o, Term::Literal(_)) {
-                e.props.push((p, o));
+                // The same triple can come from several graphs (union default graph).
+                if !e.props.iter().any(|(q, v)| *q == p && *v == o) {
+                    e.props.push((p, o));
+                }
             }
         }
     }
