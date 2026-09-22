@@ -135,7 +135,11 @@ impl EncodedQuads {
             .collect();
         graphs.sort_unstable();
         graphs.dedup();
-        let mut g = Chunker::new("INSERT OR IGNORE INTO graphs(id) VALUES ", "", caps.max_sql_len);
+        let mut g = Chunker::new(
+            "INSERT OR IGNORE INTO graphs(id) VALUES ",
+            "",
+            caps.max_sql_len,
+        );
         for id in graphs {
             g.push(&format!("({id})"));
         }

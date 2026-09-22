@@ -1,0 +1,14 @@
+[package]
+name = "oxilite-rusqlite"
+description = "In-process SQLite backend for oxilite (rusqlite, bundled SQLite, oxilite UDFs)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+oxilite-core.workspace = true
+rusqlite.workspace = true
+regex.workspace = true
+md-5.workspace = true
+sha1.workspace = true
+sha2.workspace = true

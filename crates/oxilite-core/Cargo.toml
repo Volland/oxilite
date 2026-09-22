@@ -13,3 +13,13 @@ sparesults.workspace = true
 oxsdatatypes.workspace = true
 xxhash-rust.workspace = true
 thiserror.workspace = true
+oxiri.workspace = true
+serde = { version = "1", features = ["derive"], optional = true }
+
+[features]
+default = []
+serde = ["dep:serde"]
+
+[target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
+getrandom = { version = "0.3", features = ["wasm_js"] }
+oxsdatatypes = { workspace = true, features = ["js"] }

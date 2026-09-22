@@ -1,0 +1,30 @@
+[package]
+name = "oxilite-compat"
+description = "Compatibility harness: runs Oxigraph's tests and a differential corpus on oxilite and Oxigraph"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+oxilite = { workspace = true, features = ["rusqlite", "dylib"] }
+oxigraph = { version = "0.5.11", default-features = false, features = ["rdf-12"] }
+oxrdf = { workspace = true, features = ["rdfc-10"] }
+oxrdfio.workspace = true
+spargebra = { workspace = true, features = ["standard-unicode-escaping"] }
+spareval.workspace = true
+sparesults.workspace = true
+oxiri.workspace = true
+anyhow = "1"
+dissimilar = "1"
+json-event-parser = "0.2.3"
+oxjsonld = "=0.2.6"
+oxttl = "=0.2.4"
+sparopt = "=0.3.7"
+time = { version = "0.3", features = ["formatting"] }
+
+[dev-dependencies]
+
+[features]
+default = ["rdf-12"]
+rdf-12 = []

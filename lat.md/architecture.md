@@ -11,13 +11,14 @@ The workspace splits a pure, I/O-free core from thin backends and bindings, so t
 | Crate / package | Role |
 |---|---|
 | `oxilite-core` | Sans-IO: term encoding, schema, SPARQL→SQL compiler, planner, update planner, result decoding, spareval fallback |
-| `oxilite` | Umbrella: async `Store<B>` mirroring Oxigraph's API, `blocking::Store` drop-in, backend re-exports |
+| `oxilite` | Umbrella with Oxigraph's module layout (`model`, `io`, `sparql`, `store`): `store::Store` is a drop-in for `oxigraph::store::Store`, `AsyncStore<B>` offers the same API asynchronously |
 | `oxilite-rusqlite` | Native backend on rusqlite (bundled or system SQLite) with `oxilite_*` UDFs |
 | `oxilite-dylib` | Native backend that `dlopen`s a user-supplied `libsqlite3` path — no build-time link |
 | `oxilite-d1` | Rust Workers backend over `worker::D1Database` (wasm32) |
 | `oxilite-wasm` | wasm-bindgen export of the sans-IO core for JavaScript drivers |
 | `@oxilite/node` | napi-rs Node.js binding with TypeScript types |
 | `@oxilite/d1` | TypeScript D1 driver running the wasm core against `env.DB` |
+| `oxilite-compat` (`testsuite/`) | Compatibility harness: Oxigraph's W3C runner and store tests run on oxilite, see [[test-plan#Oxigraph compatibility harness]] |
 | `oxilite-reason` (M4) | TBox closure, query rewriting, OWL 2 RL materialization |
 | `oxilite-validate` (M5) | rudof `srdf` trait implementation and D1 prefetch adapter |
 
@@ -53,9 +54,10 @@ Seven small tables; the quad table is a `WITHOUT ROWID` clustered index whose se
 - `graphs(id)` — named graphs, including empty ones created with `CREATE GRAPH`.
 - `stats_pred`, `stats_class` — planner statistics ([[architecture#Query planner#Statistics]]).
 - `update_buffer(op, s, p, o, g)` — staging for atomic SPARQL UPDATE ([[architecture#Updates and atomicity]]).
+- `oxilite_guard(graph_does_not_exist, graph_already_exists)` — assertions inside batches: inserting a non-NULL value fails a `CHECK` constraint named after the violated SPARQL condition (e.g. `CREATE GRAPH` on an existing graph), aborting the batch.
 - `oxilite_meta(key, value)` — schema version and options.
 
-Three mandatory permutations cover every bound/unbound combination of s, p, o; `g` is last in each so graph restrictions are checked inside the index. Index count is kept deliberately low because D1 bills every index entry written. See [[crates/oxilite-core/src/schema.rs#create_schema]].
+Three mandatory permutations cover every bound/unbound combination of s, p, o; `g` is last in each so graph restrictions are checked inside the index. When another position is bound, graph conditions are emitted as `+q.g = …` (SQLite's unary-plus convention) so the planner never picks `gspo` for a `g = 0` that almost every quad matches — this alone made star queries two orders of magnitude faster. Index count is kept deliberately low because D1 bills every index entry written. See [[crates/oxilite-core/src/schema.rs#create_schema]].
 
 ## Write path
 
@@ -67,7 +69,7 @@ Because ids are hashes, the same term always encodes to the same id on every cli
 
 The compiler lowers `spargebra` algebra to a single SQL `SELECT` per query whenever possible; anything it cannot express raises `Unsupported` and falls back to Rust evaluation.
 
-Variables become integer id columns (`vN`). Each pattern compiles to a *block* (FROM items, WHERE conditions, bindings, and solution-modifier state); blocks are merged as long as they stay plain and are sealed into subqueries only when SQL semantics require it (after DISTINCT, LIMIT, GROUP BY, or across UNION).
+Variables become integer id columns (`vN`) for stored terms, or value column groups (`vN_i` id, `vN_k` kind, `vN_l` lexical form, `vN_d` datatype, `vN_g` language, `vN_n` number, `vN_t` numeric rank, `vN_s` timestamp, `vN_b` boolean) for computed values and query constants, which need not be stored; the id remains the join key. Each pattern compiles to a *block* (FROM items, WHERE conditions, bindings, and solution-modifier state); blocks are merged as long as they stay plain and are sealed into subqueries only when SQL semantics require it (after DISTINCT, LIMIT, GROUP BY, or across UNION).
 
 ### Graph patterns
 

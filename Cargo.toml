@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/oxilite-core"]
+members = ["crates/oxilite-core", "crates/oxilite-rusqlite", "crates/oxilite-dylib", "crates/oxilite", "testsuite"]
 
 [workspace.package]
 version = "0.1.0"
@@ -18,3 +18,14 @@ sparesults = { version = "0.3.4", features = ["sparql-12"] }
 oxsdatatypes = "0.2"
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
 thiserror = "2"
+oxiri = "0.2"
+rusqlite = { version = "0.40", features = ["bundled", "functions"] }
+libloading = "0.8"
+regex = "1"
+md-5 = "0.10"
+sha1 = "0.10"
+sha2 = "0.10"
+oxilite-core = { path = "crates/oxilite-core", version = "0.1.0" }
+oxilite-rusqlite = { path = "crates/oxilite-rusqlite", version = "0.1.0" }
+oxilite-dylib = { path = "crates/oxilite-dylib", version = "0.1.0" }
+oxilite = { path = "crates/oxilite", version = "0.1.0" }

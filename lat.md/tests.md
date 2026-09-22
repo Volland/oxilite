@@ -33,3 +33,91 @@ Unit tests of statement generation for inserts, see [[architecture#Write path]].
 ### Statements respect the size limit
 
 Inserting 500 quads under a 2 000-byte statement limit yields several statements, none longer than the limit and none using bound parameters.
+
+## Planner
+
+Unit tests of the greedy join-order planner, see [[architecture#Query planner]].
+
+### Rare predicate first
+
+With statistics showing `ex:rare` has 10 triples and `rdf:type ex:Common` 1 000, the `ex:rare` pattern is ordered first.
+
+### Connected patterns are preferred
+
+In a chain of patterns, every pattern after the first shares a variable with an earlier one, so no Cartesian product is introduced.
+
+### Heuristics without statistics
+
+Without statistics, a pattern with a constant subject is ordered before one with only a constant predicate.
+
+## Backends
+
+Tests of the native backends, see [[architecture#Backends]].
+
+### Dylib loads a system SQLite
+
+A system `libsqlite3` found at a well-known path is loaded at runtime; values of every storage class round-trip and a failing atomic request rolls back.
+
+### Invalid library is reported
+
+Opening the dylib backend with a nonexistent library path fails with an error naming the library.
+
+## Store
+
+Integration tests of the blocking store against the M1 specifications.
+
+### Queries are single statements
+
+A five-pattern BGP with a filter uses at most two backend requests (the query plus one term-resolution round-trip), and `explain()` reports it fully compiled.
+
+### Collision aborts the batch
+
+A forged dictionary row that collides with a term being inserted makes `extend` fail with a collision error, and none of the batch's quads are stored.
+
+### Reopen keeps data
+
+Quads and named graphs written to a database file are still present after reopening it, and `validate()` passes.
+
+### Graph index is optional
+
+A store created with `graph_index: false` has only the `posg` and `ospg` secondary indexes on `quads`.
+
+### Insert and remove report changes
+
+Inserting an existing quad or removing an absent one reports `false`; the non-canonical literal `"012"^^xsd:integer` round-trips exactly.
+
+### Pattern scans match a naive filter
+
+For all 16 combinations of bound and unbound positions, `quads_for_pattern` returns exactly the quads a naive filter selects.
+
+### Planner uses statistics
+
+After `optimize()`, the generated SQL scans the rare predicate before the `rdf:type` pattern, and results are unchanged.
+
+### Union default graph deduplicates
+
+With the union-default-graph option a triple present in two named graphs matches once, while `GRAPH ?g` still returns both graphs.
+
+### Dylib store works end to end
+
+A store opened on a system `libsqlite3` through `Store::open_with_library` loads Turtle and answers an aggregate query with a filter.
+
+## Oxigraph compatibility
+
+Suites of the compatibility harness, see [[test-plan#Oxigraph compatibility harness]].
+
+### Ported Oxigraph store API tests
+
+Oxigraph 0.5.11 `lib/oxigraph/tests/store.rs`, copied with only `oxigraph::` replaced by `oxilite::`, passes against `oxilite::store::Store`; RocksDB-only tests are compiled out by their feature gates.
+
+## Planner benchmark
+
+`cargo run --release -p oxilite --example planner_bench` loads 350 010 quads (50 000 people) and compares the oxilite planner with SQLite's planner on three join-heavy queries.
+
+Measured on an Apple Silicon laptop (M1 milestone):
+
+| query | oxilite planner | SQLite planner |
+|---|---|---|
+| rare-badge-star | 75 µs | 7.2 ms |
+| friends-of-badged | 96 µs | 87 µs |
+| city-age-filter | 478 µs | 7.8 ms |

@@ -1,0 +1,13 @@
+# Accepted divergences of oxilite from the W3C expectations or from Oxigraph.
+# Every entry needs a reason and a link to the decision that justifies it.
+# Unlisted divergences fail the harness; entries whose test passes are reported as stale.
+#
+# [[divergence]]
+# id = "<test IRI or corpus id>"
+# reason = "<why>"
+# decision = "lat.md/decisions.md#<decision>"
+
+[[divergence]]
+id = "https://github.com/oxigraph/oxigraph/tests/sparql/manifest#order_terms"
+reason = "ORDER BY across incomparable literal types is implementation-defined; Oxigraph's order follows its non-transitive comparator and sort algorithm, oxilite uses a total order (numbers by value, then lexical form, datatype, language)"
+decision = "lat.md/decisions.md#D11 Total order for incomparable literals"

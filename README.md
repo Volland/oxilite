@@ -2,7 +2,7 @@
 
 **An Oxigraph-compatible RDF database and SPARQL engine that uses SQLite as its storage engine. It runs anywhere SQLite runs, including Cloudflare D1.**
 
-> **Status: design complete, implementation starting (M1).** This README describes the target system as specified in [`openspec/changes/`](openspec/changes/) and [`lat.md/`](lat.md/). Code examples show the specified API. See [Roadmap](#roadmap) for what exists today.
+> **Status: M1 (storage core) implemented.** The Rust store, native backends and the Oxigraph compatibility harness work today; D1, Node/TypeScript packages, reasoning and validation are specified and being implemented milestone by milestone. See [Roadmap](#roadmap).
 
 ---
 
@@ -94,14 +94,24 @@ compiles to a single statement, with the planner choosing `ex:age` first because
 ```sql
 SELECT q2.o AS v2
 FROM quads q1 CROSS JOIN quads q0 CROSS JOIN quads q2
-WHERE q1.p = 2305843... AND q1.g = 0
+WHERE q1.p = 2305843... AND +q1.g = 0
   AND (CASE (q1.o >> 59) WHEN 6 THEN (q1.o & 576460752303423487) - 288230376151711744
        WHEN 5 THEN (SELECT num FROM terms WHERE id = q1.o AND nt IS NOT NULL) END) > 30
-  AND q0.s = q1.s AND q0.p = 2305843... AND q0.o = 2305843... AND q0.g = 0
-  AND q2.s = q1.s AND q2.p = 2305843... AND q2.g = 0
+  AND q0.s = q1.s AND q0.p = 2305843... AND q0.o = 2305843... AND +q0.g = 0
+  AND q2.s = q1.s AND q2.p = 2305843... AND +q2.g = 0
 ```
 
-The filter is applied right after the first scan, before any join. Inline integers are compared arithmetically; only non-inline numbers (decimals, doubles) look up `terms`. `store.explain(query)` shows the SQL, the join order and the estimates.
+The filter is applied right after the first scan, before any join. The unary `+` on graph conditions keeps SQLite from choosing the graph index for `g = 0` (which nearly every quad matches), so each alias uses the right covering permutation. Inline integers are compared arithmetically; only non-inline numbers (decimals, doubles) look up `terms`. `store.explain(query)` shows the SQL, the join order and the estimates.
+
+### Planner benchmark (M1)
+
+`cargo run --release -p oxilite --example planner_bench` loads 350 010 quads and runs three join-heavy queries with oxilite's planner and with SQLite's own (Apple Silicon laptop, in-process SQLite):
+
+| query | oxilite planner | SQLite planner |
+|---|---|---|
+| star with a rare badge | 75 µs | 7.2 ms |
+| friends of badged people | 96 µs | 87 µs |
+| city + age range filter | 478 µs | 7.8 ms |
 
 ---
 
@@ -115,7 +125,7 @@ oxilite = "0.1"          # bundled SQLite via rusqlite
 ```
 
 ```rust
-use oxilite::blocking::Store;          // was: use oxigraph::store::Store;
+use oxilite::store::Store;             // was: use oxigraph::store::Store;
 use oxilite::io::RdfFormat;
 use oxilite::sparql::QueryResults;
 
@@ -140,8 +150,9 @@ println!("{}", store.explain("SELECT * WHERE { ?s ?p ?o } LIMIT 1")?);
 ```rust
 use oxilite::dylib::DylibBackend;
 
-let backend = DylibBackend::open("/opt/vendor/lib/libsqlite3.so", "data.sqlite")?;
-let store = oxilite::blocking::Store::with_backend(backend)?;
+// features = ["dylib"]
+let store = oxilite::store::Store::open_with_library("/opt/vendor/lib/libsqlite3.so", "data.sqlite")?;
+// or: Store::with_backend(DylibBackend::open(library, database)?)
 ```
 
 Only the stable SQLite C API is bound (`open_v2`, `prepare_v2`, `step`, `column_*`, `finalize`, `errmsg`, `changes`, `exec`, and optionally `create_function_v2`), so any SQLite ≥ 3.37 works.
@@ -213,11 +224,11 @@ export default {
 
 ```rust
 use worker::*;
-use oxilite::{d1::D1Backend, Store};
+use oxilite::{d1::D1Backend, AsyncStore};
 
 #[event(fetch)]
 async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
-    let store = Store::open(D1Backend::new(env.d1("DB")?)).await.map_err(|e| e.to_string())?;
+    let store = AsyncStore::open(D1Backend::new(env.d1("DB")?)).await.map_err(|e| e.to_string())?;
     let q = req.url()?.query_pairs().find(|(k, _)| k == "query").map(|(_, v)| v.into_owned())
         .unwrap_or_else(|| "ASK { ?s ?p ?o }".into());
     let results = store.query(&q).await.map_err(|e| e.to_string())?;
@@ -272,8 +283,8 @@ Intentional differences:
 
 | Milestone | Scope | Done when | Status |
 |---|---|---|---|
-| Compat harness | Oxigraph test ports + differential corpus | runs in CI for every milestone | specified |
-| **M1** Storage core | encoding, schema, backends, load/dump, BGP+FILTER → SQL, planner | W3C syntax suites + ported store API tests pass | in progress |
+| Compat harness | Oxigraph test ports + differential corpus | runs in CI for every milestone | in progress (W3C suites + store API tests pass) |
+| **M1** Storage core | encoding, schema, backends, load/dump, BGP+FILTER → SQL, planner | W3C syntax suites + ported store API tests pass | ✅ done |
 | **M2** Full SPARQL 1.1 query | OPTIONAL, UNION, MINUS, aggregates, paths, subqueries, `explain()` | ≥ 95% W3C query suite | specified |
 | **M3** Update + D1 | atomic SPARQL UPDATE, `oxilite-d1`, wasm core | W3C update suite on rusqlite and local D1 | specified |
 | TS bindings | `@oxilite/node`, `@oxilite/d1` | node:test suites + Oxigraph JS tests | specified |

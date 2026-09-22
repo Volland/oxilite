@@ -1,19 +1,19 @@
 ## 1. Harness skeleton
 
-- [ ] 1.1 Create `testsuite/` crate `oxilite-compat` (publish = false) with dev-deps `oxigraph` (0.5, `default-features = false`) and `oxilite`
-- [ ] 1.2 Add `rdf-tests` submodule at the commit Oxigraph 0.5 pins; copy `oxigraph-tests` with license notices
-- [ ] 1.3 `Engine` trait with `OxigraphEngine` and `OxiliteEngine<B>` implementations
+- [x] 1.1 Create `testsuite/` crate `oxilite-compat` (publish = false) with dev-deps `oxigraph` (0.5, `default-features = false`) and `oxilite`
+- [x] 1.2 Add `rdf-tests` submodule at the commit Oxigraph 0.5 pins; copy `oxigraph-tests` with license notices
+- [x] 1.3 `Engine` trait with `OxigraphEngine` and `OxiliteEngine<B>` implementations
 
 ## 2. Ported Oxigraph runner
 
-- [ ] 2.1 Port `manifest.rs`, `evaluator.rs`, `report.rs` unchanged where possible
-- [ ] 2.2 Port `parser_evaluator.rs`: syntax suites load → dump → isomorphism on each engine
-- [ ] 2.3 Port `sparql_evaluator.rs` generic over `Engine`, with the three verdicts (expected, upstream sanity, cross-engine)
-- [ ] 2.4 Import Oxigraph's ignore lists from `testsuite/tests/sparql.rs` as the "upstream" baseline
+- [x] 2.1 Port `manifest.rs`, `evaluator.rs`, `report.rs` unchanged where possible
+- [x] 2.2 Port `parser_evaluator.rs`: syntax suites load → dump → isomorphism on each engine
+- [x] 2.3 Port `sparql_evaluator.rs` generic over `Engine`, with the three verdicts (expected, upstream sanity, cross-engine)
+- [x] 2.4 Import Oxigraph's ignore lists from `testsuite/tests/sparql.rs` as the "upstream" baseline
 
 ## 3. API parity suites
 
-- [ ] 3.1 Port `lib/oxigraph/tests/store.rs` against `oxilite::blocking::Store` (import change only); list excluded RocksDB-specific tests
+- [x] 3.1 Port `lib/oxigraph/tests/store.rs` against `oxilite::blocking::Store` (import change only); list excluded RocksDB-specific tests
 - [ ] 3.2 Port `optimizer_regression.rs` queries into the differential corpus
 - [ ] 3.3 Port `js/test/store.test.ts` against `@oxilite/node` (after change `typescript-bindings`)
 
@@ -26,7 +26,7 @@
 
 ## 5. Reporting and CI
 
-- [ ] 5.1 `allowlist.toml` format (id, reason, decision link) with "stale entry" detection
+- [x] 5.1 `allowlist.toml` format (id, reason, decision link) with "stale entry" detection
 - [ ] 5.2 Generate `COMPATIBILITY.md` (pass rates per suite, divergence table)
-- [ ] 5.3 CI job running the harness on every PR
+- [x] 5.3 CI job running the harness on every PR
 - [ ] 5.4 (M3) D1 engine via `wrangler dev --local`; run the corpus and the query/update suites on it

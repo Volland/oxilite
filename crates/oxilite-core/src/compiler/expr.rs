@@ -48,6 +48,8 @@ pub(crate) struct V {
     pub stat: Stat,
     /// `lex` is only an approximation of the canonical form (computed numbers).
     pub computed_num: bool,
+    /// `id` decodes without the query's constants (a stored term or an inline value).
+    pub decodable: bool,
 }
 
 pub(crate) const K_IRI: i64 = Tag::Iri as i64;
@@ -82,6 +84,7 @@ impl V {
             boolv: "NULL".into(),
             stat: Stat::Any,
             computed_num: false,
+            decodable: true,
         }
     }
 
@@ -103,7 +106,7 @@ impl V {
                 xsd_str(xsd::BOOLEAN),
             ),
             lang: format!(
-                "CASE WHEN {k} IN ({K_LANG}, {K_DIRLANG}) THEN (SELECT lang FROM terms WHERE id = {x}) END"
+                "CASE {k} WHEN {K_LANG} THEN (SELECT lang FROM terms WHERE id = {x}) WHEN {K_DIRLANG} THEN (SELECT lang || '--' || CASE dir WHEN 2 THEN 'rtl' ELSE 'ltr' END FROM terms WHERE id = {x}) END"
             ),
             num: format!(
                 "CASE {k} WHEN {K_INT} THEN {payload} - {INT_OFFSET} WHEN {K_TYPED} THEN (SELECT num FROM terms WHERE id = {x} AND nt IS NOT NULL) END"
@@ -119,6 +122,7 @@ impl V {
             kind: k,
             stat: Stat::Any,
             computed_num: false,
+            decodable: true,
         }
     }
 
@@ -126,6 +130,7 @@ impl V {
     pub(crate) fn from_term(term: &Term, id: i64) -> Result<Self> {
         let mut v = Self::null();
         v.id = Some(id.to_string());
+        v.decodable = false;
         match term {
             Term::NamedNode(n) => {
                 v.kind = K_IRI.to_string();
@@ -143,7 +148,16 @@ impl V {
                 v.kind = (tag as i64).to_string();
                 v.lex = sql_str(l.value());
                 v.dt = sql_str(l.datatype().as_str());
-                v.lang = l.language().map_or_else(|| "NULL".into(), sql_str);
+                v.lang = match (l.language(), l.direction()) {
+                    (Some(lang), Some(oxrdf::BaseDirection::Ltr)) => {
+                        sql_str(&format!("{lang}--ltr"))
+                    }
+                    (Some(lang), Some(oxrdf::BaseDirection::Rtl)) => {
+                        sql_str(&format!("{lang}--rtl"))
+                    }
+                    (Some(lang), None) => sql_str(lang),
+                    (None, _) => "NULL".into(),
+                };
                 match tag {
                     Tag::Integer => {
                         v.num = l.value().to_string();
@@ -163,8 +177,9 @@ impl V {
                                 v.nt = nt.to_string();
                                 v.stat = Stat::Numeric;
                             } else if l.datatype() == xsd::BOOLEAN {
-                                v.boolv =
-                                    row.num.map_or_else(|| "NULL".into(), |b| (b as i64).to_string());
+                                v.boolv = row
+                                    .num
+                                    .map_or_else(|| "NULL".into(), |b| (b as i64).to_string());
                                 v.stat = Stat::Bool;
                             }
                             if let Some(ts) = row.ts {
@@ -192,7 +207,10 @@ impl V {
                     "CASE WHEN ({lex}) IS NOT NULL THEN CASE WHEN {} IN ({K_LANG}, {K_DIRLANG}) THEN {K_LANG} ELSE {K_STRING} END END",
                     l.kind
                 );
-                v.lang = format!("CASE WHEN {} IN ({K_LANG}, {K_DIRLANG}) THEN {} END", l.kind, l.lang);
+                v.lang = format!(
+                    "CASE WHEN {} IN ({K_LANG}, {K_DIRLANG}) THEN {} END",
+                    l.kind, l.lang
+                );
                 v.dt = format!(
                     "CASE WHEN {} IN ({K_LANG}, {K_DIRLANG}) THEN {} ELSE {} END",
                     l.kind,
@@ -241,6 +259,9 @@ impl V {
         v.id = Some(format!("({INT_BASE} + ({num}))"));
         v.kind = format!("CASE WHEN ({num}) IS NOT NULL THEN {K_INT} END");
         v.dt = xsd_str(xsd::INTEGER);
+        v.lex = format!("CAST({num} AS TEXT)");
+        v.computed_num = false;
+        v.decodable = true;
         v
     }
 
@@ -253,6 +274,7 @@ impl V {
         v.dt = xsd_str(xsd::BOOLEAN);
         v.boolv = format!("({b})");
         v.stat = Stat::Bool;
+        v.decodable = true;
         v
     }
 
@@ -344,6 +366,40 @@ impl Cmp {
     }
 }
 
+/// Datatype plus timezone presence: date/time values only compare within the same key.
+fn tsk(v: &V) -> String {
+    format!(
+        "(({dt}) || CASE WHEN substr({l}, -1) = 'Z' OR (substr({l}, -6, 1) IN ('+', '-') AND substr({l}, -3, 1) = ':') THEN 'Z' ELSE '' END)",
+        dt = v.dt,
+        l = v.lex
+    )
+}
+
+/// Value equality of two triple terms given the SQL of their ids (components compared by
+/// value, recursively up to `depth` levels).
+fn triple_eq(a: &str, b: &str, depth: usize) -> String {
+    let comp = |id: &str, c: &str| format!("(SELECT {c} FROM triple_terms WHERE id = {id})");
+    let (ao, bo) = (comp(a, "o"), comp(b, "o"));
+    let obj = if depth == 0 {
+        format!("({ao}) = ({bo})")
+    } else {
+        let va = V::from_id(&ao);
+        let vb = V::from_id(&bo);
+        format!(
+            "(CASE WHEN (({ao}) >> {PAYLOAD_BITS}) = {K_TRIPLE} AND (({bo}) >> {PAYLOAD_BITS}) = {K_TRIPLE} THEN {} ELSE {} END)",
+            triple_eq(&ao, &bo, depth - 1),
+            compare_inner(&va, &vb, Cmp::Eq, false)
+        )
+    };
+    format!(
+        "(({}) = ({}) AND ({}) = ({}) AND {obj})",
+        comp(a, "s"),
+        comp(b, "s"),
+        comp(a, "p"),
+        comp(b, "p")
+    )
+}
+
 fn may(s: Stat, want: Stat) -> bool {
     s == Stat::Any || s == want
 }
@@ -366,6 +422,10 @@ fn same_term(a: &V, b: &V) -> String {
 }
 
 fn compare(a: &V, b: &V, cmp: Cmp) -> String {
+    compare_inner(a, b, cmp, true)
+}
+
+fn compare_inner(a: &V, b: &V, cmp: Cmp, triples: bool) -> String {
     let op = cmp.op();
     let mut branches = Vec::new();
     if cmp == Cmp::Eq {
@@ -396,10 +456,24 @@ fn compare(a: &V, b: &V, cmp: Cmp) -> String {
         ));
     }
     if may(a.stat, Stat::DateTime) && may(b.stat, Stat::DateTime) {
+        // Same datatype: compare timestamps. Timezone vs no timezone follows XSD 1.1: the
+        // result is determinate only outside the ±14h window, otherwise an error.
+        let (at, bt) = (&a.ts, &b.ts);
+        let mixed = match cmp {
+            Cmp::Lt | Cmp::Le => format!(
+                "CASE WHEN ({at}) + 50400 < ({bt}) THEN 1 WHEN ({at}) - 50400 > ({bt}) THEN 0 END"
+            ),
+            Cmp::Gt | Cmp::Ge => format!(
+                "CASE WHEN ({at}) - 50400 > ({bt}) THEN 1 WHEN ({at}) + 50400 < ({bt}) THEN 0 END"
+            ),
+            Cmp::Eq => format!("CASE WHEN abs(({at}) - ({bt})) > 50400 THEN 0 END"),
+        };
         branches.push(format!(
-            "WHEN ({at}) IS NOT NULL AND ({bt}) IS NOT NULL THEN ({at}) {op} ({bt})",
-            at = a.ts,
-            bt = b.ts
+            "WHEN ({at}) IS NOT NULL AND ({bt}) IS NOT NULL AND ({ad}) = ({bd}) THEN CASE WHEN {ak} = {bk} THEN ({at}) {op} ({bt}) ELSE {mixed} END",
+            ad = a.dt,
+            bd = b.dt,
+            ak = tsk(a),
+            bk = tsk(b)
         ));
     }
     if may(a.stat, Stat::Bool) && may(b.stat, Stat::Bool) {
@@ -407,6 +481,18 @@ fn compare(a: &V, b: &V, cmp: Cmp) -> String {
             "WHEN ({ab}) IS NOT NULL AND ({bb}) IS NOT NULL THEN ({ab}) {op} ({bb})",
             ab = a.boolv,
             bb = b.boolv
+        ));
+    }
+    if cmp != Cmp::Eq && may(a.stat, Stat::LangString) && may(b.stat, Stat::LangString) {
+        // Oxigraph extension: language-tagged strings with the same tag compare by value.
+        branches.push(format!(
+            "WHEN ({ak}) = {K_LANG} AND ({bk}) = {K_LANG} AND ({ag}) = ({bg}) THEN ({al}) {op} ({bl})",
+            ak = a.kind,
+            bk = b.kind,
+            ag = a.lang,
+            bg = b.lang,
+            al = a.lex,
+            bl = b.lex
         ));
     }
     if cmp == Cmp::Eq {
@@ -423,6 +509,18 @@ fn compare(a: &V, b: &V, cmp: Cmp) -> String {
                 ag = a.lang,
                 bg = b.lang
             ));
+        }
+        if triples {
+            if let (Some(x), Some(y)) = (&a.id, &b.id) {
+                if a.decodable && b.decodable {
+                    branches.push(format!(
+                        "WHEN ({}) = {K_TRIPLE} AND ({}) = {K_TRIPLE} THEN {}",
+                        a.kind,
+                        b.kind,
+                        triple_eq(x, y, 3)
+                    ));
+                }
+            }
         }
         // IRIs, blank nodes and triple terms are only equal to themselves.
         branches.push(format!(
@@ -500,11 +598,19 @@ impl Compiler<'_> {
         V::from_term(&t, id)
     }
 
-    pub(crate) fn expr_term(&mut self, e: &Expression, cols: &BTreeMap<usize, Binding>) -> Result<V> {
+    pub(crate) fn expr_term(
+        &mut self,
+        e: &Expression,
+        cols: &BTreeMap<usize, Binding>,
+    ) -> Result<V> {
         Ok(self.expr(e, cols)?.term())
     }
 
-    pub(crate) fn expr_bool(&mut self, e: &Expression, cols: &BTreeMap<usize, Binding>) -> Result<String> {
+    pub(crate) fn expr_bool(
+        &mut self,
+        e: &Expression,
+        cols: &BTreeMap<usize, Binding>,
+    ) -> Result<String> {
         Ok(self.expr(e, cols)?.bool_sql())
     }
 
@@ -537,10 +643,14 @@ impl Compiler<'_> {
             Expression::Less(a, b) => self.cmp(a, b, Cmp::Lt, cols)?,
             Expression::LessOrEqual(a, b) => self.cmp(a, b, Cmp::Le, cols)?,
             Expression::In(a, list) => {
-                if list.is_empty() {
-                    return Ok(E::B("0".into()));
-                }
                 let a = self.expr_term(a, cols)?;
+                if list.is_empty() {
+                    // Evaluating the left operand may still fail (e.g. unbound).
+                    return Ok(E::B(format!(
+                        "(CASE WHEN ({}) IS NOT NULL THEN 0 END)",
+                        a.kind
+                    )));
+                }
                 let mut parts = Vec::new();
                 for b in list {
                     let b = self.expr_term(b, cols)?;
@@ -590,7 +700,9 @@ impl Compiler<'_> {
     }
 
     fn choose(c: &str, a: &V, b: &V) -> V {
-        let pick = |x: &str, y: &str| format!("(CASE WHEN ({c}) IS NULL THEN NULL WHEN ({c}) THEN {x} ELSE {y} END)");
+        let pick = |x: &str, y: &str| {
+            format!("(CASE WHEN ({c}) IS NULL THEN NULL WHEN ({c}) THEN {x} ELSE {y} END)")
+        };
         V {
             id: match (&a.id, &b.id) {
                 (Some(x), Some(y)) => Some(pick(x, y)),
@@ -606,20 +718,37 @@ impl Compiler<'_> {
             boolv: pick(&a.boolv, &b.boolv),
             stat: if a.stat == b.stat { a.stat } else { Stat::Any },
             computed_num: a.computed_num || b.computed_num,
+            decodable: a.decodable && b.decodable,
         }
     }
 
-    fn cmp(&mut self, a: &Expression, b: &Expression, c: Cmp, cols: &BTreeMap<usize, Binding>) -> Result<E> {
+    fn cmp(
+        &mut self,
+        a: &Expression,
+        b: &Expression,
+        c: Cmp,
+        cols: &BTreeMap<usize, Binding>,
+    ) -> Result<E> {
         let (a, b) = (self.expr_term(a, cols)?, self.expr_term(b, cols)?);
         Ok(E::B(compare(&a, &b, c)))
     }
 
-    fn arith(&mut self, a: &Expression, b: &Expression, op: char, cols: &BTreeMap<usize, Binding>) -> Result<E> {
+    fn arith(
+        &mut self,
+        a: &Expression,
+        b: &Expression,
+        op: char,
+        cols: &BTreeMap<usize, Binding>,
+    ) -> Result<E> {
         let (a, b) = (self.expr_term(a, cols)?, self.expr_term(b, cols)?);
         Ok(E::T(arith(&a, &b, op)))
     }
 
-    fn exists(&mut self, p: &spargebra::algebra::GraphPattern, cols: &BTreeMap<usize, Binding>) -> Result<String> {
+    fn exists(
+        &mut self,
+        p: &spargebra::algebra::GraphPattern,
+        cols: &BTreeMap<usize, Binding>,
+    ) -> Result<String> {
         self.outer.push(cols.clone());
         let inner = self.pattern(p);
         self.outer.pop();
@@ -659,7 +788,12 @@ impl Compiler<'_> {
         args.iter().map(|a| self.expr_term(a, cols)).collect()
     }
 
-    fn function(&mut self, f: &Function, args: &[Expression], cols: &BTreeMap<usize, Binding>) -> Result<E> {
+    fn function(
+        &mut self,
+        f: &Function,
+        args: &[Expression],
+        cols: &BTreeMap<usize, Binding>,
+    ) -> Result<E> {
         let udf = self.caps.udf;
         Ok(match f {
             Function::Str => {
@@ -678,7 +812,7 @@ impl Compiler<'_> {
                 let a = self.expr_term(&args[0], cols)?;
                 E::T(V::string(
                     format!(
-                        "CASE WHEN ({k}) IN ({K_LANG}, {K_DIRLANG}) THEN ({l}) WHEN ({k}) IN ({K_STRING}, {K_TYPED}, {K_INT}, {K_BOOL}) THEN '' END",
+                        "CASE WHEN ({k}) = {K_LANG} THEN ({l}) WHEN ({k}) = {K_DIRLANG} THEN substr({l}, 1, instr({l}, '--') - 1) WHEN ({k}) IN ({K_STRING}, {K_TYPED}, {K_INT}, {K_BOOL}) THEN '' END",
                         k = a.kind,
                         l = a.lang
                     ),
@@ -725,9 +859,17 @@ impl Compiler<'_> {
             }
             Function::UCase | Function::LCase => {
                 let a = self.expr_term(&args[0], cols)?;
-                let func = if matches!(f, Function::UCase) { "upper" } else { "lower" };
+                let func = if matches!(f, Function::UCase) {
+                    "upper"
+                } else {
+                    "lower"
+                };
                 E::T(V::string(
-                    format!("CASE WHEN {} THEN {func}({}) END", a.is_string_like(), a.lex),
+                    format!(
+                        "CASE WHEN {} THEN {func}({}) END",
+                        a.is_string_like(),
+                        a.lex
+                    ),
                     Some(&a),
                 ))
             }
@@ -742,7 +884,11 @@ impl Compiler<'_> {
                         len.num
                     )
                 } else {
-                    format!("CASE WHEN {} THEN substr({}, {start}) END", a[0].is_string_like(), a[0].lex)
+                    format!(
+                        "CASE WHEN {} THEN substr({}, {start}) END",
+                        a[0].is_string_like(),
+                        a[0].lex
+                    )
                 };
                 E::T(V::string(lex, Some(&a[0])))
             }
@@ -755,7 +901,33 @@ impl Compiler<'_> {
                         .iter()
                         .map(|v| format!("(CASE WHEN {} THEN {} END)", v.is_string_like(), v.lex))
                         .collect();
-                    E::T(V::string(format!("({})", parts.join(" || ")), None))
+                    let lex = format!("({})", parts.join(" || "));
+                    // The language tag (and direction) is kept only if all arguments share it.
+                    let same_lang = a
+                        .iter()
+                        .map(|v| {
+                            format!(
+                                "({k}) IN ({K_LANG}, {K_DIRLANG}) AND ({l}) = ({l0})",
+                                k = v.kind,
+                                l = v.lang,
+                                l0 = a[0].lang
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join(" AND ");
+                    let mut v = V::string(lex.clone(), None);
+                    v.kind = format!(
+                        "CASE WHEN ({lex}) IS NULL THEN NULL WHEN {same_lang} THEN ({k0}) ELSE {K_STRING} END",
+                        k0 = a[0].kind
+                    );
+                    v.lang = format!("CASE WHEN {same_lang} THEN ({}) END", a[0].lang);
+                    v.dt = format!(
+                        "CASE WHEN {same_lang} THEN ({}) ELSE {} END",
+                        a[0].dt,
+                        xsd_str(xsd::STRING)
+                    );
+                    v.stat = Stat::Any;
+                    E::T(v)
                 }
             }
             Function::Contains | Function::StrStarts | Function::StrEnds => {
@@ -775,19 +947,35 @@ impl Compiler<'_> {
             Function::StrBefore | Function::StrAfter => {
                 let a = self.args(args, cols)?;
                 let (x, y) = (&a[0].lex, &a[1].lex);
+                // Arguments are compatible if arg2 is a simple string or has arg1's language.
+                let compatible = format!(
+                    "({k0}) IN ({K_STRING}, {K_LANG}, {K_DIRLANG}) AND (({k1}) = {K_STRING} OR (({k1}) IN ({K_LANG}, {K_DIRLANG}) AND ({l1}) = ({l0})))",
+                    k0 = a[0].kind,
+                    k1 = a[1].kind,
+                    l0 = a[0].lang,
+                    l1 = a[1].lang
+                );
+                let found = format!("(length({y}) = 0 OR instr({x}, {y}) > 0)");
                 let lex = if matches!(f, Function::StrBefore) {
-                    format!("CASE WHEN instr({x}, {y}) > 0 THEN substr({x}, 1, instr({x}, {y}) - 1) ELSE '' END")
+                    format!("CASE WHEN length({y}) = 0 THEN '' WHEN instr({x}, {y}) > 0 THEN substr({x}, 1, instr({x}, {y}) - 1) ELSE '' END")
                 } else {
-                    format!("CASE WHEN instr({x}, {y}) > 0 THEN substr({x}, instr({x}, {y}) + length({y})) ELSE '' END")
+                    format!("CASE WHEN length({y}) = 0 THEN {x} WHEN instr({x}, {y}) > 0 THEN substr({x}, instr({x}, {y}) + length({y})) ELSE '' END")
                 };
-                E::T(V::string(
-                    format!(
-                        "CASE WHEN {} AND {} THEN {lex} END",
-                        a[0].is_string_like(),
-                        a[1].is_string_like()
-                    ),
-                    Some(&a[0]),
-                ))
+                let lex = format!("CASE WHEN {compatible} THEN {lex} END");
+                let mut v = V::string(lex.clone(), None);
+                // A match keeps arg1's language tag; no match gives a simple empty string.
+                v.kind = format!(
+                    "CASE WHEN ({lex}) IS NULL THEN NULL WHEN {found} THEN ({k0}) ELSE {K_STRING} END",
+                    k0 = a[0].kind
+                );
+                v.lang = format!("CASE WHEN {found} THEN ({}) END", a[0].lang);
+                v.dt = format!(
+                    "CASE WHEN {found} THEN ({}) ELSE {} END",
+                    a[0].dt,
+                    xsd_str(xsd::STRING)
+                );
+                v.stat = Stat::Any;
+                E::T(v)
             }
             Function::LangMatches => {
                 let a = self.args(args, cols)?;
@@ -813,9 +1001,16 @@ impl Compiler<'_> {
             }
             Function::EncodeForUri if udf => {
                 let a = self.expr_term(&args[0], cols)?;
-                E::T(V::string(format!("oxilite_encode_for_uri({})", a.lex), None))
+                E::T(V::string(
+                    format!("oxilite_encode_for_uri({})", a.lex),
+                    None,
+                ))
             }
-            Function::Md5 | Function::Sha1 | Function::Sha256 | Function::Sha384 | Function::Sha512
+            Function::Md5
+            | Function::Sha1
+            | Function::Sha256
+            | Function::Sha384
+            | Function::Sha512
                 if udf =>
             {
                 let a = self.expr_term(&args[0], cols)?;
@@ -841,7 +1036,9 @@ impl Compiler<'_> {
                 let num = match f {
                     Function::Abs => format!("abs({n})"),
                     Function::Floor => floor,
-                    Function::Ceil => format!("(-(CAST(-({n}) AS INTEGER) - ((-({n})) < CAST(-({n}) AS INTEGER))))"),
+                    Function::Ceil => format!(
+                        "(-(CAST(-({n}) AS INTEGER) - ((-({n})) < CAST(-({n}) AS INTEGER))))"
+                    ),
                     _ => {
                         let m = format!("(({n}) + 0.5)");
                         format!("(CAST({m} AS INTEGER) - (({m}) < CAST({m} AS INTEGER)))")
@@ -849,7 +1046,11 @@ impl Compiler<'_> {
                 };
                 E::T(V::numeric(num, a.nt.clone()))
             }
-            Function::Year | Function::Month | Function::Day | Function::Hours | Function::Minutes => {
+            Function::Year
+            | Function::Month
+            | Function::Day
+            | Function::Hours
+            | Function::Minutes => {
                 let a = self.expr_term(&args[0], cols)?;
                 let (start, len) = match f {
                     Function::Year => (1, 4),
@@ -874,11 +1075,13 @@ impl Compiler<'_> {
             }
             Function::Seconds => {
                 let a = self.expr_term(&args[0], cols)?;
-                // Lexical seconds are at offset 18, followed by an optional fraction and timezone.
+                // Seconds start at offset 18 of the lexical form; CAST keeps the numeric prefix.
                 E::T(V::numeric(
                     format!(
-                        "CASE WHEN ({}) IS NOT NULL AND length({l}) >= 19 THEN CAST(rtrim(substr({l}, 18), 'Z+-:0123456789') AS REAL) + CAST(substr({l}, 18, 2) AS REAL) * 0 END",
+                        "CASE WHEN ({}) IS NOT NULL AND ({}) = {} THEN CAST(substr({l}, 18) AS REAL) END",
                         a.ts,
+                        a.dt,
+                        xsd_str(xsd::DATE_TIME),
                         l = a.lex
                     ),
                     "2".into(),
@@ -915,30 +1118,62 @@ impl Compiler<'_> {
                     E::T(V::string(uuid.into(), None))
                 }
             }
-            Function::Iri => {
-                let a = self.expr_term(&args[0], cols)?;
-                if let Some(base) = &self.base_iri {
-                    // Only absolute IRIs are passed through; relative ones need resolution.
-                    let _ = base;
+            Function::Iri => match &args[0] {
+                Expression::NamedNode(n) => E::T(self.constant(n.clone().into())?),
+                Expression::Literal(l) if l.datatype() == xsd::STRING => {
+                    let iri = match &self.base_iri {
+                        Some(base) => oxiri::Iri::parse(base.as_str())
+                            .and_then(|b| b.resolve(l.value()))
+                            .map(oxiri::Iri::into_inner),
+                        None => {
+                            oxiri::Iri::parse(l.value().to_string()).map(oxiri::Iri::into_inner)
+                        }
+                    };
+                    match iri {
+                        Ok(i) => E::T(self.constant(NamedNode::new_unchecked(i).into())?),
+                        Err(_) => E::T(V::null()),
+                    }
                 }
-                E::T(V::iri(format!(
-                    "CASE WHEN ({k}) = {K_IRI} OR ({k}) = {K_STRING} THEN {l} END",
-                    k = a.kind,
-                    l = a.lex
-                )))
-            }
+                _ if self.base_iri.is_some() => {
+                    return Err(Error::unsupported("IRI() of a non-constant with a BASE"))
+                }
+                _ => {
+                    let a = self.expr_term(&args[0], cols)?;
+                    E::T(V::iri(format!(
+                            "CASE WHEN ({k}) = {K_IRI} OR (({k}) = {K_STRING} AND instr({l}, ':') > 1) THEN {l} END",
+                            k = a.kind,
+                            l = a.lex
+                        )))
+                }
+            },
             Function::StrDt => {
                 let a = self.args(args, cols)?;
-                let dt_expr = &args[1];
-                let Expression::NamedNode(dt) = dt_expr else {
+                let Expression::NamedNode(dt) = &args[1] else {
                     return Err(Error::unsupported("STRDT with a non-constant datatype"));
                 };
-                E::T(Self::cast_value(&a[0], dt)?)
+                let lex = format!(
+                    "CASE WHEN ({}) = {K_STRING} THEN {} END",
+                    a[0].kind, a[0].lex
+                );
+                if dt.as_ref() == xsd::STRING {
+                    E::T(V::string(lex, None))
+                } else {
+                    let mut v = V::typed(lex.clone(), dt.as_str());
+                    if let Some(rank) = numeric_rank(dt.as_str()) {
+                        v.num = format!("CASE WHEN trim({lex}) GLOB '*[0-9]*' THEN CAST(trim({lex}) AS REAL) END");
+                        v.nt = rank.to_string();
+                        v.stat = Stat::Numeric;
+                    }
+                    E::T(v)
+                }
             }
             Function::StrLang => {
                 let a = self.args(args, cols)?;
                 let mut v = V::string(
-                    format!("CASE WHEN ({}) = {K_STRING} THEN {} END", a[0].kind, a[0].lex),
+                    format!(
+                        "CASE WHEN ({}) = {K_STRING} THEN {} END",
+                        a[0].kind, a[0].lex
+                    ),
                     None,
                 );
                 v.kind = format!("CASE WHEN ({}) = {K_STRING} THEN {K_LANG} END", a[0].kind);
@@ -949,8 +1184,13 @@ impl Compiler<'_> {
             }
             Function::Custom(name) => {
                 let a = self.args(args, cols)?;
-                if a.len() == 1 && name.as_str().starts_with("http://www.w3.org/2001/XMLSchema#") {
-                    E::T(Self::cast_value(&a[0], name)?)
+                let _ = a;
+                if name
+                    .as_str()
+                    .starts_with("http://www.w3.org/2001/XMLSchema#")
+                {
+                    // XSD casts need exact lexical validation and canonicalization: fallback.
+                    return Err(Error::unsupported(format!("XSD cast {name}")));
                 } else {
                     return Err(Error::unsupported(format!("custom function {name}")));
                 }
@@ -959,7 +1199,8 @@ impl Compiler<'_> {
         })
     }
 
-    /// `xsd:*` casts and `STRDT`.
+    /// `xsd:*` casts (kept for M2, currently routed to the fallback).
+    #[allow(dead_code)]
     fn cast_value(a: &V, dt: &NamedNode) -> Result<V> {
         let lex = &a.lex;
         Ok(match numeric_rank(dt.as_str()) {
@@ -1027,7 +1268,9 @@ impl Compiler<'_> {
                     let test = match (starts, ends) {
                         (true, true) => format!("{t} = {l}"),
                         (true, false) => format!("substr({t}, 1, length({l})) = {l}"),
-                        (false, true) => format!("(length({l}) = 0 OR substr({t}, -length({l})) = {l})"),
+                        (false, true) => {
+                            format!("(length({l}) = 0 OR substr({t}, -length({l})) = {l})")
+                        }
                         (false, false) => format!("instr({t}, {l}) > 0"),
                     };
                     return Ok(E::B(format!("(CASE WHEN {guard} THEN {test} END)")));

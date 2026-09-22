@@ -58,6 +58,11 @@ pub fn create_schema(options: &StoreOptions) -> Request {
         // Staging table for SPARQL UPDATE (DELETE/INSERT … WHERE) inside one atomic batch.
         "CREATE TABLE IF NOT EXISTS update_buffer (\
             op INTEGER NOT NULL, s INTEGER NOT NULL, p INTEGER NOT NULL, o INTEGER NOT NULL, g INTEGER NOT NULL) STRICT",
+        // Assertions inside atomic batches: inserting a non-NULL value aborts the batch with a
+        // "CHECK constraint failed: <name>" error naming the violated SPARQL condition.
+        "CREATE TABLE IF NOT EXISTS oxilite_guard (\
+            graph_does_not_exist INTEGER CHECK (graph_does_not_exist IS NULL), \
+            graph_already_exists INTEGER CHECK (graph_already_exists IS NULL)) STRICT",
     ]
     .into_iter()
     .map(Statement::from)

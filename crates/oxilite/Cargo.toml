@@ -1,0 +1,25 @@
+[package]
+name = "oxilite"
+description = "Oxigraph-compatible RDF database and SPARQL engine on SQLite (native, dlopen'ed libsqlite3, Cloudflare D1)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = ["rusqlite"]
+rusqlite = ["dep:oxilite-rusqlite"]
+dylib = ["dep:oxilite-dylib"]
+
+[dependencies]
+oxilite-core.workspace = true
+oxilite-rusqlite = { workspace = true, optional = true }
+oxilite-dylib = { workspace = true, optional = true }
+oxrdf.workspace = true
+oxrdfio.workspace = true
+spargebra.workspace = true
+spareval.workspace = true
+sparesults.workspace = true
+
+[dev-dependencies]
+oxilite = { path = ".", features = ["rusqlite", "dylib"] }

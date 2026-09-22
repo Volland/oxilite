@@ -1,0 +1,10 @@
+[package]
+name = "oxilite-dylib"
+description = "oxilite backend loading a user-supplied libsqlite3 shared library at runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+oxilite-core.workspace = true
+libloading.workspace = true

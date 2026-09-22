@@ -40,6 +40,10 @@ impl Error {
         let msg = e.to_string();
         if msg.contains("oxilite: term hash collision") {
             Self::Collision(msg)
+        } else if msg.contains("graph_does_not_exist") {
+            Self::Other("the graph does not exist".into())
+        } else if msg.contains("graph_already_exists") {
+            Self::Other("the graph already exists".into())
         } else {
             Self::Backend(msg)
         }

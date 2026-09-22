@@ -59,3 +59,9 @@ Results reuse `spareval::QueryResults` and `sparesults` serializers unchanged. R
 ## D10 Milestones measured by W3C suites
 
 Delivery is split into six milestones, each measured by the W3C test suites Oxigraph runs, plus a differential harness comparing results with in-memory Oxigraph. See [[milestones]].
+
+## D11 Total order for incomparable literals
+
+ORDER BY uses a total SQL order: unbound, blank nodes, IRIs, literals, triple terms; numeric literals first by value, then other literals by lexical form, datatype and language.
+
+SPARQL leaves the relative order of incomparable literals undefined. Oxigraph sorts with a non-transitive comparator, so its output for mixed types depends on its sort algorithm and cannot be reproduced by SQL keys. The divergence is allow-listed in the compatibility harness (`order_terms`).

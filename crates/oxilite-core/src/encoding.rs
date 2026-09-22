@@ -255,8 +255,8 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     era * 146_097 + doe - 719_468
 }
 
-fn tz_seconds(tz: Option<oxsdatatypes::TimezoneOffset>) -> f64 {
-    tz.map_or(0.0, |tz| f64::from(i16::from(tz)) * 60.0)
+fn tz_seconds(tz: Option<oxsdatatypes::DayTimeDuration>) -> f64 {
+    tz.map_or(0.0, |tz| (tz.hours() * 3600 + tz.minutes() * 60) as f64)
 }
 
 /// Seconds since the epoch of an `xsd:dateTime` or `xsd:date` lexical form (no timezone = UTC).
@@ -272,13 +272,13 @@ pub fn timestamp(lex: &str, dt: &str) -> Option<f64> {
                     + f64::from(v.hour()) * 3600.0
                     + f64::from(v.minute()) * 60.0
                     + secs
-                    - tz_seconds(v.timezone_offset()),
+                    - tz_seconds(v.timezone()),
             )
         }
         "http://www.w3.org/2001/XMLSchema#date" => {
             let v = oxsdatatypes::Date::from_str(lex).ok()?;
             let days = days_from_civil(v.year(), v.month().into(), v.day().into());
-            Some(days as f64 * 86_400.0 - tz_seconds(v.timezone_offset()))
+            Some(days as f64 * 86_400.0 - tz_seconds(v.timezone()))
         }
         _ => None,
     }
@@ -295,7 +295,11 @@ pub fn encode_literal(literal: LiteralRef<'_>) -> (i64, Option<TermRow>) {
             };
             let id = hashed(
                 Tag::DirLangString,
-                &[lang.as_bytes(), if d == 1 { b"ltr" } else { b"rtl" }, lex.as_bytes()],
+                &[
+                    lang.as_bytes(),
+                    if d == 1 { b"ltr" } else { b"rtl" },
+                    lex.as_bytes(),
+                ],
             );
             return (
                 id,
@@ -528,7 +532,13 @@ pub fn decode_inline(id: i64) -> Option<Term> {
 }
 
 /// Decodes a hashed id from its `terms` row.
-pub fn decode_row(id: i64, lex: String, dt: Option<String>, lang: Option<String>, dir: Option<i64>) -> Result<Term> {
+pub fn decode_row(
+    id: i64,
+    lex: String,
+    dt: Option<String>,
+    lang: Option<String>,
+    dir: Option<i64>,
+) -> Result<Term> {
     let tag = tag_of(id).ok_or_else(|| Error::corrupted(format!("invalid term id {id}")))?;
     Ok(match tag {
         Tag::Iri => NamedNode::new_unchecked(lex).into(),
@@ -679,6 +689,9 @@ mod tests {
             timestamp("1970-01-01T02:00:00+02:00", xsd::DATE_TIME.as_str()),
             Some(0.0)
         );
-        assert_eq!(timestamp("2000-03-01", xsd::DATE.as_str()), Some(951_868_800.0));
+        assert_eq!(
+            timestamp("2000-03-01", xsd::DATE.as_str()),
+            Some(951_868_800.0)
+        );
     }
 }
