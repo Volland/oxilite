@@ -275,12 +275,8 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
     }
 
     fn update_inner(&self, update: &spargebra::Update) -> Result<()> {
-        let mut plan = plan_update_with(
-            update,
-            &self.stats(),
-            self.caps(),
-            &QueryOptions::default(),
-        )?;
+        let mut plan =
+            plan_update_with(update, &self.stats(), self.caps(), &QueryOptions::default())?;
         if plan.iter().all(|p| matches!(p, PlannedOp::Sql(_))) {
             let stmts = plan
                 .iter()

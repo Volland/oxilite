@@ -170,9 +170,13 @@ Reasoning is chosen per query (`QueryOptions::reasoning`: `None | Rdfs | OwlQl`,
 
 ## Validation
 
-SHACL and ShEx validation by running rudof's engines unchanged over oxilite through rudof's `srdf` traits. Delivered in M5.
+SHACL and ShEx validation by running rudof's engines unchanged over oxilite through rudof's RDF traits (`rudof_rdf`, formerly `srdf`). Delivered in M5 as the crate `oxilite-validate`, see [[crates/oxilite-validate/src/lib.rs]].
 
-Native backends implement `Rdf + NeighsRDF + QueryRDF` directly (so rudof's SPARQL paths use the oxilite compiler). D1 cannot block, so a prefetch adapter loads the relevant subgraph (target nodes, shape predicates, `sh:node` closure) into rudof's in-memory `SRDFGraph` with batched SQL, subject to a size limit. Behind the `validation` feature because rudof is a large dependency tree.
+It depends on the umbrella crate, so it is added next to it rather than behind a feature.
+
+`StoreGraph` implements `Rdf + NeighsRDF + QueryRDF` over a blocking `Store` (default graph, or all graphs merged): neighbourhood lookups are SQL pattern scans and rudof's SPARQL-mode validation runs through the oxilite compiler. SHACL uses rudof's `shacl` crate (native and SPARQL engines), ShEx `shex_validation` with compact shape maps. On the W3C SHACL core suite and the shexTest validation suite, reports over a store equal rudof's over its in-memory graph, on bundled SQLite and the system `libsqlite3`.
+
+rudof's validators are compiled out on wasm32, so D1 is validated from native code over any `AsyncBackend` (D1's HTTP API, or the Miniflare sidecar in tests). A prefetch loads what the shapes need into rudof's in-memory graph: targets (target classes, nodes, subjects/objects of target predicates with their triples, implicit class targets), the class hierarchy, and a breadth-first neighbourhood (outgoing triples, incoming ones for inverse-path predicates) to a configured depth, one request per hop and chunk of nodes. Beyond `max_triples` it fails with `Error::TooLarge` (limit and size found) instead of truncating.
 
 ## Bindings
 

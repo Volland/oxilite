@@ -254,6 +254,45 @@ impl Job for ScanJob {
     }
 }
 
+/// Quads whose subject (or, with `incoming`, object) is one of `nodes`, optionally restricted
+/// to some predicates and to the default graph: one neighbourhood hop for bounded prefetches.
+pub fn neighbourhood_job(
+    nodes: &[TermRef<'_>],
+    incoming: bool,
+    predicates: Option<&[NamedNodeRef<'_>]>,
+    default_graph_only: bool,
+    caps: &Capabilities,
+) -> ScanJob {
+    let ids: Vec<String> = nodes.iter().map(|t| term_id(*t).to_string()).collect();
+    let mut w = vec![format!(
+        "{} IN ({})",
+        if incoming { "o" } else { "s" },
+        if ids.is_empty() {
+            "NULL".into()
+        } else {
+            ids.join(",")
+        }
+    )];
+    if let Some(ps) = predicates {
+        let ps: Vec<String> = ps
+            .iter()
+            .map(|p| named_node_id(p.as_str()).to_string())
+            .collect();
+        w.push(format!(
+            "p IN ({})",
+            if ps.is_empty() {
+                "NULL".into()
+            } else {
+                ps.join(",")
+            }
+        ));
+    }
+    if default_graph_only {
+        w.push(format!("g = {DEFAULT_GRAPH_ID}"));
+    }
+    ScanJob::new(w.join(" AND "), caps)
+}
+
 /// `quads_for_pattern` as a job. `graph_name = None` matches every graph, default included.
 pub fn scan_job(
     subject: Option<NamedOrBlankNodeRef<'_>>,

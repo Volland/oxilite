@@ -1,0 +1,26 @@
+[package]
+name = "oxilite-validate"
+description = "SHACL and ShEx validation of oxilite stores with rudof"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+oxilite.workspace = true
+oxilite-core.workspace = true
+oxrdf.workspace = true
+oxrdfio.workspace = true
+thiserror.workspace = true
+rudof_rdf = "0.3.21"
+rudof_iri = "0.3.21"
+prefixmap = "0.3.21"
+shacl = "0.3.21"
+shex_ast = "0.3.21"
+shex_validation = "0.3.21"
+
+[dev-dependencies]
+oxilite = { workspace = true, features = ["rusqlite", "dylib"] }
+futures = { version = "0.3", default-features = false, features = ["executor"] }
+ureq = { version = "2", features = ["json"] }
+serde_json = "1"
+oxilite-core = { workspace = true, features = ["serde"] }

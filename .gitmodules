@@ -1,3 +1,9 @@
 [submodule "testsuite/rdf-tests"]
 	path = testsuite/rdf-tests
 	url = https://github.com/w3c/rdf-tests.git
+[submodule "testsuite/data-shapes"]
+	path = testsuite/data-shapes
+	url = https://github.com/w3c/data-shapes.git
+[submodule "testsuite/shexTest"]
+	path = testsuite/shexTest
+	url = https://github.com/shexSpec/shexTest.git

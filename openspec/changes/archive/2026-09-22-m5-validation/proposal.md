@@ -4,7 +4,7 @@ Validating data against SHACL and ShEx shapes is a core need for knowledge graph
 
 ## What Changes
 
-- New crate `oxilite-validate`, behind a `validation` feature because rudof's dependency tree is large.
+- New crate `oxilite-validate`, kept out of the umbrella crate because rudof's dependency tree is large (it depends on `oxilite`, so it is used next to it rather than enabled by a feature).
 - Implementations of rudof's `srdf` traits (`Rdf`, `NeighsRDF`, `QueryRDF`) on the native blocking store. rudof's SPARQL-based paths then run through the oxilite compiler.
 - A prefetch adapter for D1 (async, non-blocking):
   - loads the relevant subgraph into rudof's in-memory `SRDFGraph` with batched SQL: target nodes, predicates mentioned in shapes, and the `sh:node` / `sh:property` closure to a configured depth;

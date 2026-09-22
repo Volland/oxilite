@@ -2,7 +2,7 @@
 
 **An Oxigraph-compatible RDF database and SPARQL engine that uses SQLite as its storage engine. It runs anywhere SQLite runs, including Cloudflare D1.**
 
-> **Status: M1 (storage core), M2 (full SPARQL 1.1 query compiled to SQL), M3 (atomic SPARQL Update, Cloudflare D1), the TypeScript packages and M4 (RDFS / OWL reasoning) implemented.** The Rust store, native backends, the D1 backend, `@oxilite/node`, `@oxilite/d1`, reasoning and the Oxigraph compatibility harness work today; validation and the performance milestone are specified and being implemented milestone by milestone. See [Roadmap](#roadmap).
+> **Status: M1 (storage core), M2 (full SPARQL 1.1 query compiled to SQL), M3 (atomic SPARQL Update, Cloudflare D1), the TypeScript packages, M4 (RDFS / OWL reasoning) and M5 (SHACL / ShEx validation with rudof) implemented.** The Rust store, native backends, the D1 backend, `@oxilite/node`, `@oxilite/d1`, reasoning, validation and the Oxigraph compatibility harness work today; the performance milestone is specified and being implemented. See [Roadmap](#roadmap).
 
 ---
 
@@ -304,7 +304,18 @@ d1store.query(q, { include_inferred: true });
 ```
 
 The schema closure is refreshed by `optimize()` and automatically, in the same transaction, by any write that touches `rdfs:subClassOf`, `rdfs:subPropertyOf`, `rdfs:domain`, `rdfs:range`, `owl:equivalentClass`, `owl:equivalentProperty`, `owl:inverseOf` or symmetric/transitive property declarations. Materialized inferences are not maintained: re-run `materialize()` after changing data. D1 databases created by an older migration need the new `tbox_closure` and `quads_inf` tables (re-run `npx oxilite-d1 schema`; every statement is `IF NOT EXISTS`).
-- **Validation (M5).** SHACL and ShEx through rudof, unchanged. Native stores implement rudof's `srdf` traits directly. On D1, the relevant subgraph is prefetched in a few batched queries (with a size limit).
+- **Validation (M5).** SHACL and ShEx through rudof, unchanged, in the `oxilite-validate` crate. Native stores implement rudof's RDF traits directly, so rudof's SPARQL-mode validation runs through the oxilite compiler; on the W3C SHACL core suite and the shexTest suite the results are identical to rudof's in-memory graph. rudof does not build its validators for wasm32, so D1 is validated from native code (a CLI, a server, CI) over the D1 HTTP API: the subgraph the shapes need is prefetched in a few batched requests, with a size limit that fails loudly.
+
+```rust
+use oxilite_validate::{validate_shacl, validate_shex, ShaclValidationMode};
+
+let report = validate_shacl(&store, shapes_ttl, &ShaclValidationMode::Native)?;
+if !report.conforms() { println!("{report}"); }
+let results = validate_shex(&store, shexc, "http://example.com/", "<http://example.com/alice>@<http://example.com/Person>")?;
+
+// D1 (any AsyncBackend): bounded prefetch, then validation in memory
+let report = oxilite_validate::prefetch::validate_shacl_async(&d1_store, shapes_ttl, &ShaclValidationMode::Native, &Default::default()).await?;
+```
 
 ---
 
@@ -318,7 +329,7 @@ The schema closure is refreshed by `optimize()` and automatically, in the same t
 | **M3** Update + D1 | atomic SPARQL UPDATE, `oxilite-d1`, wasm core | W3C update suite on rusqlite and local D1 | ✅ done: W3C update suites pass on every backend, D1 included |
 | TS bindings | `@oxilite/node`, `@oxilite/d1` | test suites + Oxigraph JS tests | ✅ done: Oxigraph `store.test.ts` 32/33 (1 allow-listed), both example Workers tested on Miniflare |
 | **M4** Reasoning | TBox closure, rewriting, OWL 2 RL | entailment tests; agreement with `reasonable` | ✅ done: RDFS/OWL QL rewriting, SQL OWL 2 RL rules on every backend, identical to `reasonable` |
-| **M5** Validation | rudof SHACL/ShEx | rudof suites over oxilite | specified |
+| **M5** Validation | rudof SHACL/ShEx | rudof suites over oxilite | ✅ done: W3C SHACL core and shexTest results identical to rudof in memory; bounded D1 prefetch |
 | **M6** Performance | BSBM vs Oxigraph, FTS5 | published comparison | specified |
 
 ---

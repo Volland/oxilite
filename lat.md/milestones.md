@@ -42,6 +42,8 @@ rudof `srdf` traits on the native store and the D1 prefetch adapter for SHACL an
 
 Done when rudof's own SHACL/ShEx test suites pass against an oxilite-backed store.
 
+Status: done. On the W3C SHACL core suite (226 reports per backend) and the shexTest validation suite (1161 validations) rudof over an oxilite store gives exactly the results of rudof in memory; D1 validation uses the bounded prefetch.
+
 ## M6 Performance
 
 BSBM benchmark against Oxigraph/RocksDB, planner tuning and an optional FTS5 text index. Change: `m6-performance`.

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/oxilite-core", "crates/oxilite-rusqlite", "crates/oxilite-dylib", "crates/oxilite", "testsuite", "crates/oxilite-wasm", "crates/oxilite-d1", "bindings/node", "crates/oxilite-reason"]
+members = ["crates/oxilite-core", "crates/oxilite-rusqlite", "crates/oxilite-dylib", "crates/oxilite", "testsuite", "crates/oxilite-wasm", "crates/oxilite-d1", "bindings/node", "crates/oxilite-reason", "crates/oxilite-validate"]
 
 [workspace.package]
 version = "0.1.0"

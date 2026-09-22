@@ -172,6 +172,30 @@ A reasoned BGP compiles fully to one SQL statement that reads `tbox_closure`.
 
 On five sample ontologies (RDFS, property axioms, equality, class expressions with lists and chains, schema cycles) the SQL rules and the `reasonable` crate produce exactly the same closure.
 
+## Validation
+
+SHACL and ShEx with rudof over oxilite stores (`oxilite-validate`), see [[architecture#Validation]].
+
+### SHACL violation reported
+
+A `sh:minCount 1` on `ex:name`, a nested `sh:node` and a `sh:targetObjectsOf` target report the failing focus nodes, in native and SPARQL modes.
+
+### SHACL suite matches rudof in memory
+
+Every W3C SHACL core test (226 reports, 178 with violations) gives the same report over an oxilite store as over rudof's in-memory graph, on bundled SQLite and the system `libsqlite3`, in both validation modes.
+
+### ShEx conforming node
+
+A node with the required properties conforms to its ShEx shape through a shape map; a node that points to a non-conforming node does not.
+
+### ShEx suite matches rudof in memory
+
+The 1161 shexTest validation tests that rudof can parse give the same statuses over an oxilite store as in memory.
+
+### Bounded prefetch matches full validation
+
+On a D1-like async backend (and the Miniflare D1 sidecar with `OXILITE_D1_URL`), prefetch-based SHACL and ShEx validation match full validation, and a too-small limit fails with `TooLarge` stating the limit and size found.
+
 ## Node
 
 `@oxilite/node` tests over the napi-rs addon, next to the verbatim port of Oxigraph's `js/test/store.test.ts`, see [[architecture#Bindings]]. The port's failures must match `js:` entries of `testsuite/allowlist.toml`.
