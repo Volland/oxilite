@@ -49,8 +49,8 @@ Hash collisions are detected atomically by a `BEFORE INSERT` trigger on `terms` 
 Seven small tables; the quad table is a `WITHOUT ROWID` clustered index whose secondary indexes contain every column, so every triple-pattern scan is index-only.
 
 - `quads(s, p, o, g)` — `PRIMARY KEY (s,p,o,g) WITHOUT ROWID, STRICT`; indexes `posg`, `ospg`, optional `gspo`. `g = 0` is the default graph.
-- `terms(id INTEGER PRIMARY KEY, lex, dt, lang, dir, num, nt, ts)` — typed side columns (`num` numeric value, `nt` numeric type rank, `ts` epoch seconds) with partial indexes, so value filters never re-parse lexical forms.
-- `triple_terms(id, s, p, o)` — RDF 1.2 triple terms.
+- `terms(id INTEGER PRIMARY KEY, lex, dt, lang, dir, num, nt, ts)` — typed side columns (`num` numeric value, `nt` numeric type rank, `ts` epoch seconds; `dir` is the base direction of directional strings or the timezone flag of dates) with partial indexes, so value filters never re-parse lexical forms.
+- `triple_terms(id, s, p, o, vk, sk)` — RDF 1.2 triple terms, with a value key (equal for value-equal triples, so `=` is one comparison) and a sort key (ORDER BY order), both computed in Rust at write time.
 - `graphs(id)` — named graphs, including empty ones created with `CREATE GRAPH`.
 - `stats_pred`, `stats_class` — planner statistics ([[architecture#Query planner#Statistics]]).
 - `update_buffer(op, s, p, o, g)` — staging for atomic SPARQL UPDATE ([[architecture#Updates and atomicity]]).
@@ -70,6 +70,12 @@ Because ids are hashes, the same term always encodes to the same id on every cli
 The compiler lowers `spargebra` algebra to a single SQL `SELECT` per query whenever possible; anything it cannot express raises `Unsupported` and falls back to Rust evaluation.
 
 Variables become integer id columns (`vN`) for stored terms, or value column groups (`vN_i` id, `vN_k` kind, `vN_l` lexical form, `vN_d` datatype, `vN_g` language, `vN_n` number, `vN_t` numeric rank, `vN_s` timestamp, `vN_b` boolean) for computed values and query constants, which need not be stored; the id remains the join key. Each pattern compiles to a *block* (FROM items, WHERE conditions, bindings, and solution-modifier state); blocks are merged as long as they stay plain and are sealed into subqueries only when SQL semantics require it (after DISTINCT, LIMIT, GROUP BY, or across UNION).
+
+### Shallow SQL
+
+Generated SQL must parse on SQLite builds with a fixed parser stack (`YYSTACKDEPTH=100`, as in the system SQLite of macOS and Ubuntu, and possibly D1), and stay under the backend's statement size.
+
+Hence per-term facts that would need deep expressions — triple-term equality and order, date timezone presence — are precomputed at write time; nested UNIONs compile to one flat N-way `UNION ALL`; and a query whose SQL exceeds `Capabilities::max_sql_len` is reported `Unsupported` (fallback) instead of being sent. The harness runs its dylib variant on the platform SQLite to catch regressions.
 
 ### Graph patterns
 
@@ -94,25 +100,25 @@ Inline values decode arithmetically from the id; hashed values use correlated `t
 
 Sequence, alternative and inverse paths are rewritten into joins and unions; `*`, `+` and `?` become recursive CTEs seeded from a constant endpoint when one exists.
 
-Unseeded closures compute all pairs and are flagged by `explain()` as expensive. Recursive paths inside `GRAPH ?g` fall back to Rust evaluation until M2 adds a graph-carrying CTE.
+When the path is joined with a pattern that binds one endpoint (`?c a ex:C . ?c ex:knows+ ?x`), the CTE is seeded from that pattern's distinct values (magic-set style) instead of computing the whole closure; only fully unseeded closures compute all pairs, and `explain()` flags them. Every CTE carries a graph column, so walks stay inside one graph under `GRAPH ?g`.
 
 ### Aggregates and solution modifiers
 
 GROUP BY, aggregates, ORDER BY, DISTINCT and LIMIT/OFFSET compile into one SELECT when their SPARQL order allows it, sealing into subqueries otherwise.
 
-`COUNT` produces inline integer ids arithmetically. `SUM`/`AVG` track the numeric type rank for type promotion. `MIN`/`MAX` over stored terms use SQLite's bare-column rule to return the actual term. ORDER BY follows SPARQL's order: unbound, blank nodes, IRIs, then literals by value.
+`COUNT` produces inline integer ids arithmetically. `SUM`/`AVG` track the numeric type rank for type promotion; an integer `AVG` also returns the exact sum and count so the decoder divides with Oxigraph's decimal precision. `MIN`/`MAX` over stored terms use SQLite's bare-column rule to return the actual term. ORDER BY follows [[decisions#D11 Total order for incomparable literals]]. `REDUCED` behaves like `DISTINCT`, as in Oxigraph.
 
 ### Fallback evaluator
 
-When compilation raises `Unsupported`, sync backends evaluate the query with `spareval` over a `QueryableDataset` backed by per-pattern SQL scans.
+When compilation raises `Unsupported`, sync backends evaluate the query with `spareval`, but the largest compilable subtrees still run as SQL.
 
-Hash ids make `internalize_term` free (no lookup). On D1 there is no sync access, so the fallback is unavailable and the error is returned; `explain()` reports why a query is not fully compiled.
+The query is rewritten so each compilable subtree becomes `SERVICE <urn:oxilite:sql:N> { … }`; a spareval service handler runs the precompiled SQL (memoized, since it does not depend on outer bindings) and only the operators above it — say a custom function in a FILTER — are evaluated in Rust. Subtrees under `GRAPH` are not replaced (a SERVICE would lose the active graph). Remaining quad access goes through a `QueryableDataset` backed by per-pattern SQL scans, where hash ids make `internalize_term` free. On D1 there is no sync access, so queries needing the fallback return `Unsupported`; `explain()` reports the reason and lists the subqueries that still run as SQL.
 
 ## Query planner
 
 A greedy, statistics-driven planner orders triple patterns and forces that order with `CROSS JOIN`; SQLite still chooses the index for each pattern.
 
-SQLite's own planner sees N identical copies of `quads` and has only per-index averages, so it cannot tell `rdf:type` from a rare predicate. The planner picks the most selective pattern first, then repeatedly the cheapest pattern *connected* to already-bound variables, avoiding Cartesian products. A query option lets SQLite plan instead, for benchmarking.
+SQLite's own planner sees N identical copies of `quads` and has only per-index averages, so it cannot tell `rdf:type` from a rare predicate. The planner picks the most selective pattern first, then repeatedly the cheapest pattern *connected* to already-bound variables, avoiding Cartesian products. The right side of an OPTIONAL is planned as if the left side's variables were bound, since SQLite evaluates it per left row — this keeps OPTIONAL on a foreign key linear (Oxigraph's optimizer regression). `explain()` lists every BGP's join order with estimated rows and warns about Cartesian products and unseeded closures. A query option lets SQLite plan instead, for benchmarking.
 
 ### Statistics
 

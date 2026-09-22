@@ -409,6 +409,7 @@ dependencies = [
  "oxilite-core",
  "oxilite-dylib",
  "oxilite-rusqlite",
+ "oxiri",
  "oxrdf",
  "oxrdfio",
  "sparesults",

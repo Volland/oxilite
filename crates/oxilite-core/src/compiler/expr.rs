@@ -9,7 +9,7 @@
 //!
 // @lat: [[architecture#SPARQL to SQL compiler#Expressions]]
 
-use super::{Binding, Block, Col, Compiler};
+use super::{Binding, Block, Compiler};
 use crate::encoding::{
     encode_literal, numeric_rank, numeric_type, Tag, INT_OFFSET, PAYLOAD_BITS, PAYLOAD_MASK,
 };
@@ -50,6 +50,11 @@ pub(crate) struct V {
     pub computed_num: bool,
     /// `id` decodes without the query's constants (a stored term or an inline value).
     pub decodable: bool,
+    /// Auxiliary value: the value key of a triple term, or `"avg:sum/count"` of an integer
+    /// AVG for exact decoding.
+    pub aux: String,
+    /// Datatype and timezone presence of date/time values (`dt|flag`), when cheaply known.
+    pub tz: String,
 }
 
 pub(crate) const K_IRI: i64 = Tag::Iri as i64;
@@ -85,6 +90,8 @@ impl V {
             stat: Stat::Any,
             computed_num: false,
             decodable: true,
+            aux: "NULL".into(),
+            tz: "NULL".into(),
         }
     }
 
@@ -119,6 +126,8 @@ impl V {
                 "CASE {k} WHEN {K_BOOL} THEN {payload} WHEN {K_TYPED} THEN (SELECT num FROM terms WHERE id = {x} AND dt = {}) END",
                 xsd_str(xsd::BOOLEAN)
             ),
+            aux: format!("CASE WHEN {k} = {K_TRIPLE} THEN (SELECT vk FROM triple_terms WHERE id = {x}) END"),
+            tz: format!("CASE WHEN {k} = {K_TYPED} THEN (SELECT dt || '|' || dir FROM terms WHERE id = {x} AND ts IS NOT NULL) END"),
             kind: k,
             stat: Stat::Any,
             computed_num: false,
@@ -184,6 +193,11 @@ impl V {
                             }
                             if let Some(ts) = row.ts {
                                 v.ts = sql_f64(ts);
+                                v.tz = sql_str(&format!(
+                                    "{}|{}",
+                                    l.datatype().as_str(),
+                                    row.dir.unwrap_or(0)
+                                ));
                                 v.stat = Stat::DateTime;
                             }
                         }
@@ -192,6 +206,7 @@ impl V {
             }
             Term::Triple(_) => {
                 v.kind = K_TRIPLE.to_string();
+                v.aux = sql_str(&crate::encoding::value_key(term.as_ref()));
             }
         }
         Ok(v)
@@ -256,7 +271,7 @@ impl V {
     /// A computed integer (always `xsd:integer`).
     pub(crate) fn integer(num: String) -> Self {
         let mut v = Self::numeric(num.clone(), "1".into());
-        v.id = Some(format!("({INT_BASE} + ({num}))"));
+        v.id = Some(format!("({INT_BASE} + CAST({num} AS INTEGER))"));
         v.kind = format!("CASE WHEN ({num}) IS NOT NULL THEN {K_INT} END");
         v.dt = xsd_str(xsd::INTEGER);
         v.lex = format!("CAST({num} AS TEXT)");
@@ -268,7 +283,7 @@ impl V {
     /// A computed boolean.
     pub(crate) fn boolean(b: &str) -> Self {
         let mut v = Self::null();
-        v.id = Some(format!("({BOOL_BASE} + ({b}))"));
+        v.id = Some(format!("({BOOL_BASE} + CAST({b} AS INTEGER))"));
         v.kind = format!("CASE WHEN ({b}) IS NOT NULL THEN {K_BOOL} END");
         v.lex = format!("CASE ({b}) WHEN 1 THEN 'true' WHEN 0 THEN 'false' END");
         v.dt = xsd_str(xsd::BOOLEAN);
@@ -368,6 +383,9 @@ impl Cmp {
 
 /// Datatype plus timezone presence: date/time values only compare within the same key.
 fn tsk(v: &V) -> String {
+    if v.tz != "NULL" {
+        return format!("({})", v.tz);
+    }
     format!(
         "(({dt}) || CASE WHEN substr({l}, -1) = 'Z' OR (substr({l}, -6, 1) IN ('+', '-') AND substr({l}, -3, 1) = ':') THEN 'Z' ELSE '' END)",
         dt = v.dt,
@@ -375,36 +393,11 @@ fn tsk(v: &V) -> String {
     )
 }
 
-/// Value equality of two triple terms given the SQL of their ids (components compared by
-/// value, recursively up to `depth` levels).
-fn triple_eq(a: &str, b: &str, depth: usize) -> String {
-    let comp = |id: &str, c: &str| format!("(SELECT {c} FROM triple_terms WHERE id = {id})");
-    let (ao, bo) = (comp(a, "o"), comp(b, "o"));
-    let obj = if depth == 0 {
-        format!("({ao}) = ({bo})")
-    } else {
-        let va = V::from_id(&ao);
-        let vb = V::from_id(&bo);
-        format!(
-            "(CASE WHEN (({ao}) >> {PAYLOAD_BITS}) = {K_TRIPLE} AND (({bo}) >> {PAYLOAD_BITS}) = {K_TRIPLE} THEN {} ELSE {} END)",
-            triple_eq(&ao, &bo, depth - 1),
-            compare_inner(&va, &vb, Cmp::Eq, false)
-        )
-    };
-    format!(
-        "(({}) = ({}) AND ({}) = ({}) AND {obj})",
-        comp(a, "s"),
-        comp(b, "s"),
-        comp(a, "p"),
-        comp(b, "p")
-    )
-}
-
 fn may(s: Stat, want: Stat) -> bool {
     s == Stat::Any || s == want
 }
 
-fn same_term(a: &V, b: &V) -> String {
+pub(crate) fn same_term(a: &V, b: &V) -> String {
     match (&a.id, &b.id) {
         (Some(x), Some(y)) => format!("(({x}) = ({y}))"),
         _ => format!(
@@ -510,17 +503,12 @@ fn compare_inner(a: &V, b: &V, cmp: Cmp, triples: bool) -> String {
                 bg = b.lang
             ));
         }
-        if triples {
-            if let (Some(x), Some(y)) = (&a.id, &b.id) {
-                if a.decodable && b.decodable {
-                    branches.push(format!(
-                        "WHEN ({}) = {K_TRIPLE} AND ({}) = {K_TRIPLE} THEN {}",
-                        a.kind,
-                        b.kind,
-                        triple_eq(x, y, 3)
-                    ));
-                }
-            }
+        if triples && a.aux != "NULL" && b.aux != "NULL" {
+            // Triple terms: value keys computed at write time (components by value).
+            branches.push(format!(
+                "WHEN ({}) = {K_TRIPLE} AND ({}) = {K_TRIPLE} THEN ({}) = ({})",
+                a.kind, b.kind, a.aux, b.aux
+            ));
         }
         // IRIs, blank nodes and triple terms are only equal to themselves.
         branches.push(format!(
@@ -699,7 +687,7 @@ impl Compiler<'_> {
         })
     }
 
-    fn choose(c: &str, a: &V, b: &V) -> V {
+    pub(crate) fn choose(c: &str, a: &V, b: &V) -> V {
         let pick = |x: &str, y: &str| {
             format!("(CASE WHEN ({c}) IS NULL THEN NULL WHEN ({c}) THEN {x} ELSE {y} END)")
         };
@@ -719,6 +707,8 @@ impl Compiler<'_> {
             stat: if a.stat == b.stat { a.stat } else { Stat::Any },
             computed_num: a.computed_num || b.computed_num,
             decodable: a.decodable && b.decodable,
+            aux: pick(&a.aux, &b.aux),
+            tz: pick(&a.tz, &b.tz),
         }
     }
 
@@ -760,17 +750,10 @@ impl Compiler<'_> {
         let mut conds = inner.wheres.clone();
         for (idx, b) in &inner.cols {
             if let Some(outer) = cols.get(idx) {
-                let (Col::Id(i), Col::Id(o)) = (&b.col, &outer.col) else {
-                    return Err(Error::unsupported("EXISTS over computed values"));
-                };
                 if b.correlated {
                     continue;
                 }
-                conds.push(if outer.nullable || b.nullable {
-                    format!("(({o}) IS NULL OR ({i}) IS NULL OR ({i}) = ({o}))")
-                } else {
-                    format!("({i}) = ({o})")
-                });
+                conds.push(Self::unify(b, outer).0);
             }
         }
         Ok(format!(
@@ -821,7 +804,11 @@ impl Compiler<'_> {
             }
             Function::Datatype => {
                 let a = self.expr_term(&args[0], cols)?;
-                E::T(V::iri(a.dt.clone()))
+                // The datatype of an error (e.g. a failed cast) is an error.
+                E::T(V::iri(format!(
+                    "CASE WHEN ({}) IS NOT NULL THEN {} END",
+                    a.kind, a.dt
+                )))
             }
             Function::IsIri => {
                 let a = self.expr_term(&args[0], cols)?;
@@ -1184,67 +1171,92 @@ impl Compiler<'_> {
             }
             Function::Custom(name) => {
                 let a = self.args(args, cols)?;
-                let _ = a;
-                if name
-                    .as_str()
-                    .starts_with("http://www.w3.org/2001/XMLSchema#")
+                if a.len() == 1
+                    && name
+                        .as_str()
+                        .starts_with("http://www.w3.org/2001/XMLSchema#")
                 {
-                    // XSD casts need exact lexical validation and canonicalization: fallback.
-                    return Err(Error::unsupported(format!("XSD cast {name}")));
+                    E::T(cast(&a[0], name)?)
                 } else {
                     return Err(Error::unsupported(format!("custom function {name}")));
                 }
             }
-            other => return Err(Error::unsupported(format!("SPARQL function {other}"))),
-        })
-    }
-
-    /// `xsd:*` casts (kept for M2, currently routed to the fallback).
-    #[allow(dead_code)]
-    fn cast_value(a: &V, dt: &NamedNode) -> Result<V> {
-        let lex = &a.lex;
-        Ok(match numeric_rank(dt.as_str()) {
-            Some(numeric_type::INTEGER) if dt.as_ref() == xsd::INTEGER => V::integer(format!(
-                "CASE WHEN ({n}) IS NOT NULL THEN CAST({n} AS INTEGER) WHEN ({b}) IS NOT NULL THEN ({b}) WHEN ({k}) = {K_STRING} AND trim({lex}) GLOB '[-+0-9]*' AND CAST(trim({lex}) AS INTEGER) || '' = ltrim(trim({lex}), '+') THEN CAST(trim({lex}) AS INTEGER) END",
-                n = a.num,
-                b = a.boolv,
-                k = a.kind
-            )),
-            Some(rank) if rank != numeric_type::INTEGER => V::numeric(
-                format!(
-                    "CASE WHEN ({n}) IS NOT NULL THEN CAST({n} AS REAL) WHEN ({b}) IS NOT NULL THEN ({b}) * 1.0 WHEN ({k}) = {K_STRING} AND trim({lex}) GLOB '*[0-9]*' THEN CAST(trim({lex}) AS REAL) END",
-                    n = a.num,
-                    b = a.boolv,
+            Function::HasLang => {
+                let a = self.expr_term(&args[0], cols)?;
+                E::B(format!(
+                    "(CASE WHEN ({k}) IS NOT NULL THEN ({k}) IN ({K_LANG}, {K_DIRLANG}) END)",
                     k = a.kind
-                ),
-                rank.to_string(),
-            ),
-            _ if dt.as_ref() == xsd::STRING => V::string(
-                format!(
-                    "CASE WHEN ({}) IN ({K_IRI}, {K_STRING}, {K_TYPED}, {K_INT}, {K_BOOL}) THEN {lex} END",
-                    a.kind
-                ),
-                None,
-            ),
-            _ if dt.as_ref() == xsd::BOOLEAN => {
-                let b = format!(
-                    "CASE WHEN ({bv}) IS NOT NULL THEN ({bv}) WHEN ({n}) IS NOT NULL THEN ({n}) <> 0 WHEN {lex} IN ('true', '1') THEN 1 WHEN {lex} IN ('false', '0') THEN 0 END",
-                    bv = a.boolv,
-                    n = a.num
+                ))
+            }
+            Function::HasLangDir => {
+                let a = self.expr_term(&args[0], cols)?;
+                E::B(format!(
+                    "(CASE WHEN ({k}) IS NOT NULL THEN ({k}) = {K_DIRLANG} END)",
+                    k = a.kind
+                ))
+            }
+            Function::LangDir => {
+                let a = self.expr_term(&args[0], cols)?;
+                E::T(V::string(
+                    format!(
+                        "CASE WHEN ({k}) = {K_DIRLANG} THEN substr({l}, instr({l}, '--') + 2) WHEN ({k}) IN ({K_STRING}, {K_LANG}, {K_TYPED}, {K_INT}, {K_BOOL}) THEN '' END",
+                        k = a.kind,
+                        l = a.lang
+                    ),
+                    None,
+                ))
+            }
+            Function::StrLangDir => {
+                let a = self.args(args, cols)?;
+                let mut v = V::string(
+                    format!(
+                        "CASE WHEN ({}) = {K_STRING} AND ({}) = {K_STRING} AND ({d}) IN ('ltr', 'rtl') THEN {} END",
+                        a[0].kind,
+                        a[1].kind,
+                        a[0].lex,
+                        d = a[2].lex
+                    ),
+                    None,
                 );
-                V::boolean(&b)
+                v.kind = format!("CASE WHEN ({}) IS NOT NULL THEN {K_DIRLANG} END", v.lex);
+                v.lang = format!("(lower({}) || '--' || ({}))", a[1].lex, a[2].lex);
+                v.dt = sql_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#dirLangString");
+                v.stat = Stat::LangString;
+                E::T(v)
             }
-            _ => {
-                if a.computed_num {
-                    return Err(Error::unsupported("cast of a computed number"));
-                }
-                let mut v = V::typed(format!("CASE WHEN ({}) IS NOT NULL THEN {lex} END", a.kind), dt.as_str());
-                if let Some(_) = crate::encoding::timestamp("1970-01-01T00:00:00Z", dt.as_str()) {
-                    v.ts = format!("CASE WHEN ({}) IS NOT NULL THEN ({}) END", a.kind, a.ts);
-                    v.stat = Stat::DateTime;
-                }
-                v
+            Function::Subject | Function::Predicate | Function::Object => {
+                let a = self.expr_term(&args[0], cols)?;
+                let (Some(id), true) = (&a.id, a.decodable) else {
+                    return Err(Error::unsupported(
+                        "SUBJECT/PREDICATE/OBJECT of a computed triple",
+                    ));
+                };
+                let c = match f {
+                    Function::Subject => "s",
+                    Function::Predicate => "p",
+                    _ => "o",
+                };
+                E::T(V::from_id(&format!(
+                    "(CASE WHEN ({}) = {K_TRIPLE} THEN (SELECT {c} FROM triple_terms WHERE id = {id}) END)",
+                    a.kind
+                )))
             }
+            Function::Timezone => {
+                let a = self.expr_term(&args[0], cols)?;
+                let l = &a.lex;
+                // dayTimeDuration of the timezone suffix: Z → PT0S, +05:30 → PT5H30M, -08:00 → -PT8H.
+                let h = format!("CAST(substr({l}, -5, 2) AS INTEGER)");
+                let m = format!("CAST(substr({l}, -2, 2) AS INTEGER)");
+                let lex = format!(
+                    "CASE WHEN ({ts}) IS NULL THEN NULL WHEN substr({l}, -1) = 'Z' THEN 'PT0S' WHEN substr({l}, -6, 1) IN ('+', '-') AND substr({l}, -3, 1) = ':' THEN (CASE WHEN substr({l}, -6, 1) = '-' AND ({h} > 0 OR {m} > 0) THEN '-' ELSE '' END) || 'PT' || CASE WHEN {h} = 0 AND {m} = 0 THEN '0S' ELSE (CASE WHEN {h} > 0 THEN {h} || 'H' ELSE '' END) || (CASE WHEN {m} > 0 THEN {m} || 'M' ELSE '' END) END END",
+                    ts = a.ts
+                );
+                E::T(V::typed(
+                    lex,
+                    "http://www.w3.org/2001/XMLSchema#dayTimeDuration",
+                ))
+            }
+            other => return Err(Error::unsupported(format!("SPARQL function {other}"))),
         })
     }
 
@@ -1294,12 +1306,122 @@ impl Compiler<'_> {
     }
 }
 
+/// XSD whitespace collapse (spaces, tabs, line breaks) around a lexical form.
+fn collapse(lex: &str) -> String {
+    format!("trim({lex}, ' ' || char(9) || char(10) || char(13))")
+}
+
+/// `t` is a valid `xsd:integer` lexical form.
+fn int_lex(t: &str) -> String {
+    let u = format!("(CASE WHEN substr({t}, 1, 1) IN ('+', '-') THEN substr({t}, 2) ELSE {t} END)");
+    format!("({u} <> '' AND {u} NOT GLOB '*[^0-9]*')")
+}
+
+/// `t` is a valid `xsd:decimal` lexical form.
+fn dec_lex(t: &str) -> String {
+    let u = format!("(CASE WHEN substr({t}, 1, 1) IN ('+', '-') THEN substr({t}, 2) ELSE {t} END)");
+    format!(
+        "({u} <> '' AND {u} <> '.' AND {u} NOT GLOB '*[^0-9.]*' AND length({u}) - length(replace({u}, '.', '')) <= 1)"
+    )
+}
+
+/// `t` is a valid `xsd:double` / `xsd:float` lexical form.
+fn dbl_lex(t: &str) -> String {
+    let e = format!("instr(lower({t}), 'e')");
+    let mantissa = format!("substr({t}, 1, {e} - 1)");
+    let exponent = format!("substr({t}, {e} + 1)");
+    format!(
+        "({t} IN ('INF', '+INF', '-INF') OR {} OR ({e} > 0 AND {} AND {}))",
+        dec_lex(t),
+        dec_lex(&mantissa),
+        int_lex(&exponent)
+    )
+}
+
+/// XSD casts (`xsd:integer(?x)` …) following the SPARQL 1.1 cast table; results are
+/// canonicalized by the decoder like Oxigraph's.
+fn cast(a: &V, dt: &NamedNode) -> Result<V> {
+    let t = collapse(&a.lex);
+    let is_str = format!("({}) = {K_STRING}", a.kind);
+    let is_num = format!("({}) IS NOT NULL", a.nt);
+    let is_bool = format!("({}) IS NOT NULL", a.boolv);
+    if a.computed_num {
+        return Err(Error::unsupported("cast of a computed number"));
+    }
+    let dts = dt.as_str();
+    Ok(match dts {
+        "http://www.w3.org/2001/XMLSchema#string" => {
+            // Canonical lexical forms, like Oxigraph (which stores values, not lexical forms).
+            let n = &a.num;
+            V::string(
+                format!(
+                    "CASE WHEN ({k}) IN ({K_IRI}, {K_STRING}) THEN {l} WHEN {is_bool} THEN CASE ({b}) WHEN 1 THEN 'true' ELSE 'false' END WHEN ({n}) IS NOT NULL AND ({n}) = CAST({n} AS INTEGER) AND abs({n}) < 1e15 THEN CAST(CAST({n} AS INTEGER) AS TEXT) WHEN ({n}) IS NOT NULL THEN CAST({n} AS TEXT) WHEN ({k}) = {K_TYPED} THEN {l} END",
+                    k = a.kind,
+                    l = a.lex,
+                    b = a.boolv
+                ),
+                None,
+            )
+        }
+        "http://www.w3.org/2001/XMLSchema#boolean" => V::boolean(&format!(
+            "CASE WHEN {is_bool} THEN ({b}) WHEN {is_num} THEN (({n}) IS NOT NULL AND ({n}) <> 0) WHEN {is_str} THEN CASE WHEN {t} IN ('true', '1') THEN 1 WHEN {t} IN ('false', '0') THEN 0 END END",
+            b = a.boolv,
+            n = a.num
+        )),
+        "http://www.w3.org/2001/XMLSchema#integer" => V::integer(format!(
+            "CASE WHEN {is_bool} THEN ({b}) WHEN {is_num} THEN CASE WHEN abs({n}) < 9.2e18 THEN CAST({n} AS INTEGER) END WHEN {is_str} AND {il} THEN CAST({t} AS INTEGER) END",
+            b = a.boolv,
+            n = a.num,
+            il = int_lex(&t)
+        )),
+        "http://www.w3.org/2001/XMLSchema#decimal" => V::numeric(
+            format!(
+                "CASE WHEN {is_bool} THEN ({b}) * 1.0 WHEN {is_num} THEN CASE WHEN abs({n}) < 9e999 THEN CAST({n} AS REAL) END WHEN {is_str} AND {dl} THEN CAST({t} AS REAL) END",
+                b = a.boolv,
+                n = a.num,
+                dl = dec_lex(&t)
+            ),
+            numeric_type::DECIMAL.to_string(),
+        ),
+        "http://www.w3.org/2001/XMLSchema#float" | "http://www.w3.org/2001/XMLSchema#double" => V::numeric(
+            format!(
+                "CASE WHEN {is_bool} THEN ({b}) * 1.0 WHEN {is_num} THEN CAST({n} AS REAL) WHEN {is_str} AND {dl} THEN CASE WHEN {t} IN ('INF', '+INF') THEN 9e999 WHEN {t} = '-INF' THEN -9e999 ELSE CAST({t} AS REAL) END END",
+                b = a.boolv,
+                n = a.num,
+                dl = dbl_lex(&t)
+            ),
+            if dts.ends_with("float") { numeric_type::FLOAT } else { numeric_type::DOUBLE }.to_string(),
+        ),
+        "http://www.w3.org/2001/XMLSchema#dateTime" => {
+            let valid = format!(
+                "(({dt}) = {dts_sql} OR ({is_str} AND {t} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]T[0-2][0-9]:[0-5][0-9]:[0-6][0-9]*' AND julianday({t}) IS NOT NULL))",
+                dt = a.dt,
+                dts_sql = sql_str(dts)
+            );
+            let mut v = V::typed(format!("CASE WHEN {valid} THEN {t} END"), dts);
+            v.ts = format!("CASE WHEN {valid} THEN (julianday({t}) - 2440587.5) * 86400.0 END");
+            v.stat = Stat::DateTime;
+            v
+        }
+        _ => return Err(Error::unsupported(format!("XSD cast {dt}"))),
+    })
+}
+
 /// Canonical lexical form of a computed numeric result, used by the decoder.
 pub(crate) fn format_number(num: f64, dt: &str) -> Literal {
     match numeric_rank(dt) {
         Some(numeric_type::INTEGER) => Literal::from(num as i64),
         Some(numeric_type::DECIMAL) => {
-            let d = oxsdatatypes::Decimal::try_from(oxsdatatypes::Double::from(num))
+            // Decimals are computed as IEEE doubles: round to 15 significant digits so that
+            // 1.1 + 10 is 11.1, not 11.100000000000001.
+            let digits = if num == 0.0 {
+                0
+            } else {
+                15 - (num.abs().log10().floor() as i32) - 1
+            };
+            let text = format!("{:.*}", digits.clamp(0, 30) as usize, num);
+            let d = std::str::FromStr::from_str(&text)
+                .or_else(|_| oxsdatatypes::Decimal::try_from(oxsdatatypes::Double::from(num)))
                 .unwrap_or_default();
             Literal::from(d)
         }

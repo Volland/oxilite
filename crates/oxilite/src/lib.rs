@@ -21,6 +21,7 @@
 
 mod async_store;
 mod common;
+mod partial;
 pub mod store;
 
 pub use async_store::AsyncStore;

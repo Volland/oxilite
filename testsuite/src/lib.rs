@@ -74,6 +74,19 @@ pub fn check_testsuite(manifest_url: &str, upstream_ignored: &[&str]) -> Result<
         allowed,
         errors.len(),
     );
+    let (compiled, reasons) = engine::take_coverage();
+    let fallback: usize = reasons.values().sum();
+    if compiled + fallback > 0 {
+        eprintln!(
+            "{manifest_url}: {compiled} oxilite evaluations fully in SQL, {fallback} via the fallback"
+        );
+        let mut r: Vec<_> = reasons.into_iter().collect();
+        r.sort_by(|a, b| b.1.cmp(&a.1));
+        for (reason, n) in r {
+            eprintln!("  {n:4} × {reason}");
+        }
+        allowlist::record_coverage(manifest_url, compiled, fallback);
+    }
     assert!(
         errors.is_empty(),
         "{} failing tests:\n{}\n",

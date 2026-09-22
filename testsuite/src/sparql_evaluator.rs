@@ -833,3 +833,19 @@ fn evaluate_query_optimization_test(test: &Test) -> Result<()> {
     );
     Ok(())
 }
+
+/// oxilite port: compares two query results the way the W3C evaluation tests do
+/// (isomorphism with blank-node mapping, ordered comparison when `ordered`).
+pub fn compare_query_results(
+    expected: QueryResults<'_>,
+    actual: QueryResults<'_>,
+    ordered: bool,
+) -> Result<()> {
+    let e = StaticQueryResults::from_query_results(expected, ordered)?;
+    let a = StaticQueryResults::from_query_results(actual, ordered)?;
+    if are_query_results_isomorphic(&e, &a) {
+        Ok(())
+    } else {
+        bail!("{}", results_diff(e, a))
+    }
+}

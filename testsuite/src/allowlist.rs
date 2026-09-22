@@ -49,7 +49,12 @@ pub fn parse(text: &str) -> Result<HashMap<String, Entry>> {
         let (k, v) = line
             .split_once('=')
             .with_context(|| format!("bad allow-list line: {line}"))?;
-        let v = v.trim().trim_matches('"').to_string();
+        let v = v.trim();
+        let v = v
+            .strip_prefix('"')
+            .and_then(|v| v.strip_suffix('"'))
+            .unwrap_or(v);
+        let v = v.replace("\\\"", "\"");
         cur.insert(k.trim().to_string(), v);
     }
     flush(&mut cur, &mut out)?;
@@ -95,5 +100,18 @@ mod tests {
         .unwrap();
         assert_eq!(a.len(), 2);
         assert_eq!(a["b"].reason, "r2");
+    }
+}
+
+/// Appends SQL-compilation coverage to `target/compat-coverage.tsv`.
+pub fn record_coverage(suite: &str, compiled: usize, fallback: usize) {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target");
+    let _ = std::fs::create_dir_all(&dir);
+    if let Ok(mut f) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join("compat-coverage.tsv"))
+    {
+        let _ = writeln!(f, "{suite}\t{compiled}\t{fallback}");
     }
 }

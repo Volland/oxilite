@@ -11,3 +11,13 @@
 id = "https://github.com/oxigraph/oxigraph/tests/sparql/manifest#order_terms"
 reason = "ORDER BY across incomparable literal types is implementation-defined; Oxigraph's order follows its non-transitive comparator and sort algorithm, oxilite uses a total order (numbers by value, then lexical form, datatype, language)"
 decision = "lat.md/decisions.md#D11 Total order for incomparable literals"
+
+[[divergence]]
+id = "corpus:from-two"
+reason = "FROM with several graphs: oxilite builds the RDF merge (set semantics, a triple in two FROM graphs matches once) as the SPARQL spec requires; Oxigraph concatenates the graphs"
+decision = "lat.md/decisions.md#D12 Set semantics for merged default graphs"
+
+[[divergence]]
+id = "corpus:filter-bool-4"
+reason = "oxilite preserves lexical forms (\"1\"^^xsd:boolean stays \"1\"); Oxigraph stores values and returns the canonical \"true\" for STR()"
+decision = "lat.md/decisions.md#D2 Tagged 64-bit hash ids with inline small values"

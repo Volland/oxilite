@@ -8,6 +8,7 @@
 // @lat: [[architecture#SPARQL to SQL compiler]]
 
 pub mod expr;
+mod ops;
 pub mod plan;
 
 use crate::encoding::{encode_literal, named_node_id, term_id, EncodedRows, DEFAULT_GRAPH_ID};
@@ -121,9 +122,9 @@ pub(crate) struct Block {
     pub extra_select: Vec<String>,
 }
 
-pub(crate) const VAL_FIELDS: [&str; 9] = ["i", "k", "l", "d", "g", "n", "t", "s", "b"];
+pub(crate) const VAL_FIELDS: [&str; 10] = ["i", "k", "l", "d", "g", "n", "t", "s", "b", "x"];
 
-pub(crate) fn val_fields(v: &V) -> [String; 9] {
+pub(crate) fn val_fields(v: &V) -> [String; 10] {
     [
         v.id.clone().unwrap_or_else(|| "NULL".into()),
         v.kind.clone(),
@@ -138,6 +139,7 @@ pub(crate) fn val_fields(v: &V) -> [String; 9] {
         v.nt.clone(),
         v.ts.clone(),
         v.boolv.clone(),
+        v.aux.clone(),
     ]
 }
 
@@ -197,19 +199,9 @@ impl Block {
         sel
     }
 
-    /// Renders the block as a SELECT statement.
-    pub(crate) fn to_select(&self, vars: Option<&[usize]>, text_ids: bool) -> String {
-        let all: Vec<usize> = self.cols.keys().copied().collect();
-        let mut sel = self.select_list(vars.unwrap_or(&all), text_ids);
-        sel.extend(self.extra_select.iter().cloned());
-        if sel.is_empty() {
-            sel.push("1 AS _u".into());
-        }
-        let mut sql = String::from("SELECT ");
-        if self.distinct {
-            sql.push_str("DISTINCT ");
-        }
-        sql.push_str(&sel.join(", "));
+    /// Renders everything after the select list: FROM, WHERE, GROUP BY, ORDER BY, LIMIT.
+    pub(crate) fn tail(&self) -> String {
+        let mut sql = String::new();
         if !self.from.is_empty() {
             sql.push_str(" FROM ");
             sql.push_str(&Self::render_from(&self.from));
@@ -239,6 +231,22 @@ impl Block {
             }
         }
         sql
+    }
+
+    /// Renders the block as a SELECT statement.
+    pub(crate) fn to_select(&self, vars: Option<&[usize]>, text_ids: bool) -> String {
+        let all: Vec<usize> = self.cols.keys().copied().collect();
+        let mut sel = self.select_list(vars.unwrap_or(&all), text_ids);
+        sel.extend(self.extra_select.iter().cloned());
+        if sel.is_empty() {
+            sel.push("1 AS _u".into());
+        }
+        format!(
+            "SELECT {}{}{}",
+            if self.distinct { "DISTINCT " } else { "" },
+            sel.join(", "),
+            self.tail()
+        )
     }
 }
 
@@ -280,6 +288,13 @@ pub(crate) struct Compiler<'a> {
     scope: GraphScope,
     /// Rows needed by constants that end up stored (update templates).
     pub rows: EncodedRows,
+    /// Planner decisions and warnings, for `explain()`.
+    pub notes: Vec<String>,
+    /// Triple-term patterns awaiting a `triple_terms` join (variable, pattern).
+    pending_triples: Vec<(usize, TriplePattern)>,
+    /// Variables bound by an enclosing join (e.g. the left side of OPTIONAL): the planner
+    /// orders patterns as if they were bound, since SQLite evaluates the right side per row.
+    pub(crate) plan_hint: Vec<HashSet<usize>>,
 }
 
 impl<'a> Compiler<'a> {
@@ -329,6 +344,9 @@ impl<'a> Compiler<'a> {
             dataset,
             scope: GraphScope::Default,
             rows: EncodedRows::default(),
+            notes: Vec::new(),
+            pending_triples: Vec::new(),
+            plan_hint: Vec::new(),
         }
     }
 
@@ -403,6 +421,8 @@ impl<'a> Compiler<'a> {
                     stat: v.stat,
                     computed_num: false,
                     decodable: v.decodable,
+                    aux: format!("{alias}.v{idx}_x"),
+                    tz: "NULL".into(),
                 })),
             };
             cols.insert(
@@ -454,6 +474,16 @@ impl<'a> Compiler<'a> {
             GraphPattern::Bgp { patterns } => self.bgp(patterns),
             GraphPattern::Join { left, right } => {
                 let a = self.pattern(left)?;
+                if let GraphPattern::Path {
+                    subject,
+                    path,
+                    object,
+                } = right.as_ref()
+                {
+                    if let Some(b) = self.seeded_path(&a, subject, path, object)? {
+                        return self.join(a, b);
+                    }
+                }
                 let b = self.pattern(right)?;
                 self.join(a, b)
             }
@@ -606,7 +636,10 @@ impl<'a> Compiler<'a> {
                 b.stage = Stage::Distinct;
                 Ok(b)
             }
-            GraphPattern::Reduced { inner } => self.pattern(inner),
+            // REDUCED may drop any duplicates; Oxigraph drops them all, so do we.
+            GraphPattern::Reduced { inner } => self.pattern(&GraphPattern::Distinct {
+                inner: inner.clone(),
+            }),
             GraphPattern::Slice {
                 inner,
                 start,
@@ -625,20 +658,46 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    /// Operators added after M1 (see `ops.rs`); unsupported ones go to the fallback.
+    /// OPTIONAL, UNION, MINUS, GROUP BY and property paths live in `ops.rs`.
     fn pattern_ext(&mut self, p: &GraphPattern) -> Result<Block> {
-        Err(Error::unsupported(format!(
-            "graph pattern {}",
-            match p {
-                GraphPattern::Path { .. } => "property path",
-                GraphPattern::LeftJoin { .. } => "OPTIONAL",
-                GraphPattern::Union { .. } => "UNION",
-                GraphPattern::Minus { .. } => "MINUS",
-                GraphPattern::Group { .. } => "GROUP BY",
-                GraphPattern::Service { .. } => "SERVICE",
-                _ => "operator",
+        self.pattern_m2(p)
+    }
+
+    /// Condition that two bindings of the same variable agree (SPARQL compatibility), and the
+    /// binding that results from merging them.
+    pub(crate) fn unify(a: &Binding, b: &Binding) -> (String, Binding) {
+        let eq = match (a.col.key(), b.col.key()) {
+            (Some(x), Some(y)) => format!("{x} = {y}"),
+            _ => expr::same_term(&a.col.value(), &b.col.value()),
+        };
+        if !a.nullable && !b.nullable {
+            return (eq, a.clone());
+        }
+        let is_null = |x: &Binding| match &x.col {
+            Col::Id(i) => format!("{i} IS NULL"),
+            Col::Val(v) => format!("({}) IS NULL", v.kind),
+        };
+        let cond = format!("({eq} OR {} OR {})", is_null(a), is_null(b));
+        let col = match (&a.col, &b.col) {
+            (Col::Id(x), Col::Id(y)) => Col::Id(format!("COALESCE({x}, {y})")),
+            _ => {
+                let (av, bv) = (a.col.value(), b.col.value());
+                Col::Val(Box::new(Self::choose(
+                    &format!("(({}) IS NOT NULL)", av.kind),
+                    &av,
+                    &bv,
+                )))
             }
-        )))
+        };
+        (
+            cond,
+            Binding {
+                col,
+                nullable: a.nullable && b.nullable,
+                computed: true,
+                correlated: a.correlated || b.correlated,
+            },
+        )
     }
 
     fn graph_list_block(&mut self, v: usize) -> Block {
@@ -661,17 +720,19 @@ impl<'a> Compiler<'a> {
             TermPattern::Literal(l) => Pos::Const(self.constant_id(&l.clone().into())?),
             TermPattern::Variable(v) => Pos::Var(self.var(v)),
             TermPattern::BlankNode(b) => {
-                let label = b.as_str().to_string();
-                if let Some(v) = bnodes.get(&label) {
-                    Pos::Var(*v)
+                // Blank nodes act as variables; the parser gives them query-unique labels, so
+                // one hidden variable per label keeps them joined across paths and BGPs.
+                let _ = bnodes;
+                Pos::Var(self.var(&Variable::new_unchecked(format!("\u{1}b{}", b.as_str()))))
+            }
+            TermPattern::Triple(tp) => {
+                if let Some(t) = ground_triple(tp) {
+                    Pos::Const(self.constant_id(&t.into())?)
                 } else {
-                    let v = self.fresh_var("b");
-                    bnodes.insert(label, v);
+                    let v = self.fresh_var("t");
+                    self.pending_triples.push((v, (**tp).clone()));
                     Pos::Var(v)
                 }
-            }
-            TermPattern::Triple(_) => {
-                return Err(Error::unsupported("triple term patterns"));
             }
         })
     }
@@ -689,26 +750,26 @@ impl<'a> Compiler<'a> {
             Pos::Const(id) => b.wheres.push(format!("{colsql} = {id}")),
             Pos::Var(v) => {
                 if let Some(existing) = b.cols.get(&v) {
-                    match existing.col.key() {
-                        Some(x) if !existing.nullable => b.wheres.push(format!("{colsql} = {x}")),
-                        Some(x) => b.wheres.push(format!("({x} IS NULL OR {colsql} = {x})")),
-                        None => return Err(Error::unsupported("join on a computed value")),
-                    }
+                    let cond = match existing.col.key() {
+                        Some(x) => format!("{colsql} = {x}"),
+                        None => expr::same_term(&V::from_id(colsql), &existing.col.value()),
+                    };
+                    b.wheres.push(if existing.nullable {
+                        let null = match &existing.col {
+                            Col::Id(x) => format!("{x} IS NULL"),
+                            Col::Val(v) => format!("({}) IS NULL", v.kind),
+                        };
+                        format!("({null} OR {cond})")
+                    } else {
+                        cond
+                    });
                     return Ok(());
                 }
                 let mut correlated = false;
-                if let Some(outer) = self.outer_binding(v) {
-                    match outer.col.key() {
-                        Some(o) => {
-                            b.wheres.push(if outer.nullable {
-                                format!("({o} IS NULL OR {colsql} = {o})")
-                            } else {
-                                format!("{colsql} = {o}")
-                            });
-                            correlated = true;
-                        }
-                        None => return Err(Error::unsupported("EXISTS over computed values")),
-                    }
+                if let Some(outer) = self.outer_binding(v).cloned() {
+                    let (cond, _) = Self::unify(&Binding::id(colsql), &outer);
+                    b.wheres.push(cond);
+                    correlated = true;
                 }
                 b.cols.insert(
                     v,
@@ -812,7 +873,12 @@ impl<'a> Compiler<'a> {
                 self.pos(&tp.object, &mut bnodes)?,
             ]);
         }
-        let pre: HashSet<usize> = self.outer.iter().flat_map(|m| m.keys().copied()).collect();
+        let pre: HashSet<usize> = self
+            .outer
+            .iter()
+            .flat_map(|m| m.keys().copied())
+            .chain(self.plan_hint.iter().flatten().copied())
+            .collect();
         let ord: Vec<usize> = if self.options.sqlite_planner {
             (0..enc.len()).collect()
         } else {
@@ -823,10 +889,63 @@ impl<'a> Compiler<'a> {
         } else {
             Join::Cross
         };
+        // Record the plan for explain(): order, estimated rows, Cartesian products.
+        {
+            let mut bound = pre.clone();
+            let mut steps = Vec::new();
+            for (n, i) in ord.iter().enumerate() {
+                let est = plan::estimate(&enc[*i], &bound, self.stats);
+                let vars: Vec<usize> = enc[*i]
+                    .iter()
+                    .filter_map(|p| match p {
+                        Pos::Var(v) => Some(*v),
+                        Pos::Const(_) => None,
+                    })
+                    .collect();
+                if n > 0 && !vars.iter().any(|v| bound.contains(v)) {
+                    self.notes.push(format!(
+                        "warning: Cartesian product: triple pattern {} shares no variable with the patterns before it",
+                        patterns[*i]
+                    ));
+                }
+                steps.push(format!("{} (~{est:.0} rows)", patterns[*i]));
+                bound.extend(vars);
+            }
+            self.notes.push(format!(
+                "join order ({}): {}",
+                if self.options.sqlite_planner {
+                    "SQLite planner"
+                } else if self.stats.available {
+                    "statistics"
+                } else {
+                    "heuristics, run optimize() for statistics"
+                },
+                steps.join(" → ")
+            ));
+        }
         let mut b = Block::default();
         for i in ord {
             let [s, p, o] = enc[i];
             self.quad_access(&mut b, join.clone(), s, p, o)?;
+        }
+        // RDF 1.2 triple-term patterns: join `triple_terms` on the term's id and match its
+        // components (possibly nested).
+        while let Some((v, tp)) = self.pending_triples.pop() {
+            let Some(key) = b.cols.get(&v).and_then(|x| x.col.key().map(str::to_string)) else {
+                return Err(Error::unsupported("unbound triple term pattern"));
+            };
+            let t = self.alias("tt");
+            b.from.push(FromItem {
+                join: Join::Inner,
+                item: format!("triple_terms {t}"),
+            });
+            b.wheres.push(format!("{t}.id = {key}"));
+            let sp = self.pos(&tp.subject, &mut bnodes)?;
+            let pp = self.pos_nn(&tp.predicate)?;
+            let op = self.pos(&tp.object, &mut bnodes)?;
+            self.bind_pos(&mut b, &format!("{t}.s"), sp)?;
+            self.bind_pos(&mut b, &format!("{t}.p"), pp)?;
+            self.bind_pos(&mut b, &format!("{t}.o"), op)?;
         }
         Ok(b)
     }
@@ -847,29 +966,9 @@ impl<'a> Compiler<'a> {
                     a.cols.insert(idx, bb);
                 }
                 Some(ab) => {
-                    let (Some(x), Some(y)) = (ab.col.key(), bb.col.key()) else {
-                        return Err(Error::unsupported("join on a computed value"));
-                    };
-                    let (x, y) = (x.to_string(), y.to_string());
-                    if !ab.nullable && !bb.nullable {
-                        a.wheres.push(format!("{x} = {y}"));
-                        continue;
-                    }
-                    if matches!((&ab.col, &bb.col), (Col::Id(_), Col::Id(_))) {
-                        a.wheres
-                            .push(format!("({x} = {y} OR {x} IS NULL OR {y} IS NULL)"));
-                        a.cols.insert(
-                            idx,
-                            Binding {
-                                col: Col::Id(format!("COALESCE({x}, {y})")),
-                                nullable: ab.nullable && bb.nullable,
-                                computed: true,
-                                correlated: ab.correlated || bb.correlated,
-                            },
-                        );
-                    } else {
-                        return Err(Error::unsupported("optional join on a computed value"));
-                    }
+                    let (cond, merged) = Self::unify(&ab, &bb);
+                    a.wheres.push(cond);
+                    a.cols.insert(idx, merged);
                 }
             }
         }
@@ -964,6 +1063,8 @@ impl<'a> Compiler<'a> {
                 stat: expr::Stat::Any,
                 computed_num: false,
                 decodable: false,
+                aux: c(9),
+                tz: "NULL".into(),
             };
             b.cols.insert(
                 i,
@@ -1022,6 +1123,26 @@ impl<'a> Compiler<'a> {
         }
         Ok(vec![self.expr_bool(e, cols)?])
     }
+}
+
+/// The triple term of a pattern without variables or blank nodes.
+fn ground_triple(tp: &TriplePattern) -> Option<oxrdf::Triple> {
+    fn term(t: &TermPattern) -> Option<Term> {
+        Some(match t {
+            TermPattern::NamedNode(n) => n.clone().into(),
+            TermPattern::Literal(l) => l.clone().into(),
+            TermPattern::Triple(tp) => ground_triple(tp)?.into(),
+            TermPattern::BlankNode(_) | TermPattern::Variable(_) => return None,
+        })
+    }
+    let s = match term(&tp.subject)? {
+        Term::NamedNode(n) => oxrdf::NamedOrBlankNode::from(n),
+        _ => return None,
+    };
+    let NamedNodePattern::NamedNode(p) = &tp.predicate else {
+        return None;
+    };
+    Some(oxrdf::Triple::new(s, p.clone(), term(&tp.object)?))
 }
 
 fn has_quad_access(p: &GraphPattern) -> bool {
@@ -1089,6 +1210,21 @@ pub(crate) fn order_keys(v: &V) -> Vec<String> {
             v.lex.clone(),
             v.dt.clone(),
             v.lang.clone(),
-        ],
+        ]
+        .into_iter()
+        .chain(triple_order_keys(v))
+        .collect(),
     }
+}
+
+/// Ordering key of triple terms: the sort key computed at write time.
+fn triple_order_keys(v: &V) -> Vec<String> {
+    use expr::K_TRIPLE;
+    let (Some(id), true) = (&v.id, v.decodable) else {
+        return Vec::new();
+    };
+    vec![format!(
+        "(CASE WHEN ({}) = {K_TRIPLE} THEN (SELECT sk FROM triple_terms WHERE id = {id}) END)",
+        v.kind
+    )]
 }

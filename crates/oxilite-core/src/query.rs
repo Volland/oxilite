@@ -51,16 +51,25 @@ pub struct CompiledQuery {
     layout: Vec<Out>,
     constants: HashMap<i64, Term>,
     union_default_graph: bool,
+    /// Planner decisions and warnings.
+    pub notes: Vec<String>,
 }
 
 impl CompiledQuery {
-    /// Human-readable description for `explain()`.
+    /// Human-readable description for `explain()`: the SQL, join orders with estimated
+    /// cardinalities, and warnings.
     pub fn explain(&self) -> String {
-        format!(
-            "-- oxilite: fully compiled to SQL ({} output variable(s))\n{}",
-            self.variables.len(),
-            self.sql
-        )
+        let mut out = format!(
+            "-- oxilite: fully compiled to SQL ({} output variable(s))\n",
+            self.variables.len()
+        );
+        for n in &self.notes {
+            out.push_str("-- ");
+            out.push_str(n);
+            out.push('\n');
+        }
+        out.push_str(&self.sql);
+        out
     }
 }
 
@@ -177,6 +186,13 @@ pub fn compile_query(
         }
         _ => final_select(&block, &idxs, caps.int64_as_text),
     };
+    if sql.len() > caps.max_sql_len {
+        return Err(Error::unsupported(format!(
+            "generated SQL is {} bytes, over the backend limit of {}",
+            sql.len(),
+            caps.max_sql_len
+        )));
+    }
     Ok(CompiledQuery {
         sql,
         form,
@@ -184,6 +200,7 @@ pub fn compile_query(
         layout,
         constants: c.constants,
         union_default_graph: options.union_default_graph,
+        notes: c.notes,
     })
 }
 
@@ -191,7 +208,7 @@ fn final_select(block: &Block, idxs: &[usize], text_ids: bool) -> String {
     block.to_select(Some(idxs), text_ids)
 }
 
-/// Decodes a computed value from its 9 columns.
+/// Decodes a computed value from its value columns.
 fn decode_val(cells: &[SqlValue]) -> Option<Term> {
     let get = |name: &str| {
         let i = VAL_FIELDS.iter().position(|f| *f == name).expect("field");
@@ -228,6 +245,16 @@ fn decode_val(cells: &[SqlValue]) -> Option<Term> {
         Tag::Boolean => Literal::from(get("b").as_i64()? != 0).into(),
         Tag::Typed => {
             let dt = dt?;
+            if let Some((sum, count)) = get("x")
+                .as_str()
+                .and_then(|a| a.strip_prefix("avg:"))
+                .and_then(|a| a.split_once('/'))
+            {
+                // Exact integer AVG: decimal division like Oxigraph.
+                let sum = oxsdatatypes::Decimal::from(sum.parse::<i64>().ok()?);
+                let count = oxsdatatypes::Decimal::from(count.parse::<i64>().ok()?);
+                return Some(Literal::from(sum.checked_div(count)?).into());
+            }
             match lex {
                 Some(l) => Literal::new_typed_literal(l, NamedNode::new_unchecked(dt)).into(),
                 None => format_number(num?, &dt).into(),

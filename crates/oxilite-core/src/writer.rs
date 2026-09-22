@@ -95,12 +95,17 @@ pub fn term_statements(rows: &EncodedRows, caps: &Capabilities) -> Vec<Statement
     }
     out.extend(terms.finish());
     let mut triples = Chunker::new(
-        "INSERT OR IGNORE INTO triple_terms(id, s, p, o) VALUES ",
+        "INSERT OR IGNORE INTO triple_terms(id, s, p, o, vk, sk) VALUES ",
         "",
         caps.max_sql_len,
     );
     for t in &rows.triples {
-        triples.push(&format!("({},{},{},{})", t.id, t.s, t.p, t.o));
+        let mut tuple = format!("({},{},{},{},", t.id, t.s, t.p, t.o);
+        quote_str(&mut tuple, &t.vk);
+        tuple.push(',');
+        quote_str(&mut tuple, &t.sk);
+        tuple.push(')');
+        triples.push(&tuple);
     }
     out.extend(triples.finish());
     out

@@ -40,7 +40,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-0
+      # The dylib variant runs on the platform's own SQLite build, whose parser stack is
+      # limited (YYSTACKDEPTH=100): generated SQL must stay shallow enough for it (and D1).
+      - if: runner.os == 'macOS'
+        run: echo "OXILITE_SQLITE_LIBRARY=/usr/lib/libsqlite3.dylib" >> "$GITHUB_ENV"
       - run: cargo test --workspace
+      - if: runner.os == 'Linux'
+        run: cargo run -p oxilite-compat --bin compat-report
 
   wasm:
     runs-on: ubuntu-latest

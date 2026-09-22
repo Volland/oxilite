@@ -8,7 +8,40 @@ use oxilite::sparql::QueryResults;
 use oxilite::QueryOptions;
 use spargebra::algebra::GraphPattern;
 use spargebra::{Query, Update};
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fmt;
+
+type Coverage = (usize, HashMap<String, usize>);
+
+thread_local! {
+    /// Queries evaluated fully in SQL vs. by the fallback, with fallback reasons (per test
+    /// thread: each W3C suite runs on its own thread).
+    static COVERAGE: RefCell<Option<Coverage>> = const { RefCell::new(None) };
+}
+
+fn record(explain: &str) {
+    COVERAGE.with(|c| {
+        let mut c = c.borrow_mut();
+        let (compiled, reasons) = c.get_or_insert_with(|| (0, HashMap::new()));
+        if explain.starts_with("-- oxilite: fully compiled") {
+            *compiled += 1;
+        } else {
+            let reason = explain
+                .split("SQL (")
+                .nth(1)
+                .and_then(|r| r.split(')').next())
+                .unwrap_or(explain)
+                .to_string();
+            *reasons.entry(reason).or_default() += 1;
+        }
+    });
+}
+
+/// Takes and resets this thread's coverage counters: (compiled, fallback reasons).
+pub fn take_coverage() -> Coverage {
+    COVERAGE.with(|c| c.borrow_mut().take().unwrap_or_default())
+}
 
 /// A configuration oxilite is tested in. Plans and backends must never change results.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,6 +130,7 @@ impl OxiliteEngine {
     }
 
     pub fn query(&self, query: &Query) -> Result<QueryResults<'static>> {
+        record(&self.explain(query));
         Ok(with_store!(self, s => s.query_opt(query, self.options.clone()))?)
     }
 

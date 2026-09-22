@@ -142,5 +142,7 @@ pub fn serialize_triples<W: Write>(
 }
 
 pub fn explain_unsupported(e: &Error) -> String {
-    format!("-- oxilite: not fully compiled to SQL ({e}); evaluated by the spareval fallback on sync backends")
+    format!(
+        "-- oxilite: not fully compiled to SQL ({e}); the operators above the compiled subqueries are evaluated in Rust by spareval (sync backends only)"
+    )
 }

@@ -374,8 +374,11 @@ pub fn system_library_candidates() -> &'static [&'static str] {
     }
 }
 
-/// The first loadable system SQLite library, if any.
+/// The library named by `OXILITE_SQLITE_LIBRARY`, or the first loadable system SQLite.
 pub fn find_system_library() -> Option<&'static str> {
+    if let Ok(p) = std::env::var("OXILITE_SQLITE_LIBRARY") {
+        return Some(Box::leak(p.into_boxed_str()));
+    }
     system_library_candidates()
         .iter()
         .copied()

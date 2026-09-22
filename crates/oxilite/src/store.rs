@@ -47,7 +47,7 @@ impl SyncBackend for NoBackend {
 }
 
 struct Inner<B> {
-    backend: B,
+    backend: Arc<B>,
     stats: RwLock<Stats>,
 }
 
@@ -92,7 +92,7 @@ impl Store {
         let stats = run_sync(&backend, ops::stats_job(backend.capabilities()))?;
         Ok(Self {
             inner: Arc::new(Inner {
-                backend,
+                backend: Arc::new(backend),
                 stats: RwLock::new(stats),
             }),
         })
@@ -107,7 +107,7 @@ impl Store<oxilite_dylib::DylibBackend> {
     }
 }
 
-impl<B: SyncBackend> Store<B> {
+impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
     /// Opens a store over any backend (creating the schema if needed).
     pub fn with_backend(backend: B) -> Result<Self> {
         Self::with_backend_and_options(backend, &StoreOptions::default())
@@ -117,7 +117,7 @@ impl<B: SyncBackend> Store<B> {
         let stats = run_sync(&backend, ops::open_job(options, backend.capabilities()))?;
         Ok(Self {
             inner: Arc::new(Inner {
-                backend,
+                backend: Arc::new(backend),
                 stats: RwLock::new(stats),
             }),
         })
@@ -133,7 +133,7 @@ impl<B: SyncBackend> Store<B> {
     }
 
     fn run<J: oxilite_core::Job>(&self, job: J) -> Result<J::Output> {
-        run_sync(&self.inner.backend, job)
+        run_sync(&*self.inner.backend, job)
     }
 
     fn evaluate(&self, query: &spargebra::Query, options: &QueryOptions) -> Result<QueryOutput> {
@@ -147,11 +147,10 @@ impl<B: SyncBackend> Store<B> {
         };
         match compiled {
             Ok(c) => self.run(QueryJob::new(c, self.caps().clone())),
-            Err(e) if e.is_unsupported() => oxilite_core::fallback::evaluate(
-                &self.inner.backend,
-                query,
-                options.union_default_graph,
-            ),
+            Err(e) if e.is_unsupported() => {
+                let stats = self.stats();
+                crate::partial::evaluate(Arc::clone(&self.inner.backend), query, &stats, options)
+            }
             Err(e) => Err(e),
         }
     }
@@ -195,7 +194,22 @@ impl<B: SyncBackend> Store<B> {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         Ok(match compile_query(&q, &stats, self.caps(), options) {
             Ok(c) => c.explain(),
-            Err(e) if e.is_unsupported() => explain_unsupported(&e),
+            Err(e) if e.is_unsupported() => {
+                let (_, jobs) = crate::partial::plan(&q, &stats, self.caps(), options);
+                let mut out = explain_unsupported(&e);
+                let mut names: Vec<_> = jobs.keys().cloned().collect();
+                names.sort();
+                if !names.is_empty() {
+                    out.push_str(&format!(
+                        "\n-- {} subquery(ies) still run as SQL:",
+                        names.len()
+                    ));
+                    for n in names {
+                        out.push_str(&format!("\n-- <{n}>\n{}", jobs[&n].sql));
+                    }
+                }
+                out
+            }
             Err(e) => return Err(e),
         })
     }
@@ -252,7 +266,7 @@ impl<B: SyncBackend> Store<B> {
             return Ok(());
         }
         // Mixed plan: an interactive transaction with fallback evaluation.
-        let backend = &self.inner.backend;
+        let backend = &*self.inner.backend;
         backend.begin()?;
         let result = (|| {
             for p in plan {
@@ -530,7 +544,7 @@ pub struct BulkLoader<'a, B: SyncBackend> {
     loaded: u64,
 }
 
-impl<'a, B: SyncBackend> BulkLoader<'a, B> {
+impl<'a, B: SyncBackend + Send + Sync + 'static> BulkLoader<'a, B> {
     /// Accepted for compatibility; SQLite writes are single-threaded.
     pub fn with_num_threads(self, _num_threads: usize) -> Self {
         self

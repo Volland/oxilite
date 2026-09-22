@@ -65,3 +65,9 @@ Delivery is split into six milestones, each measured by the W3C test suites Oxig
 ORDER BY uses a total SQL order: unbound, blank nodes, IRIs, literals, triple terms; numeric literals first by value, then other literals by lexical form, datatype and language.
 
 SPARQL leaves the relative order of incomparable literals undefined. Oxigraph sorts with a non-transitive comparator, so its output for mixed types depends on its sort algorithm and cannot be reproduced by SQL keys. The divergence is allow-listed in the compatibility harness (`order_terms`).
+
+## D12 Set semantics for merged default graphs
+
+When a query's default graph is the merge of several graphs (several `FROM` clauses, or the union-default-graph option), a triple present in more than one of them matches once.
+
+This is the RDF merge the SPARQL specification requires. Oxigraph concatenates the graphs and can return duplicate solutions; the divergence is allow-listed in the compatibility harness (`corpus:from-two`).

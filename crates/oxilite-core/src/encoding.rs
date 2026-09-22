@@ -163,7 +163,8 @@ pub struct TermRow {
     pub dt: Option<String>,
     /// Language tag, for [`Tag::LangString`] and [`Tag::DirLangString`].
     pub lang: Option<String>,
-    /// Base direction (1 = ltr, 2 = rtl), for [`Tag::DirLangString`].
+    /// Base direction (1 = ltr, 2 = rtl) for [`Tag::DirLangString`]; for date/time literals,
+    /// whether the value has a timezone (1) or not (0).
     pub dir: Option<i64>,
     /// Numeric value for numeric datatypes, or 0/1 for non-canonical `xsd:boolean`.
     pub num: Option<f64>,
@@ -180,6 +181,10 @@ pub struct TripleRow {
     pub s: i64,
     pub p: i64,
     pub o: i64,
+    /// Value key: equal for value-equal triple terms (`<<a b 1>> = <<a b 1.0>>`).
+    pub vk: String,
+    /// Sort key: orders triple terms like Oxigraph (subject, predicate, then object).
+    pub sk: String,
 }
 
 /// Everything that must be written so that an encoded term can be decoded later.
@@ -284,6 +289,89 @@ pub fn timestamp(lex: &str, dt: &str) -> Option<f64> {
     }
 }
 
+/// For `xsd:dateTime` / `xsd:date` values: 1 if the lexical form has a timezone, else 0.
+pub fn timezone_flag(lex: &str, dt: &str) -> Option<i64> {
+    timestamp(lex, dt)?;
+    let tz = lex.ends_with('Z')
+        || (lex.len() > 6 && {
+            let b = lex.as_bytes();
+            let n = b.len();
+            (b[n - 6] == b'+' || b[n - 6] == b'-') && b[n - 3] == b':'
+        });
+    Some(i64::from(tz))
+}
+
+/// A string that is equal for value-equal terms (numbers by value, dates by instant): used to
+/// compare triple terms with SPARQL `=` in one SQL comparison.
+pub fn value_key(term: TermRef<'_>) -> String {
+    match term {
+        TermRef::NamedNode(n) => format!("i{}", named_node_id(n.as_str())),
+        TermRef::BlankNode(b) => format!("b{}", blank_node_id(b.as_str())),
+        TermRef::Literal(l) => {
+            let (id, row) = encode_literal(l);
+            match (tag_of(id), row) {
+                (Some(Tag::Integer), _) => format!("n{}", (id & PAYLOAD_MASK) - INT_OFFSET),
+                (Some(Tag::Boolean), _) => format!("B{}", id & 1),
+                (_, Some(r)) => match (r.num, r.nt, r.ts) {
+                    (Some(n), Some(_), _) if n.fract() == 0.0 && n.abs() < 9.0e15 => {
+                        format!("n{}", n as i64)
+                    }
+                    (Some(n), Some(_), _) => format!("n{n:?}"),
+                    (Some(b), None, _) if l.datatype() == xsd::BOOLEAN => format!("B{}", b as i64),
+                    (_, _, Some(ts)) => {
+                        format!("t{}|{}|{ts:?}", l.datatype().as_str(), r.dir.unwrap_or(0))
+                    }
+                    _ => format!("l{id}"),
+                },
+                _ => format!("l{id}"),
+            }
+        }
+        TermRef::Triple(t) => format!(
+            "({} {} {})",
+            value_key(t.subject.as_ref().into()),
+            value_key(t.predicate.as_ref().into()),
+            value_key(t.object.as_ref())
+        ),
+    }
+}
+
+/// A string whose byte order is the ORDER BY order of terms (blank nodes, IRIs, numbers by
+/// value, other literals by lexical form, triple terms by components).
+pub fn sort_key(term: TermRef<'_>) -> String {
+    fn number(x: f64) -> String {
+        // Order-preserving bit transform: lexicographic order of the hex = numeric order.
+        let bits = x.to_bits();
+        let key = if x.is_sign_negative() {
+            !bits
+        } else {
+            bits | (1 << 63)
+        };
+        format!("{key:016x}")
+    }
+    match term {
+        TermRef::BlankNode(b) => format!("0{}", b.as_str()),
+        TermRef::NamedNode(n) => format!("1{}", n.as_str()),
+        TermRef::Literal(l) => {
+            let (id, row) = encode_literal(l);
+            let num = match (tag_of(id), &row) {
+                (Some(Tag::Integer), _) => Some(((id & PAYLOAD_MASK) - INT_OFFSET) as f64),
+                (_, Some(r)) if r.nt.is_some() => r.num,
+                _ => None,
+            };
+            match num {
+                Some(n) => format!("2{}", number(n)),
+                None => format!("3{}\u{1}{}", l.value(), l.datatype().as_str()),
+            }
+        }
+        TermRef::Triple(t) => format!(
+            "4{}\u{2}{}\u{2}{}",
+            sort_key(t.subject.as_ref().into()),
+            sort_key(t.predicate.as_ref().into()),
+            sort_key(t.object.as_ref())
+        ),
+    }
+}
+
 /// Encodes a literal, returning its id and (for hashed literals) the row to store.
 pub fn encode_literal(literal: LiteralRef<'_>) -> (i64, Option<TermRow>) {
     let lex = literal.value();
@@ -381,7 +469,7 @@ pub fn encode_literal(literal: LiteralRef<'_>) -> (i64, Option<TermRow>) {
             lex: lex.into(),
             dt: Some(dt_str.into()),
             lang: None,
-            dir: None,
+            dir: timezone_flag(lex, dt_str),
             num,
             nt: if num.is_some() { nt } else { None },
             ts: timestamp(lex, dt_str),
@@ -495,7 +583,17 @@ impl EncodedRows {
             Tag::Triple,
             &[&s.to_be_bytes(), &p.to_be_bytes(), &o.to_be_bytes()],
         );
-        self.triples.push(TripleRow { id, s, p, o });
+        let owned = t.into_owned();
+        let vk = value_key(TermRef::Triple(&owned));
+        let sk = sort_key(TermRef::Triple(&owned));
+        self.triples.push(TripleRow {
+            id,
+            s,
+            p,
+            o,
+            vk,
+            sk,
+        });
         id
     }
 

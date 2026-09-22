@@ -110,6 +110,16 @@ Suites of the compatibility harness, see [[test-plan#Oxigraph compatibility harn
 
 Oxigraph 0.5.11 `lib/oxigraph/tests/store.rs`, copied with only `oxigraph::` replaced by `oxilite::`, passes against `oxilite::store::Store`; RocksDB-only tests are compiled out by their feature gates.
 
+### Differential corpus matches Oxigraph
+
+About 120 query families over a seeded dataset give the same results on Oxigraph and on every oxilite variant, for two seeds; divergences must be allow-listed.
+
+The dataset covers every literal kind, blank nodes, named graphs with cross-graph duplicates, a class hierarchy, cycles and triple terms.
+
+### Optimizer regression query
+
+Oxigraph's OPTIONAL-on-foreign-key regression (20 persons × 20 orders) returns Oxigraph's results, and the OPTIONAL's BGP is planned starting from the foreign-key lookup on the bound `?c`.
+
 ## Planner benchmark
 
 `cargo run --release -p oxilite --example planner_bench` loads 350 010 quads (50 000 people) and compares the oxilite planner with SQLite's planner on three join-heavy queries.

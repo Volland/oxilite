@@ -2,7 +2,7 @@
 
 **An Oxigraph-compatible RDF database and SPARQL engine that uses SQLite as its storage engine. It runs anywhere SQLite runs, including Cloudflare D1.**
 
-> **Status: M1 (storage core) implemented.** The Rust store, native backends and the Oxigraph compatibility harness work today; D1, Node/TypeScript packages, reasoning and validation are specified and being implemented milestone by milestone. See [Roadmap](#roadmap).
+> **Status: M1 (storage core) and M2 (full SPARQL 1.1 query compiled to SQL) implemented.** The Rust store, native backends and the Oxigraph compatibility harness work today; D1, Node/TypeScript packages, reasoning and validation are specified and being implemented milestone by milestone. See [Roadmap](#roadmap).
 
 ---
 
@@ -283,9 +283,9 @@ Intentional differences:
 
 | Milestone | Scope | Done when | Status |
 |---|---|---|---|
-| Compat harness | Oxigraph test ports + differential corpus | runs in CI for every milestone | in progress (W3C suites + store API tests pass) |
+| Compat harness | Oxigraph test ports + differential corpus | runs in CI for every milestone | in progress (W3C suites, store API tests and differential corpus pass; D1 and JS parts follow M3/bindings) |
 | **M1** Storage core | encoding, schema, backends, load/dump, BGP+FILTER → SQL, planner | W3C syntax suites + ported store API tests pass | ✅ done |
-| **M2** Full SPARQL 1.1 query | OPTIONAL, UNION, MINUS, aggregates, paths, subqueries, `explain()` | ≥ 95% W3C query suite | specified |
+| **M2** Full SPARQL 1.1 query | OPTIONAL, UNION, MINUS, aggregates, paths, subqueries, `explain()` | ≥ 95% W3C query suite | ✅ done: 100% pass, 95% of evaluations fully in SQL ([COMPATIBILITY.md](COMPATIBILITY.md)) |
 | **M3** Update + D1 | atomic SPARQL UPDATE, `oxilite-d1`, wasm core | W3C update suite on rusqlite and local D1 | specified |
 | TS bindings | `@oxilite/node`, `@oxilite/d1` | node:test suites + Oxigraph JS tests | specified |
 | **M4** Reasoning | TBox closure, rewriting, OWL 2 RL | entailment tests; agreement with `reasonable` | specified |

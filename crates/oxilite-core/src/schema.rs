@@ -43,7 +43,7 @@ pub fn create_schema(options: &StoreOptions) -> Request {
             (t.lex IS NOT NEW.lex OR t.dt IS NOT NEW.dt OR t.lang IS NOT NEW.lang OR t.dir IS NOT NEW.dir)) \
          BEGIN SELECT RAISE(ABORT, 'oxilite: term hash collision'); END",
         "CREATE TABLE IF NOT EXISTS triple_terms (\
-            id INTEGER PRIMARY KEY, s INTEGER NOT NULL, p INTEGER NOT NULL, o INTEGER NOT NULL) STRICT",
+            id INTEGER PRIMARY KEY, s INTEGER NOT NULL, p INTEGER NOT NULL, o INTEGER NOT NULL, vk TEXT NOT NULL, sk TEXT NOT NULL) STRICT",
         // The quad table is its own clustered SPOG index; secondary indexes contain every
         // column, so every triple-pattern scan is index-only.
         "CREATE TABLE IF NOT EXISTS quads (\
