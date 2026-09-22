@@ -112,8 +112,22 @@ pub(crate) enum Zone {
     Named(String),
 }
 
+/// With `tzdb-bundle`, zones come from the embedded database even where the host has
+/// `/usr/share/zoneinfo`: distributions build it differently (Debian and Ubuntu keep
+/// `backzone`, so pre-1970 `Europe/Stockholm` is its own LMT, not `Europe/Berlin`'s), and
+/// query results must not depend on the machine.
+#[cfg(feature = "tzdb-bundle")]
+fn tz_db() -> jiff::tz::TimeZoneDatabase {
+    jiff::tz::TimeZoneDatabase::bundled()
+}
+
+#[cfg(not(feature = "tzdb-bundle"))]
+fn tz_db() -> jiff::tz::TimeZoneDatabase {
+    jiff::tz::db().clone()
+}
+
 fn tz(name: &str) -> Result<jiff::tz::TimeZone> {
-    jiff::tz::db()
+    tz_db()
         .get(name)
         .map_err(|_| rt(format!("unknown time zone '{name}'")))
 }
