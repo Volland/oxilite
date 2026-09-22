@@ -26,6 +26,8 @@ Atomic SPARQL UPDATE compiled to batch SQL, the `oxilite-d1` Rust backend, the w
 
 Done when the W3C SPARQL 1.1 update suite passes on rusqlite and the same query/update tests pass against local D1 (`wrangler dev`).
 
+Status: done. The W3C update suites pass on every engine variant, including D1 through the Miniflare sidecar; `@oxilite/d1` and the example Rust Worker (`examples/d1-worker`) pass end-to-end tests on local D1.
+
 ## M4 Reasoning
 
 TBox closure, RDFS / OWL-QL query rewriting and opt-in OWL 2 RL materialization. Change: `m4-reasoning`.

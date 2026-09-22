@@ -161,6 +161,8 @@ pub struct Capabilities {
     pub interactive_transactions: bool,
     /// 64-bit integers must be returned as TEXT (JavaScript numbers lose precision above 2^53).
     pub int64_as_text: bool,
+    /// Maximum number of terms in one compound SELECT (`UNION ALL` chain); D1 allows 5.
+    pub max_compound_select: usize,
     /// Name of the backend, for `explain()`.
     pub name: String,
 }
@@ -180,6 +182,7 @@ impl Capabilities {
             udf: false,
             interactive_transactions: true,
             int64_as_text: false,
+            max_compound_select: 500,
             name: "sqlite".into(),
         }
     }
@@ -192,6 +195,7 @@ impl Capabilities {
             udf: false,
             interactive_transactions: false,
             int64_as_text: true,
+            max_compound_select: 5,
             name: "d1".into(),
         }
     }
@@ -245,6 +249,25 @@ pub fn sql_f64(v: f64) -> String {
             format!("{s}.0")
         }
     }
+}
+
+/// `UNION ALL` of several SELECTs within the backend's compound-select limit: longer chains
+/// are nested (`SELECT * FROM (a UNION ALL b …) UNION ALL …`).
+pub fn union_all(mut parts: Vec<String>, max_terms: usize) -> String {
+    let k = max_terms.max(2);
+    while parts.len() > k {
+        parts = parts
+            .chunks(k)
+            .map(|c| {
+                if c.len() == 1 {
+                    c[0].clone()
+                } else {
+                    format!("SELECT * FROM ({})", c.join(" UNION ALL "))
+                }
+            })
+            .collect();
+    }
+    parts.join(" UNION ALL ")
 }
 
 /// Reads a column from a row.

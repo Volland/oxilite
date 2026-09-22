@@ -1,0 +1,20 @@
+[package]
+name = "oxilite-d1-worker"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+oxilite = { path = "../../crates/oxilite", default-features = false, features = ["d1"] }
+oxilite-core = { path = "../../crates/oxilite-core", features = ["serde"] }
+worker = { version = "0.8", features = ["d1"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+
+[workspace]

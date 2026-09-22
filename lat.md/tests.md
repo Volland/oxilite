@@ -120,6 +120,30 @@ The dataset covers every literal kind, blank nodes, named graphs with cross-grap
 
 Oxigraph's OPTIONAL-on-foreign-key regression (20 persons × 20 orders) returns Oxigraph's results, and the OPTIONAL's BGP is planned starting from the foreign-key lookup on the bound `?c`.
 
+### Update corpus matches Oxigraph
+
+Every SPARQL UPDATE in the differential update corpus, applied to the seeded dataset, leaves oxilite and Oxigraph with the same quads; divergences must be allow-listed.
+
+## D1
+
+`@oxilite/d1` tests running the wasm core against a Miniflare D1 database, see [[architecture#Backends#Cloudflare D1]].
+
+### Store API on Miniflare D1
+
+`add`, `has`, `delete`, `size` and `match` on `D1Store` behave like Oxigraph's JavaScript store API against a real D1 binding.
+
+### Ids above 2^53 survive D1
+
+Fifty hashed terms (60-bit ids) round-trip through D1 and JavaScript intact, proving ids travel as TEXT and no precision is lost above 2^53.
+
+### Failed update leaves D1 unchanged
+
+An update whose later operation fails (`CREATE GRAPH` on an existing graph) aborts its whole batch, so the earlier `INSERT DATA` is not visible.
+
+### Large loads respect D1 limits
+
+A 6000-triple bulk load is split into batches under D1's statement limits, all triples arrive, and statistics are refreshed for `explain()`.
+
 ## Planner benchmark
 
 `cargo run --release -p oxilite --example planner_bench` loads 350 010 quads (50 000 people) and compares the oxilite planner with SQLite's planner on three join-heavy queries.

@@ -217,7 +217,10 @@ impl Compiler<'_> {
         let mut out = Block::default();
         out.from.push(FromItem {
             join: Join::First,
-            item: format!("({}) AS {alias}", branches.join(" UNION ALL ")),
+            item: format!(
+                "({}) AS {alias}",
+                crate::sql::union_all(branches, self.caps.max_compound_select)
+            ),
         });
         for (idx, (shape, nullable)) in vars {
             let col = match shape {
@@ -305,6 +308,37 @@ impl Compiler<'_> {
     ) -> Result<Block> {
         let b = self.pattern(inner)?;
         let mut b = self.plain(b);
+        // Aggregate arguments that are expressions are computed once, as columns of an inner
+        // subquery: SQL has no common subexpressions, and each aggregate uses its argument's
+        // fields several times.
+        let mut aggregates: Vec<(Variable, AggregateExpression)> = aggregates.to_vec();
+        let mut materialized = false;
+        for (_, agg) in &mut aggregates {
+            if let AggregateExpression::FunctionCall { expr, .. } = agg {
+                if !matches!(expr, Expression::Variable(_)) {
+                    let v = self.expr_term(expr, &b.cols)?;
+                    let hidden = self.fresh_var("agg");
+                    let col = match &v.id {
+                        Some(id) if v.decodable => Col::Id(id.clone()),
+                        _ => Col::Val(Box::new(v)),
+                    };
+                    b.cols.insert(
+                        hidden,
+                        Binding {
+                            col,
+                            nullable: true,
+                            computed: true,
+                            correlated: false,
+                        },
+                    );
+                    *expr = Expression::Variable(self.var_names[hidden].clone());
+                    materialized = true;
+                }
+            }
+        }
+        if materialized {
+            b = self.seal(b);
+        }
         if aggregates
             .iter()
             .any(|(_, a)| matches!(a, AggregateExpression::CountSolutions { distinct: true }))
@@ -359,7 +393,7 @@ impl Compiler<'_> {
                 "several MIN/MAX aggregates in one group",
             ));
         }
-        for (var, agg) in aggregates {
+        for (var, agg) in &aggregates {
             let bind = self.aggregate(agg, &b.cols, &mut b.extra_select)?;
             let idx = self.var(var);
             cols.insert(idx, bind);

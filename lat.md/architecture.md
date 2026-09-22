@@ -132,6 +132,8 @@ Every write — `INSERT DATA`, `DELETE/INSERT … WHERE`, `CLEAR`, `DROP`, `exte
 
 `DELETE/INSERT … WHERE` evaluates the WHERE once into `update_buffer` (delete rows and insert rows computed *before* any modification), then deletes, inserts, and clears the buffer — all in the same batch, so semantics match SPARQL's "evaluate WHERE first" rule without interactive transactions. Bulk loads are chunked across batches and documented as non-atomic, like Oxigraph's `BulkLoader`. Interactive `transaction(|tx| …)` exists only on backends reporting `interactive_transactions`.
 
+Conditions SQL cannot express as data become constraint failures on `oxilite_guard`, whose CHECK columns (`graph_does_not_exist`, `graph_already_exists`, `computed_value_not_storable`) abort the whole batch and are mapped back to SPARQL errors (see [[crates/oxilite-core/src/error.rs]]). A template that stores a computed non-integer value (a decimal from arithmetic, a new string) raises `computed_value_not_storable`; native stores then rerun the update through spareval's `delete_insert` inside one transaction, while D1 reports it. `explain_update()` shows the SQL of every operation.
+
 ## Backends
 
 Four ways to reach SQLite, all behind the same sans-IO contract.
@@ -148,9 +150,13 @@ Loads a SQLite shared library from a path at runtime (`libloading`), binding onl
 
 Async backend over the D1 binding: `Atomic` requests become `db.batch()`, ids travel as TEXT because JavaScript numbers lose precision above 2^53, and statements stay under D1's size limits.
 
+`Capabilities::d1()` encodes the limits the compiler respects: SQL under 90 KB per statement, at most 50 statements per batch (bulk loads are chunked), at most 5 terms per compound SELECT (larger UNIONs nest), GLOB patterns under 50 bytes, no UDFs, and no interactive transactions (so no spareval fallback: queries that do not compile report `unsupported`). The Rust backend reads batch results through js-sys, because worker-rs types `meta.last_row_id` as `i64` and a 60-bit term id arrives as a JavaScript float. The schema ships as a migration from `oxilite_d1::migration_sql`.
+
 ### JavaScript drivers
 
 The wasm build of the core exposes the step machine to JavaScript, so a TypeScript driver can run SPARQL on `env.DB` without a Rust Worker.
+
+`oxilite-wasm` exports an `Engine` whose methods (query, update, load, match, dump…) return a `Job`; `Job.step(responseJson)` yields either the next SQL request or the final output as JSON (see [[crates/oxilite-core/src/json.rs]]). It is built for the `web` target (Workers) and the `nodejs` target (Miniflare tests, CLI).
 
 ## Reasoning
 

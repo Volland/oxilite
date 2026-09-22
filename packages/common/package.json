@@ -1,0 +1,11 @@
+{
+  "name": "@oxilite/common",
+  "version": "0.1.0",
+  "description": "RDF/JS terms and result conversion shared by the oxilite JavaScript packages",
+  "license": "MIT OR Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": { "build": "tsc -p ." }
+}

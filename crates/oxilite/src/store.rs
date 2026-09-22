@@ -8,7 +8,7 @@ use crate::common::{
 pub use crate::common::{IntoQuery, IntoUpdate};
 use oxilite_core::job::run_sync;
 use oxilite_core::query::{compile_query, QueryJob, QueryOutput};
-use oxilite_core::update::{plan_update, PlannedOp};
+use oxilite_core::update::{plan_update_with, PlannedOp};
 use oxilite_core::{
     ops, Capabilities, Error, QueryOptions, Request, Result, Stats, StoreOptions, SyncBackend,
 };
@@ -248,22 +248,52 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
         self.run(ops::is_empty_job())
     }
 
+    /// Describes how an update runs: the SQL of each compiled operation, or why it needs the
+    /// fallback.
+    pub fn explain_update(&self, update: impl IntoUpdate) -> Result<String> {
+        let update = update.into_update()?;
+        let plan = plan_update_with(
+            &update,
+            &self.stats(),
+            self.caps(),
+            &QueryOptions::default(),
+        )?;
+        Ok(oxilite_core::update::explain_plan(&plan))
+    }
+
     /// Executes a SPARQL update atomically.
     pub fn update(&self, update: impl IntoUpdate) -> Result<()> {
         let update = update.into_update()?;
-        let plan = plan_update(&update, self.caps())?;
+        let mut plan = plan_update_with(
+            &update,
+            &self.stats(),
+            self.caps(),
+            &QueryOptions::default(),
+        )?;
         if plan.iter().all(|p| matches!(p, PlannedOp::Sql(_))) {
             let stmts = plan
-                .into_iter()
+                .iter()
                 .flat_map(|p| match p {
-                    PlannedOp::Sql(s) => s,
+                    PlannedOp::Sql(s) => s.clone(),
                     PlannedOp::Fallback(..) => Vec::new(),
                 })
                 .collect::<Vec<_>>();
-            if !stmts.is_empty() {
-                self.inner.backend.execute(&Request::atomic(stmts))?;
+            if stmts.is_empty() {
+                return Ok(());
             }
-            return Ok(());
+            match self.inner.backend.execute(&Request::atomic(stmts)) {
+                Ok(_) => return Ok(()),
+                // A runtime guard rejected the SQL plan (e.g. a computed non-integer value in a
+                // template): the batch rolled back, evaluate DELETE/INSERT with the fallback.
+                Err(e) if e.is_unsupported() => {
+                    for (i, op) in update.operations.iter().enumerate() {
+                        if matches!(op, spargebra::GraphUpdateOperation::DeleteInsert { .. }) {
+                            plan[i] = PlannedOp::Fallback(i, e.to_string());
+                        }
+                    }
+                }
+                Err(e) => return Err(e),
+            }
         }
         // Mixed plan: an interactive transaction with fallback evaluation.
         let backend = &*self.inner.backend;

@@ -15,10 +15,11 @@ xxhash-rust.workspace = true
 thiserror.workspace = true
 oxiri.workspace = true
 serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
 
 [features]
 default = []
-serde = ["dep:serde"]
+serde = ["dep:serde", "dep:serde_json"]
 
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
 getrandom = { version = "0.3", features = ["wasm_js"] }

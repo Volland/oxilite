@@ -47,7 +47,7 @@ impl<'a, B: SyncBackend> SqlDataset<'a, B> {
         Ok(r.pop().map(|rs| rs.rows).unwrap_or_default())
     }
 
-    fn lookup(&self, id: i64) -> Result<Term> {
+    pub fn lookup(&self, id: i64) -> Result<Term> {
         if let Some(t) = self.cache.borrow().get(&id) {
             return Ok(t.clone());
         }
@@ -187,18 +187,55 @@ impl<'a, B: SyncBackend> QueryableDataset<'a> for SqlDataset<'a, B> {
     }
 }
 
+/// Applies the dataset options (union default graph, explicit default / named graphs) to a
+/// spareval dataset specification.
+pub fn apply_dataset_options(
+    spec: &mut spareval::QueryDatasetSpecification,
+    query: &Query,
+    options: &crate::QueryOptions,
+    lookup: impl Fn(i64) -> Option<oxrdf::Term>,
+) {
+    if options.union_default_graph && query_dataset(query).is_none() {
+        spec.set_default_graph_as_union();
+    }
+    let graph = |id: &i64| -> Option<oxrdf::GraphName> {
+        if *id == DEFAULT_GRAPH_ID {
+            return Some(oxrdf::GraphName::DefaultGraph);
+        }
+        match lookup(*id)? {
+            Term::NamedNode(n) => Some(n.into()),
+            Term::BlankNode(b) => Some(b.into()),
+            _ => None,
+        }
+    };
+    if let Some(d) = &options.default_graph {
+        spec.set_default_graph(d.iter().filter_map(graph).collect());
+    }
+    if let Some(n) = &options.named_graphs {
+        spec.set_available_named_graphs(
+            n.iter()
+                .filter_map(|id| match graph(id)? {
+                    oxrdf::GraphName::NamedNode(n) => Some(n.into()),
+                    oxrdf::GraphName::BlankNode(b) => Some(b.into()),
+                    oxrdf::GraphName::DefaultGraph => None,
+                })
+                .collect(),
+        );
+    }
+}
+
 /// Evaluates a query with `spareval` over a sync backend.
 pub fn evaluate<B: SyncBackend>(
     backend: &B,
     query: &Query,
-    union_default_graph: bool,
+    options: &crate::QueryOptions,
 ) -> Result<QueryOutput> {
     let evaluator = QueryEvaluator::new();
     let mut prepared = evaluator.prepare(query);
-    if union_default_graph && query_dataset(query).is_none() {
-        prepared.dataset_mut().set_default_graph_as_union();
-    }
     let dataset = SqlDataset::new(backend);
+    apply_dataset_options(prepared.dataset_mut(), query, options, |id| {
+        dataset.lookup(id).ok()
+    });
     Ok(match prepared.execute(dataset)? {
         QueryResults::Solutions(solutions) => {
             let variables = solutions.variables().to_vec();

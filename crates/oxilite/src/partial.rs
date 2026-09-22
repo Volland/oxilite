@@ -279,7 +279,7 @@ pub(crate) fn evaluate<B: SyncBackend + Send + Sync + 'static>(
     let caps = backend.capabilities().clone();
     let (rewritten, jobs) = plan(query, stats, &caps, options);
     if jobs.is_empty() {
-        return oxilite_core::fallback::evaluate(&*backend, query, options.union_default_graph);
+        return oxilite_core::fallback::evaluate(&*backend, query, options);
     }
     let handler = SqlServices {
         backend: Arc::clone(&backend),
@@ -289,10 +289,10 @@ pub(crate) fn evaluate<B: SyncBackend + Send + Sync + 'static>(
     };
     let evaluator = QueryEvaluator::new().with_default_service_handler(handler);
     let mut prepared = evaluator.prepare(&rewritten);
-    if options.union_default_graph && parts(query).1.is_none() {
-        prepared.dataset_mut().set_default_graph_as_union();
-    }
     let dataset = oxilite_core::fallback::SqlDataset::new(&*backend);
+    oxilite_core::fallback::apply_dataset_options(prepared.dataset_mut(), query, options, |id| {
+        dataset.lookup(id).ok()
+    });
     Ok(match prepared.execute(dataset)? {
         QueryResults::Solutions(solutions) => {
             let variables = solutions.variables().to_vec();

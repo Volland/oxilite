@@ -2,3 +2,9 @@
 .mcp.json
 .omc
 /target
+node_modules/
+/examples/d1-worker/build/
+/examples/d1-worker/target/
+/packages/*/dist/
+/packages/d1/wasm/
+/packages/common/dist/

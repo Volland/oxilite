@@ -8,7 +8,7 @@ use crate::common::{
 };
 use oxilite_core::job::run_async;
 use oxilite_core::query::{compile_query, QueryJob, QueryOutput};
-use oxilite_core::update::{plan_update, PlannedOp};
+use oxilite_core::update::{plan_update_with, PlannedOp};
 use oxilite_core::{
     ops, AsyncBackend, Capabilities, Error, QueryOptions, Request, Result, Stats, StoreOptions,
 };
@@ -100,11 +100,29 @@ impl<B: AsyncBackend> AsyncStore<B> {
         )
     }
 
+    /// Describes how an update runs: the SQL of each compiled operation, or why it needs the
+    /// fallback.
+    pub fn explain_update(&self, update: impl IntoUpdate) -> Result<String> {
+        let update = update.into_update()?;
+        let plan = plan_update_with(
+            &update,
+            &self.stats.borrow(),
+            self.caps(),
+            &QueryOptions::default(),
+        )?;
+        Ok(oxilite_core::update::explain_plan(&plan))
+    }
+
     /// Executes a SPARQL update as one atomic request.
     pub async fn update(&self, update: impl IntoUpdate) -> Result<()> {
         let update = update.into_update()?;
         let mut stmts = Vec::new();
-        for p in plan_update(&update, self.caps())? {
+        for p in plan_update_with(
+            &update,
+            &self.stats.borrow(),
+            self.caps(),
+            &QueryOptions::default(),
+        )? {
             match p {
                 PlannedOp::Sql(s) => stmts.extend(s),
                 PlannedOp::Fallback(_, what) => {

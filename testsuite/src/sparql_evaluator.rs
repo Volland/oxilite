@@ -234,9 +234,14 @@ fn evaluate_evaluation_test(test: &Test) -> Result<()> {
     for variant in crate::engine::variants() {
         let engine = crate::engine::OxiliteEngine::new(variant, &dataset)?;
         let explain = engine.explain(&query);
-        let actual = engine
-            .query(&query)
-            .with_context(|| format!("oxilite[{variant}] failed on {query}\n{explain}"))?;
+        let actual = match engine.query(&query) {
+            Ok(a) => a,
+            // D1 has no fallback evaluator: the query is reported unsupported, as in a Worker.
+            Err(e) if e.downcast_ref::<crate::engine::D1Unsupported>().is_some() => continue,
+            Err(e) => {
+                return Err(e.context(format!("oxilite[{variant}] failed on {query}\n{explain}")))
+            }
+        };
         let actual = StaticQueryResults::from_query_results(actual, with_order)
             .with_context(|| format!("oxilite[{variant}] error when executing {query}"))?;
         ensure!(
@@ -327,9 +332,15 @@ fn evaluate_update_evaluation_test(test: &Test) -> Result<()> {
     // oxilite port: run the same update on every oxilite variant.
     for variant in crate::engine::variants() {
         let engine = crate::engine::OxiliteEngine::new(variant, &initial)?;
-        engine
-            .update(&update)
-            .with_context(|| format!("oxilite[{variant}] failure to execute update {update}"))?;
+        match engine.update(&update) {
+            Ok(()) => {}
+            Err(e) if e.downcast_ref::<crate::engine::D1Unsupported>().is_some() => continue,
+            Err(e) => {
+                return Err(e.context(format!(
+                    "oxilite[{variant}] failure to execute update {update}"
+                )))
+            }
+        }
         let mut actual = engine.dataset()?;
         actual.canonicalize(CanonicalizationAlgorithm::Unstable);
         ensure!(

@@ -502,6 +502,7 @@ pub fn check(dataset: &Dataset, cq: &CorpusQuery) -> Result<()> {
         let engine = OxiliteEngine::new(variant, dataset)?;
         let actual = match engine.query(&query) {
             Ok(a) => a,
+            Err(e) if e.downcast_ref::<crate::engine::D1Unsupported>().is_some() => continue,
             Err(e) => {
                 errors.push(format!(
                     "oxilite[{variant}] failed: {e}\n{}",
@@ -586,3 +587,86 @@ SELECT * WHERE {
   }
 }
 ";
+
+/// Update families (M3): each runs on Oxigraph and on every oxilite variant over the same
+/// data; the resulting datasets must be isomorphic.
+pub fn updates() -> Vec<CorpusQuery> {
+    [
+        ("insert-data", "INSERT DATA { ex:new ex:p \"v\" ; ex:q [ ex:r 1 ] . GRAPH ex:g3 { ex:new ex:p 2 } }"),
+        ("delete-data", "DELETE DATA { ex:e1 ex:next ex:e2 }"),
+        ("delete-where", "DELETE WHERE { ?s ex:flag ?f }"),
+        ("delete-insert", "DELETE { ?s ex:age ?a } INSERT { ?s ex:age2 ?b } WHERE { ?s ex:age ?a BIND(?a + 1 AS ?b) FILTER(?a < 30) }"),
+        ("insert-where-bnode", "INSERT { ?s ex:addr2 [ ex:city ?c ; ex:of ?s ] } WHERE { ?s ex:addr/ex:city ?c }"),
+        ("insert-graph-var", "INSERT { GRAPH ?g { ?s ex:copied true } } WHERE { GRAPH ?g { ?s ex:inG ?v } }"),
+        ("with", "WITH ex:g1 DELETE { ?s ex:inG ?v } INSERT { ?s ex:inG2 ?v } WHERE { ?s ex:inG ?v FILTER(?v > 20) }"),
+        ("using", "DELETE { ?s ex:knows ?o } USING ex:g2 WHERE { ?s ex:knows ?o }"),
+        ("insert-values", "INSERT { ?s ex:tag ?t } WHERE { VALUES (?s ?t) { (ex:e1 \"a\") (ex:e2 \"b\"@en) (ex:zzz 3.5) } }"),
+        ("clear-graph", "CLEAR GRAPH ex:g1"),
+        ("drop-named", "DROP NAMED"),
+        ("create-graph", "CREATE GRAPH ex:empty"),
+        ("add", "ADD ex:g1 TO ex:g2"),
+        ("move", "MOVE ex:g2 TO DEFAULT"),
+        ("copy", "COPY DEFAULT TO ex:g4"),
+        ("insert-computed-decimal", "INSERT { ?s ex:half ?h } WHERE { ?s ex:age ?a BIND(?a / 2 AS ?h) }"),
+        ("insert-computed-integer", "INSERT { ?s ex:next-age ?n } WHERE { ?s ex:age ?a BIND(?a + 1 AS ?n) }"),
+        ("sequence", "INSERT DATA { ex:x ex:p 1 } ; DELETE { ex:x ex:p ?v } INSERT { ex:x ex:p ?w } WHERE { ex:x ex:p ?v BIND(?v * 10 AS ?w) }"),
+    ]
+    .into_iter()
+    .map(|(id, u)| q(&format!("update-{id}"), u, false))
+    .collect()
+}
+
+/// Runs one corpus update on Oxigraph and on every oxilite variant and compares datasets.
+pub fn check_update(dataset: &Dataset, cu: &CorpusQuery) -> Result<()> {
+    use oxigraph::model::dataset::CanonicalizationAlgorithm;
+    let update = SparqlParser::new()
+        .parse_update(&cu.query)
+        .with_context(|| format!("{}: bad corpus update", cu.id))?;
+    let reference = oxigraph::store::Store::new()?;
+    reference.extend(dataset.iter().map(QuadRef::into_owned))?;
+    reference.update(cu.query.as_str())?;
+    let mut expected = normalize(&reference.iter().collect::<Result<Dataset, _>>()?)?;
+    expected.canonicalize(CanonicalizationAlgorithm::Unstable);
+    let mut errors = Vec::new();
+    for variant in variants() {
+        let engine = OxiliteEngine::new(variant, dataset)?;
+        let plan = engine.explain_update(&update);
+        if plan.contains("not compiled") && variant != crate::engine::Variant::D1 {
+            errors.push(format!(
+                "oxilite[{variant}] did not compile the update to SQL:\n{plan}"
+            ));
+        }
+        if let Err(e) = engine.update(&update) {
+            if e.downcast_ref::<crate::engine::D1Unsupported>().is_some() {
+                continue;
+            }
+            errors.push(format!(
+                "oxilite[{variant}] failed: {e}\n{}",
+                engine.explain_update(&update)
+            ));
+            continue;
+        }
+        let mut actual = normalize(&engine.dataset()?)?;
+        actual.canonicalize(CanonicalizationAlgorithm::Unstable);
+        if actual != expected {
+            errors.push(format!(
+                "oxilite[{variant}] dataset differs from Oxigraph's:\n{}\n{}",
+                crate::report::dataset_diff(&expected, &actual),
+                engine.explain_update(&update)
+            ));
+        }
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        bail!("{} ({}):\n{}", cu.id, cu.query, errors.join("\n"))
+    }
+}
+
+/// Normalizes literals the way Oxigraph stores them (canonical values), so datasets from both
+/// engines compare by value like Oxigraph's own test runner does.
+fn normalize(d: &Dataset) -> Result<Dataset> {
+    let store = oxigraph::store::Store::new()?;
+    store.extend(d.iter().map(QuadRef::into_owned))?;
+    Ok(store.iter().collect::<Result<Dataset, _>>()?)
+}

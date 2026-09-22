@@ -75,3 +75,9 @@ pub mod rusqlite {
 pub mod dylib {
     pub use oxilite_dylib::*;
 }
+
+/// The Cloudflare D1 backend (Rust Workers, `wasm32`).
+#[cfg(feature = "d1")]
+pub mod d1 {
+    pub use oxilite_d1::*;
+}

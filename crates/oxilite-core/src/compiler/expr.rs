@@ -1394,7 +1394,7 @@ fn cast(a: &V, dt: &NamedNode) -> Result<V> {
         ),
         "http://www.w3.org/2001/XMLSchema#dateTime" => {
             let valid = format!(
-                "(({dt}) = {dts_sql} OR ({is_str} AND {t} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]T[0-2][0-9]:[0-5][0-9]:[0-6][0-9]*' AND julianday({t}) IS NOT NULL))",
+                "(({dt}) = {dts_sql} OR ({is_str} AND substr({t}, 1, 10) GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]' AND substr({t}, 11, 9) GLOB 'T[0-2][0-9]:[0-5][0-9]:[0-6][0-9]' AND julianday({t}) IS NOT NULL))",
                 dt = a.dt,
                 dts_sql = sql_str(dts)
             );

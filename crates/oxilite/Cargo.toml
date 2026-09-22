@@ -10,11 +10,13 @@ repository.workspace = true
 default = ["rusqlite"]
 rusqlite = ["dep:oxilite-rusqlite"]
 dylib = ["dep:oxilite-dylib"]
+d1 = ["dep:oxilite-d1"]
 
 [dependencies]
 oxilite-core.workspace = true
 oxilite-rusqlite = { workspace = true, optional = true }
 oxilite-dylib = { workspace = true, optional = true }
+oxilite-d1 = { workspace = true, optional = true }
 oxrdf.workspace = true
 oxrdfio.workspace = true
 spargebra.workspace = true

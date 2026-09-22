@@ -1,0 +1,14 @@
+{
+  "name": "oxilite-workspace",
+  "private": true,
+  "workspaces": ["packages/common", "packages/d1", "bindings/node", "testsuite/d1-sidecar"],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm test --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "typescript": "^5.9",
+    "vitest": "^3.2"
+  }
+}

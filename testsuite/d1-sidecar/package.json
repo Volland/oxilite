@@ -1,0 +1,1 @@
+{ "name": "oxilite-d1-sidecar", "private": true, "type": "module", "dependencies": { "miniflare": "^4" } }

@@ -9,6 +9,8 @@ pub mod encoding;
 pub mod error;
 pub mod fallback;
 pub mod job;
+#[cfg(feature = "serde")]
+pub mod json;
 pub mod ops;
 pub mod query;
 pub mod resolve;

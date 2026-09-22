@@ -1,0 +1,23 @@
+{
+  "name": "@oxilite/d1",
+  "version": "0.1.0",
+  "description": "oxilite on Cloudflare D1: an Oxigraph-compatible SPARQL store running on a D1 binding",
+  "license": "MIT OR Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "node": "./dist/node.js", "default": "./dist/index.js" },
+    "./node": { "types": "./dist/node.d.ts", "default": "./dist/node.js" },
+    "./oxilite.wasm": "./wasm/web/oxilite_wasm_bg.wasm"
+  },
+  "bin": { "oxilite-d1": "bin/oxilite-d1.mjs" },
+  "files": ["dist", "wasm", "bin"],
+  "scripts": {
+    "build:wasm": "cargo build -p oxilite-wasm --target wasm32-unknown-unknown --profile wasm-release && wasm-bindgen --target nodejs --out-dir wasm/node ../../target/wasm32-unknown-unknown/wasm-release/oxilite_wasm.wasm && wasm-bindgen --target web --out-dir wasm/web ../../target/wasm32-unknown-unknown/wasm-release/oxilite_wasm.wasm && echo {\\\"type\\\":\\\"commonjs\\\"} > wasm/node/package.json",
+    "build": "tsc -p .",
+    "test": "vitest run"
+  },
+  "dependencies": { "@oxilite/common": "0.1.0" },
+  "devDependencies": { "miniflare": "^4" }
+}

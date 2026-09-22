@@ -61,3 +61,21 @@ fn optional_on_foreign_key_matches_oxigraph_and_is_planned_selectively() -> Resu
     );
     Ok(())
 }
+
+// @lat: [[tests#Oxigraph compatibility#Update corpus matches Oxigraph]]
+#[test]
+fn update_corpus_matches_oxigraph() -> Result<()> {
+    use oxilite_compat::differential::{check_update, updates};
+    let allow = allowlist::load()?;
+    let data = dataset(3, 40);
+    let mut failures = Vec::new();
+    for cu in updates() {
+        if let Err(e) = check_update(&data, &cu) {
+            if !allow.contains_key(cu.id.as_str()) {
+                failures.push(format!("{e:#}"));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n\n"));
+    Ok(())
+}

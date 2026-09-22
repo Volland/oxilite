@@ -2,7 +2,7 @@
 
 **An Oxigraph-compatible RDF database and SPARQL engine that uses SQLite as its storage engine. It runs anywhere SQLite runs, including Cloudflare D1.**
 
-> **Status: M1 (storage core) and M2 (full SPARQL 1.1 query compiled to SQL) implemented.** The Rust store, native backends and the Oxigraph compatibility harness work today; D1, Node/TypeScript packages, reasoning and validation are specified and being implemented milestone by milestone. See [Roadmap](#roadmap).
+> **Status: M1 (storage core), M2 (full SPARQL 1.1 query compiled to SQL) and M3 (atomic SPARQL Update, Cloudflare D1) implemented.** The Rust store, native backends, the D1 backend (Rust Workers and the `@oxilite/d1` TypeScript driver) and the Oxigraph compatibility harness work today; the Node.js package, reasoning and validation are specified and being implemented milestone by milestone. See [Roadmap](#roadmap).
 
 ---
 
@@ -200,10 +200,12 @@ database_id = "<id>"
 
 ```ts
 import { D1Store } from "@oxilite/d1";
+import wasm from "@oxilite/d1/oxilite.wasm";            // the oxilite core, compiled to WebAssembly
 
 export default {
   async fetch(req: Request, env: { DB: D1Database }): Promise<Response> {
-    const store = await D1Store.open(env.DB);           // init() is idempotent if you skip migrations
+    // `migrated: true` skips the (idempotent) schema DDL when the migration was applied.
+    const store = await D1Store.open(env.DB, { wasm, migrated: true });
     const url = new URL(req.url);
 
     if (req.method === "POST" && url.pathname === "/update") {
@@ -223,18 +225,21 @@ export default {
 ### 2b. Rust Worker
 
 ```rust
-use worker::*;
 use oxilite::{d1::D1Backend, AsyncStore};
+use worker::*;
 
+// oxilite = { version = "0.1", default-features = false, features = ["d1"] }
 #[event(fetch)]
 async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
-    let store = AsyncStore::open(D1Backend::new(env.d1("DB")?)).await.map_err(|e| e.to_string())?;
+    let store = AsyncStore::open_existing(D1Backend::new(env.d1("DB")?)).await.map_err(|e| e.to_string())?;
     let q = req.url()?.query_pairs().find(|(k, _)| k == "query").map(|(_, v)| v.into_owned())
         .unwrap_or_else(|| "ASK { ?s ?p ?o }".into());
-    let results = store.query(&q).await.map_err(|e| e.to_string())?;
-    Response::ok(results.to_json_string()?)
+    let out = store.query_output(q.as_str(), &Default::default()).await.map_err(|e| e.to_string())?;
+    Response::ok(oxilite_core::json::output_to_sparql_json(&out).map_err(|e| e.to_string())?)
 }
 ```
+
+A complete endpoint (`/sparql`, `/update`, `/load`, `/explain`) with its `wrangler.toml` and migration is in [`examples/d1-worker`](examples/d1-worker/); build it with `worker-build --release`.
 
 ### What oxilite does differently on D1
 
@@ -242,7 +247,8 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
 |---|---|
 | No extensions or user-defined functions | Every SPARQL function has a pure-SQL form or a rewrite. The few that don't (general `REGEX`, `REPLACE`, hashes) return a clear "unsupported on this backend" error, and `explain()` flags them. |
 | No interactive transactions; `batch()` is the only atomic unit | Every write is one batch. `DELETE/INSERT … WHERE` stages its WHERE results in `update_buffer` inside the same batch, so SPARQL's evaluate-then-apply semantics hold. |
-| Statement size limit (about 100 KB) and 100 bound parameters | Constants are inlined as escaped SQL literals and never bound. Large inserts are split into statements under the limit. |
+| Statement size limit (100 KB), 100 bound parameters, 50 statements per batch | Constants are inlined as escaped SQL literals and never bound. Generated SQL is kept under 90 KB (larger queries report `unsupported`), and large inserts are split into statements and batches under the limits. |
+| Parser limits: at most 5 terms in a compound SELECT, GLOB patterns up to 50 bytes | Large UNIONs are nested into groups of at most five, and lexical-form checks split their GLOB patterns into short pieces. |
 | JavaScript numbers lose precision above 2^53 | Ids (60-bit) are selected as TEXT and parsed in the core. |
 | Billed per row read and written | Few indexes, read-free writes, no per-write statistics updates, one statement per query, and deduplicated term resolution. |
 | Per-invocation query limits | Queries use 1–2 requests; bulk loads are chunked (and documented as non-atomic across chunks, like Oxigraph's `BulkLoader`). |
@@ -286,7 +292,7 @@ Intentional differences:
 | Compat harness | Oxigraph test ports + differential corpus | runs in CI for every milestone | in progress (W3C suites, store API tests and differential corpus pass; D1 and JS parts follow M3/bindings) |
 | **M1** Storage core | encoding, schema, backends, load/dump, BGP+FILTER → SQL, planner | W3C syntax suites + ported store API tests pass | ✅ done |
 | **M2** Full SPARQL 1.1 query | OPTIONAL, UNION, MINUS, aggregates, paths, subqueries, `explain()` | ≥ 95% W3C query suite | ✅ done: 100% pass, 95% of evaluations fully in SQL ([COMPATIBILITY.md](COMPATIBILITY.md)) |
-| **M3** Update + D1 | atomic SPARQL UPDATE, `oxilite-d1`, wasm core | W3C update suite on rusqlite and local D1 | specified |
+| **M3** Update + D1 | atomic SPARQL UPDATE, `oxilite-d1`, wasm core | W3C update suite on rusqlite and local D1 | done |
 | TS bindings | `@oxilite/node`, `@oxilite/d1` | node:test suites + Oxigraph JS tests | specified |
 | **M4** Reasoning | TBox closure, rewriting, OWL 2 RL | entailment tests; agreement with `reasonable` | specified |
 | **M5** Validation | rudof SHACL/ShEx | rudof suites over oxilite | specified |

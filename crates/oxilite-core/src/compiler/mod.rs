@@ -25,11 +25,18 @@ use std::fmt::Write;
 
 /// Per-query options.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(default, rename_all = "camelCase"))]
 pub struct QueryOptions {
     /// Treat the default graph as the union of all graphs (Oxigraph's `union_default_graph`).
     pub union_default_graph: bool,
     /// Let SQLite choose the join order instead of the oxilite planner (for benchmarking).
     pub sqlite_planner: bool,
+    /// Overrides the default graph with the merge of these graphs (term ids, 0 = default
+    /// graph), like Oxigraph's `default_graph` option.
+    pub default_graph: Option<Vec<i64>>,
+    /// Overrides the available named graphs (term ids).
+    pub named_graphs: Option<Vec<i64>>,
 }
 
 /// How a variable is represented in SQL.
@@ -305,7 +312,7 @@ impl<'a> Compiler<'a> {
         dataset: Option<&QueryDataset>,
         base_iri: Option<String>,
     ) -> Self {
-        let dataset = match dataset {
+        let mut dataset = match dataset {
             Some(ds) => Dataset {
                 default: DefaultGraph::List(
                     ds.default
@@ -313,13 +320,11 @@ impl<'a> Compiler<'a> {
                         .map(|g| named_node_id(g.as_str()))
                         .collect(),
                 ),
-                named: Some(
-                    ds.named
-                        .iter()
-                        .flatten()
-                        .map(|g| named_node_id(g.as_str()))
-                        .collect(),
-                ),
+                // `None` (e.g. `WITH`) leaves every named graph available, as in spareval.
+                named: ds
+                    .named
+                    .as_ref()
+                    .map(|n| n.iter().map(|g| named_node_id(g.as_str())).collect()),
             },
             None => Dataset {
                 default: if options.union_default_graph {
@@ -330,6 +335,12 @@ impl<'a> Compiler<'a> {
                 named: None,
             },
         };
+        if let Some(d) = &options.default_graph {
+            dataset.default = DefaultGraph::List(d.clone());
+        }
+        if let Some(n) = &options.named_graphs {
+            dataset.named = Some(n.clone());
+        }
         Self {
             stats,
             caps,
@@ -997,8 +1008,8 @@ impl<'a> Compiler<'a> {
                 n => b.from.push(FromItem {
                     join: Join::First,
                     item: format!(
-                        "({}) AS {}",
-                        vec!["SELECT 1"; n].join(" UNION ALL "),
+                        "(VALUES {}) AS {}",
+                        vec!["(1)"; n].join(","),
                         self.alias("u")
                     ),
                 }),

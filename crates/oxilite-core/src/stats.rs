@@ -13,6 +13,7 @@ use std::collections::HashMap;
 
 /// Per-predicate statistics.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PredicateStats {
     pub triples: f64,
     pub distinct_subjects: f64,
@@ -21,6 +22,7 @@ pub struct PredicateStats {
 
 /// Planner statistics loaded from `stats_pred` / `stats_class`.
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Stats {
     /// `true` when `optimize()` has been run at least once.
     pub available: bool,
