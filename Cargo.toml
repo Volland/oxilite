@@ -1,0 +1,20 @@
+[workspace]
+resolver = "2"
+members = ["crates/oxilite-core"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/pavlyshyn/oxilite"
+rust-version = "1.85"
+
+[workspace.dependencies]
+oxrdf = { version = "0.3.4", features = ["rdf-12"] }
+oxrdfio = { version = "0.2", features = ["rdf-12"] }
+spargebra = { version = "0.4.7", features = ["sparql-12"] }
+spareval = { version = "0.2.7", features = ["sparql-12"] }
+sparesults = { version = "0.3.4", features = ["sparql-12"] }
+oxsdatatypes = "0.2"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+thiserror = "2"
