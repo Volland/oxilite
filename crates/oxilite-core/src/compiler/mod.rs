@@ -13,6 +13,7 @@ pub mod plan;
 
 use crate::encoding::{encode_literal, named_node_id, term_id, EncodedRows, DEFAULT_GRAPH_ID};
 use crate::error::{Error, Result};
+use crate::reason::{Entailment, GraphFilter};
 use crate::sql::Capabilities;
 use crate::stats::Stats;
 use expr::V;
@@ -37,6 +38,10 @@ pub struct QueryOptions {
     pub default_graph: Option<Vec<i64>>,
     /// Overrides the available named graphs (term ids).
     pub named_graphs: Option<Vec<i64>>,
+    /// Entailment regime (default: none, like Oxigraph).
+    pub reasoning: crate::reason::Reasoning,
+    /// Also match materialized inferences (`quads_inf`, see `materialize()`).
+    pub include_inferred: bool,
 }
 
 /// How a variable is represented in SQL.
@@ -812,14 +817,16 @@ impl<'a> Compiler<'a> {
                     b.wheres.push(in_list(&format!("{q}.g"), &l));
                     let d = self.alias("d");
                     b.wheres.push(format!(
-                        "NOT EXISTS (SELECT 1 FROM quads {d} WHERE {d}.s = {q}.s AND {d}.p = {q}.p AND {d}.o = {q}.o AND {d}.g < {q}.g AND {})",
+                        "NOT EXISTS (SELECT 1 FROM {} {d} WHERE {d}.s = {q}.s AND {d}.p = {q}.p AND {d}.o = {q}.o AND {d}.g < {q}.g AND {})",
+                        self.entailment().base(),
                         in_list(&format!("{d}.g"), &l)
                     ));
                 }
                 DefaultGraph::Union => {
                     let d = self.alias("d");
+                    let base = self.entailment().base();
                     b.wheres.push(format!(
-                        "NOT EXISTS (SELECT 1 FROM quads {d} WHERE {d}.s = {q}.s AND {d}.p = {q}.p AND {d}.o = {q}.o AND {d}.g < {q}.g)"
+                        "NOT EXISTS (SELECT 1 FROM {base} {d} WHERE {d}.s = {q}.s AND {d}.p = {q}.p AND {d}.o = {q}.o AND {d}.g < {q}.g)"
                     ));
                 }
             },
@@ -845,6 +852,16 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
+    /// Builds entailed-triple sources for this query's reasoning options.
+    pub(crate) fn entailment(&self) -> Entailment<'a> {
+        Entailment {
+            reasoning: self.options.reasoning,
+            inferred: self.options.include_inferred,
+            transitive: &self.stats.transitive,
+            max_compound: self.caps.max_compound_select,
+        }
+    }
+
     /// Adds a `quads` alias bound to the three positions (in the current graph scope).
     pub(crate) fn quad_access(
         &mut self,
@@ -860,14 +877,42 @@ impl<'a> Compiler<'a> {
             Pos::Var(v) => b.cols.contains_key(&v) || me.outer_binding(v).is_some(),
         };
         let selective = bound(s, b, self) || bound(p, b, self) || bound(o, b, self);
+        let ent = self.entailment();
+        // With reasoning, a merged default graph is merged inside the derived table (so an
+        // entailed triple appears once), which then only exposes graph 0.
+        let merge = match (&self.scope, &self.dataset.default) {
+            (GraphScope::Default, DefaultGraph::Union) if ent.active() => {
+                Some(GraphFilter::Merge(None))
+            }
+            (GraphScope::Default, DefaultGraph::List(l)) if ent.active() && l.len() > 1 => {
+                Some(GraphFilter::Merge(Some(l.clone())))
+            }
+            _ => None,
+        };
+        let source = if ent.active() {
+            let c = |p: Pos| match p {
+                Pos::Const(id) => Some(id),
+                Pos::Var(_) => None,
+            };
+            ent.source(
+                c(s),
+                c(p),
+                c(o),
+                merge.as_ref().unwrap_or(&GraphFilter::Keep),
+            )
+        } else {
+            "quads".into()
+        };
         b.from.push(FromItem {
             join: if b.from.is_empty() { Join::First } else { join },
-            item: format!("quads {q}"),
+            item: format!("{source} {q}"),
         });
         self.bind_pos(b, &format!("{q}.s"), s)?;
         self.bind_pos(b, &format!("{q}.p"), p)?;
         self.bind_pos(b, &format!("{q}.o"), o)?;
-        self.graph_pos(b, &q, selective)?;
+        if merge.is_none() {
+            self.graph_pos(b, &q, selective)?;
+        }
         Ok(q)
     }
 

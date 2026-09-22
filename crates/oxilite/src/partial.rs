@@ -289,7 +289,7 @@ pub(crate) fn evaluate<B: SyncBackend + Send + Sync + 'static>(
     };
     let evaluator = QueryEvaluator::new().with_default_service_handler(handler);
     let mut prepared = evaluator.prepare(&rewritten);
-    let dataset = oxilite_core::fallback::SqlDataset::new(&*backend);
+    let dataset = oxilite_core::fallback::SqlDataset::new(&*backend).with_options(options)?;
     oxilite_core::fallback::apply_dataset_options(prepared.dataset_mut(), query, options, |id| {
         dataset.lookup(id).ok()
     });

@@ -161,11 +161,17 @@ impl EncodedQuads {
 
 /// `INSERT OR IGNORE INTO quads` statements.
 pub fn quad_insert_statements(quads: &[[i64; 4]], caps: &Capabilities) -> Vec<Statement> {
-    let mut c = Chunker::new(
-        "INSERT OR IGNORE INTO quads(s, p, o, g) VALUES ",
-        "",
-        caps.max_sql_len,
-    );
+    insert_statements_into("quads", quads, caps)
+}
+
+/// `INSERT OR IGNORE INTO <table>(s, p, o, g)` statements (`quads` or `quads_inf`).
+pub fn insert_statements_into(
+    table: &str,
+    quads: &[[i64; 4]],
+    caps: &Capabilities,
+) -> Vec<Statement> {
+    let prefix = format!("INSERT OR IGNORE INTO {table}(s, p, o, g) VALUES ");
+    let mut c = Chunker::new(&prefix, "", caps.max_sql_len);
     for [s, p, o, g] in quads {
         c.push(&format!("({s},{p},{o},{g})"));
     }

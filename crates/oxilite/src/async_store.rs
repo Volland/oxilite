@@ -133,7 +133,39 @@ impl<B: AsyncBackend> AsyncStore<B> {
         if !stmts.is_empty() {
             self.backend.execute(&Request::atomic(stmts)).await?;
         }
+        if oxilite_core::reason::update_touches_schema(&update) {
+            self.reload_stats().await?;
+        }
         Ok(())
+    }
+
+    /// Reloads statistics and the in-memory reasoning facts.
+    async fn reload_stats(&self) -> Result<()> {
+        let stats = run_async(&self.backend, ops::stats_job(self.caps())).await?;
+        *self.stats.borrow_mut() = stats;
+        Ok(())
+    }
+
+    async fn after_write<'a>(&self, quads: impl IntoIterator<Item = QuadRef<'a>>) -> Result<()> {
+        if quads.into_iter().any(oxilite_core::reason::is_schema_quad) {
+            self.reload_stats().await?;
+        }
+        Ok(())
+    }
+
+    /// Computes the OWL 2 RL closure into the inference table (SQL rules, one request per
+    /// round); returns the number of inferred triples.
+    pub async fn materialize(&self) -> Result<u64> {
+        run_async(
+            &self.backend,
+            ops::materialize_job(crate::store::MAX_MATERIALIZE_ROUNDS, self.caps()),
+        )
+        .await
+    }
+
+    /// Removes every materialized inference.
+    pub async fn clear_inferences(&self) -> Result<()> {
+        run_async(&self.backend, ops::clear_inferences_job()).await
     }
 
     pub async fn quads_for_pattern(
@@ -163,7 +195,10 @@ impl<B: AsyncBackend> AsyncStore<B> {
     }
 
     pub async fn insert<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool> {
-        Ok(run_async(&self.backend, ops::insert_job([quad.into()], self.caps())).await? > 0)
+        let quad = quad.into();
+        let added = run_async(&self.backend, ops::insert_job([quad], self.caps())).await? > 0;
+        self.after_write([quad]).await?;
+        Ok(added)
     }
 
     pub async fn extend(&self, quads: impl IntoIterator<Item = impl Into<Quad>>) -> Result<()> {
@@ -175,11 +210,14 @@ impl<B: AsyncBackend> AsyncStore<B> {
             )
             .await?;
         }
-        Ok(())
+        self.after_write(quads.iter().map(Quad::as_ref)).await
     }
 
     pub async fn remove<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool> {
-        Ok(run_async(&self.backend, ops::remove_job([quad.into()], self.caps())).await? > 0)
+        let quad = quad.into();
+        let removed = run_async(&self.backend, ops::remove_job([quad], self.caps())).await? > 0;
+        self.after_write([quad]).await?;
+        Ok(removed)
     }
 
     /// Loads a document. Atomic when it fits in one request of the backend; use
@@ -190,7 +228,14 @@ impl<B: AsyncBackend> AsyncStore<B> {
         reader: impl Read,
     ) -> Result<()> {
         let quads = parse_all(parser.into(), reader, None)?;
-        let req = ops::insert_request(quads.iter().map(Quad::as_ref), self.caps());
+        let mut req = ops::insert_request(quads.iter().map(Quad::as_ref), self.caps());
+        let schema = quads
+            .iter()
+            .any(|q| oxilite_core::reason::is_schema_quad(q.as_ref()));
+        if schema {
+            req.statements
+                .extend(oxilite_core::reason::closure_statements());
+        }
         if req.statements.len() > self.caps().max_statements {
             return Err(Error::Other(format!(
                 "document needs {} statements, more than one atomic request allows ({}); use bulk_load",
@@ -200,6 +245,9 @@ impl<B: AsyncBackend> AsyncStore<B> {
         }
         if !req.statements.is_empty() {
             self.backend.execute(&req).await?;
+        }
+        if schema {
+            self.reload_stats().await?;
         }
         Ok(())
     }
@@ -280,22 +328,26 @@ impl<B: AsyncBackend> AsyncStore<B> {
     }
 
     pub async fn clear_graph<'a>(&self, graph_name: impl Into<GraphNameRef<'a>>) -> Result<()> {
-        run_async(&self.backend, ops::clear_graph_job(graph_name.into())).await
+        run_async(&self.backend, ops::clear_graph_job(graph_name.into())).await?;
+        self.reload_stats().await
     }
 
     pub async fn remove_named_graph<'a>(
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> Result<bool> {
-        run_async(
+        let existed = run_async(
             &self.backend,
             ops::remove_named_graph_job(graph_name.into()),
         )
-        .await
+        .await?;
+        self.reload_stats().await?;
+        Ok(existed)
     }
 
     pub async fn clear(&self) -> Result<()> {
-        run_async(&self.backend, ops::clear_job()).await
+        run_async(&self.backend, ops::clear_job()).await?;
+        self.reload_stats().await
     }
 
     /// Refreshes planner statistics.

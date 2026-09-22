@@ -105,6 +105,25 @@ describe("D1Store (Oxigraph JS API, async)", () => {
     assert(plan.includes("statistics"), plan);
   });
 
+  // @lat: [[tests#D1#Reasoning on D1]]
+  it("reasons per query and materializes OWL 2 RL on D1", async () => {
+    await store.load(
+      `@prefix ex: <http://example.com/> . @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> . @prefix owl: <http://www.w3.org/2002/07/owl#> .
+       ex:Dog rdfs:subClassOf ex:Mammal . ex:Mammal rdfs:subClassOf ex:Animal . ex:rex a ex:Dog .
+       ex:ancestor a owl:TransitiveProperty . ex:a ex:ancestor ex:b . ex:b ex:ancestor ex:c .
+       ex:rex owl:sameAs ex:rexy . ex:rex ex:name "Rex" .`,
+      { format: "text/turtle" },
+    );
+    const animals = (await store.query("SELECT ?x WHERE { ?x a <http://example.com/Animal> }", { reasoning: "rdfs" })) as unknown[];
+    assert.strictEqual(animals.length, 1);
+    const anc = (await store.query("SELECT ?y WHERE { <http://example.com/a> <http://example.com/ancestor> ?y }", { reasoning: "owl-ql" })) as unknown[];
+    assert.strictEqual(anc.length, 2);
+    assert((await store.materialize()) > 0);
+    const r = (await store.query("SELECT ?n WHERE { <http://example.com/rexy> <http://example.com/name> ?n }", { include_inferred: true })) as Map<string, Term>[];
+    assert.strictEqual(r[0]?.get("n")?.value, "Rex");
+    await store.clearInferences();
+  });
+
   it("collision errors are typed", () => {
     assert(new OxiliteCollisionError("x") instanceof Error);
   });

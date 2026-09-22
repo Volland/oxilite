@@ -34,6 +34,8 @@ TBox closure, RDFS / OWL-QL query rewriting and opt-in OWL 2 RL materialization.
 
 Done when hand-written entailment tests pass and materialization agrees with `reasonable` on sample ontologies.
 
+Status: done. RDFS and OWL QL rewriting and the SQL OWL 2 RL rules pass the entailment tests on bundled SQLite, the system `libsqlite3` and D1 (Miniflare), and agree with `reasonable` on five sample ontologies.
+
 ## M5 Validation
 
 rudof `srdf` traits on the native store and the D1 prefetch adapter for SHACL and ShEx. Change: `m5-validation`.

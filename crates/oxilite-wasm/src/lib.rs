@@ -118,6 +118,53 @@ impl Engine {
         })
     }
 
+    /// Runs `job`, then reloads statistics (the in-memory reasoning facts) when `reload`.
+    fn reloading(&self, job: Job, reload: bool) -> Job {
+        if !reload {
+            return job;
+        }
+        let stats = Rc::clone(&self.stats);
+        let caps = self.caps.clone();
+        let mut inner = job.step;
+        let mut value: Option<Value> = None;
+        let mut reloader: Option<oxilite_core::job::OneShot<Stats>> = None;
+        Job {
+            step: Box::new(move |r| {
+                let r = match reloader.as_mut() {
+                    Some(j) => j.step(r)?,
+                    None => match inner(r)? {
+                        Step::Execute(q) => return Ok(Step::Execute(q)),
+                        Step::Done(v) => {
+                            value = Some(v);
+                            reloader.insert(ops::stats_job(&caps)).step(None)?
+                        }
+                    },
+                };
+                match r {
+                    Step::Execute(q) => Ok(Step::Execute(q)),
+                    Step::Done(s) => {
+                        *stats.borrow_mut() = s;
+                        Ok(Step::Done(value.take().unwrap_or(Value::Null)))
+                    }
+                }
+            }),
+        }
+    }
+
+    /// Computes the OWL 2 RL closure into the inference table (one batch per rule round);
+    /// the result is `{"kind": "number"}`, the number of inferred triples.
+    pub fn materialize(&self) -> Job {
+        wrap(ops::materialize_job(1000, &self.caps), |n| {
+            Ok(json!({"kind": "number", "value": n}))
+        })
+    }
+
+    /// Removes every materialized inference.
+    #[wasm_bindgen(js_name = clearInferences)]
+    pub fn clear_inferences(&self) -> Job {
+        wrap(ops::clear_inferences_job(), |_| ok())
+    }
+
     /// Creates the schema if needed and loads planner statistics.
     pub fn open(&self) -> Job {
         self.stats_job(ops::open_job(&self.options, &self.caps))
@@ -221,14 +268,15 @@ impl Engine {
                 }
             }
         }
-        Ok(wrap(
+        let job = wrap(
             Sequence::new(if stmts.is_empty() {
                 Vec::new()
             } else {
                 vec![Request::atomic(stmts)]
             }),
             |_| ok(),
-        ))
+        );
+        Ok(self.reloading(job, oxilite_core::reason::update_touches_schema(&u)))
     }
 
     /// How an update would run (SQL per operation).
@@ -276,7 +324,14 @@ impl Engine {
         graph: Option<String>,
     ) -> Result<Job, JsError> {
         let quads = self.parse(data, format_name, base, graph)?;
-        let req = ops::insert_request(quads.iter().map(Quad::as_ref), &self.caps);
+        let mut req = ops::insert_request(quads.iter().map(Quad::as_ref), &self.caps);
+        let schema = quads
+            .iter()
+            .any(|q| oxilite_core::reason::is_schema_quad(q.as_ref()));
+        if schema {
+            req.statements
+                .extend(oxilite_core::reason::closure_statements());
+        }
         if req.statements.len() > self.caps.max_statements {
             return Err(js(format!(
                 "the document needs {} statements, more than one D1 batch allows ({}); use bulkLoad",
@@ -284,7 +339,7 @@ impl Engine {
                 self.caps.max_statements
             )));
         }
-        Ok(wrap(Sequence::new(vec![req]), |_| ok()))
+        Ok(self.reloading(wrap(Sequence::new(vec![req]), |_| ok()), schema))
     }
 
     /// Loads a document in several batches (not atomic), then refreshes statistics.
@@ -347,19 +402,27 @@ impl Engine {
     /// Inserts quads (JSON array of RDF/JS quads) atomically.
     pub fn add(&self, quads: &str) -> Result<Job, JsError> {
         let quads = parse_quads(quads)?;
-        Ok(wrap(
+        let schema = quads
+            .iter()
+            .any(|q| oxilite_core::reason::is_schema_quad(q.as_ref()));
+        let job = wrap(
             ops::insert_job(quads.iter().map(Quad::as_ref), &self.caps),
             |n| Ok(json!({"kind": "number", "value": n})),
-        ))
+        );
+        Ok(self.reloading(job, schema))
     }
 
     /// Removes quads (JSON array of RDF/JS quads) atomically.
     pub fn delete(&self, quads: &str) -> Result<Job, JsError> {
         let quads = parse_quads(quads)?;
-        Ok(wrap(
+        let schema = quads
+            .iter()
+            .any(|q| oxilite_core::reason::is_schema_quad(q.as_ref()));
+        let job = wrap(
             ops::remove_job(quads.iter().map(Quad::as_ref), &self.caps),
             |n| Ok(json!({"kind": "number", "value": n})),
-        ))
+        );
+        Ok(self.reloading(job, schema))
     }
 
     /// Does the store contain a quad (JSON RDF/JS quad)?
@@ -454,7 +517,7 @@ impl Engine {
 
     /// Removes everything.
     pub fn clear(&self) -> Job {
-        wrap(ops::clear_job(), |_| ok())
+        self.reloading(wrap(ops::clear_job(), |_| ok()), true)
     }
 }
 

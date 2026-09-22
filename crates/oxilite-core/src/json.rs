@@ -201,6 +201,10 @@ pub struct JsQueryOptions {
     pub default_graph: Option<Value>,
     pub named_graphs: Option<Vec<Value>>,
     pub results_format: Option<String>,
+    /// `"none"` (default), `"rdfs"` or `"owl-ql"`.
+    pub reasoning: crate::reason::Reasoning,
+    /// Also match materialized inferences.
+    pub include_inferred: bool,
 }
 
 impl JsQueryOptions {
@@ -224,6 +228,8 @@ impl JsQueryOptions {
                 .as_ref()
                 .map(|a| a.iter().map(gid).collect::<Result<_>>())
                 .transpose()?,
+            reasoning: self.reasoning,
+            include_inferred: self.include_inferred,
             ..crate::QueryOptions::default()
         })
     }

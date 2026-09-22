@@ -13,6 +13,7 @@ pub mod job;
 pub mod json;
 pub mod ops;
 pub mod query;
+pub mod reason;
 pub mod resolve;
 pub mod schema;
 pub mod sql;

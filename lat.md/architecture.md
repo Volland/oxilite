@@ -160,9 +160,13 @@ The wasm build of the core exposes the step machine to JavaScript, so a TypeScri
 
 ## Reasoning
 
-RDFS/OWL-QL reasoning by query rewriting against a small materialized TBox closure; full OWL 2 RL materialization is explicit and opt-in. Delivered in M4.
+RDFS/OWL-QL reasoning by query rewriting against a small materialized TBox closure; full OWL 2 RL materialization is explicit and opt-in. Delivered in M4, see [[crates/oxilite-core/src/reason.rs]].
 
-`tbox_closure(kind, sub, sup)` holds transitive subClassOf/subPropertyOf plus inverse, symmetric, transitive, domain and range facts; it is recomputed on `optimize()` and schema changes. Reasoning is chosen per query (`None | Rdfs | OwlQl`, default `None` like Oxigraph). `materialize()` writes OWL 2 RL inferences into `quads_inf` using SQL fixpoint rules (D1) or `reasonable` (native), rebuilt from scratch.
+`tbox_closure(kind, sub, sup)` holds the class closure (subClassOf and equivalentClass), the RDFS and OWL property closures (OWL composes subPropertyOf, equivalentProperty, inverseOf and symmetric properties with a direction bit), transitive properties, and the classes a property's subjects and objects belong to (domains and ranges through sub-properties, super-classes and inverses). It is computed from asserted quads of every graph by recursive CTEs, recomputed by `optimize()` and inside the same atomic request as any write that touches schema triples; stores then reload the transitive properties, which live in memory with the statistics.
+
+Reasoning is chosen per query (`QueryOptions::reasoning`: `None | Rdfs | OwlQl`, default `None` like Oxigraph). The compiler swaps each pattern's `quads` table for a derived table of entailed triples (a `SELECT DISTINCT` over UNION ALL arms: asserted, sub/inverse properties, types through the class closure, domains and ranges), so queries stay single statements and paths, OPTIONAL and the fallback all see the same entailments. A transitive property becomes a recursive CTE, walked from a constant endpoint when there is one. With a merged default graph the derived table merges graphs itself, so each entailed triple appears once. Literals never become subjects.
+
+`materialize()` runs OWL 2 RL rules as `INSERT OR IGNORE INTO quads_inf … SELECT` statements over asserted plus inferred triples (all graphs merged, conclusions in graph 0, triples already asserted there skipped), one atomic request per round until a round adds nothing: the same code on SQLite, dlopen and D1 (where a round is one batch, and the whole run is not atomic). The rules are the ones `reasonable` implements (equality, property axioms, class expressions including lists and property chains, `scm-sco`, `scm-eqc1`, and `owl:Thing` typing); `materialize_with_reasonable()` (feature `reasonable`, crate `oxilite-reason`) computes the same closure in memory, and an agreement test checks both on sample ontologies. `include_inferred` makes queries read `quads ∪ quads_inf`.
 
 ## Validation
 

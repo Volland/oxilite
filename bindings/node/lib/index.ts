@@ -34,6 +34,8 @@ interface NativeStoreInstance {
   size(): number;
   dump(format: string, fromGraph?: string | null): string;
   optimize(): void;
+  materialize(reasonable?: boolean | null): number;
+  clearInferences(): void;
   clear(): void;
   backup(path: string): void;
 }
@@ -153,6 +155,21 @@ export class Store {
 
   match(subject?: TermLike | null, predicate?: TermLike | null, object?: TermLike | null, graph?: TermLike | null): Quad[] {
     return outputToResult(JSON.parse(this.native.match(j(subject), j(predicate), j(object), j(graph))) as Output) as Quad[];
+  }
+
+  /**
+   * Computes the OWL 2 RL closure into a separate inference table (replacing earlier
+   * inferences); query it with `include_inferred: true`. `engine: "reasonable"` computes it
+   * in memory with the `reasonable` reasoner (faster, same results). Returns the number of
+   * inferred triples.
+   */
+  materialize(options: { engine?: "sql" | "reasonable" } = {}): number {
+    return this.native.materialize(options.engine === "reasonable");
+  }
+
+  /** Removes every materialized inference. */
+  clearInferences(): void {
+    this.native.clearInferences();
   }
 
   /** Refreshes planner statistics (run after large imports). */

@@ -9,7 +9,7 @@
 use crate::encoding::rdf_type_id;
 use crate::error::Result;
 use crate::sql::{col, expect_len, Capabilities, Request, Response, Statement};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 /// Per-predicate statistics.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -31,6 +31,8 @@ pub struct Stats {
     /// Instance count per `rdf:type` class.
     pub classes: HashMap<i64, f64>,
     pub graph_index: bool,
+    /// Transitive properties (from `tbox_closure`), for query-time reasoning.
+    pub transitive: BTreeSet<i64>,
 }
 
 fn id_col(caps: &Capabilities, c: &str) -> String {
@@ -54,11 +56,12 @@ impl Stats {
                 "SELECT {}, instances FROM stats_class",
                 id_col(caps, "o")
             )),
+            crate::reason::transitive_statement(|c| id_col(caps, c)),
         ])
     }
 
     pub fn from_response(response: &Response) -> Result<Self> {
-        expect_len(response, 3)?;
+        expect_len(response, 4)?;
         let mut stats = Self::default();
         for row in &response[0].rows {
             let key = col(row, 0)?.as_str().unwrap_or_default();
@@ -95,12 +98,23 @@ impl Stats {
                 stats.classes.insert(o, n);
             }
         }
+        for row in &response[3].rows {
+            if let Some(p) = col(row, 0)?.as_i64() {
+                stats.transitive.insert(p);
+            }
+        }
         Ok(stats)
     }
 
-    /// Statements recomputing statistics (run by `optimize()`).
+    /// Statements recomputing statistics and the schema closure (run by `optimize()`).
     pub fn refresh_request() -> Request {
-        Request::atomic(vec![
+        let mut r = Self::refresh_statements();
+        r.extend(crate::reason::closure_statements());
+        Request::atomic(r)
+    }
+
+    fn refresh_statements() -> Vec<Statement> {
+        vec![
             "DELETE FROM stats_pred".into(),
             "INSERT INTO stats_pred(p, triples, distinct_s, distinct_o) \
              SELECT p, COUNT(*), COUNT(DISTINCT s), COUNT(DISTINCT o) FROM quads GROUP BY p"
@@ -112,6 +126,6 @@ impl Stats {
             )),
             "INSERT OR REPLACE INTO oxilite_meta(key, value) SELECT 'total', CAST(COUNT(*) AS TEXT) FROM quads"
                 .into(),
-        ])
+        ]
     }
 }

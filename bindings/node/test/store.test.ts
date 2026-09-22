@@ -73,6 +73,26 @@ describe("@oxilite/node", () => {
     assert.throws(() => store.update("CREATE GRAPH <http://example.com/g>"), /already exists/);
   });
 
+  // @lat: [[tests#Node#Reasoning options]]
+  it("reasons per query and materializes OWL 2 RL", () => {
+    const store = new Store();
+    store.load(
+      `@prefix ex: <http://example.com/> . @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> . @prefix owl: <http://www.w3.org/2002/07/owl#> .
+       ex:Dog rdfs:subClassOf ex:Animal . ex:rex a ex:Dog . ex:rex owl:sameAs ex:rexy . ex:rex ex:name "Rex" .`,
+      { format: "text/turtle" },
+    );
+    const q = "SELECT ?x WHERE { ?x a <http://example.com/Animal> }";
+    assert.strictEqual((store.query(q) as unknown[]).length, 0);
+    assert.strictEqual((store.query(q, { reasoning: "rdfs" }) as unknown[]).length, 1);
+    for (const engine of ["sql", "reasonable"] as const) {
+      assert(store.materialize({ engine }) > 0);
+      const r = store.query("SELECT ?n WHERE { <http://example.com/rexy> <http://example.com/name> ?n }", { include_inferred: true }) as Map<string, Term>[];
+      assert.strictEqual(r[0]?.get("n")?.value, "Rex");
+    }
+    store.clearInferences();
+    assert.strictEqual((store.query(q, { include_inferred: true }) as unknown[]).length, 0);
+  });
+
   it("schema SQL", () => {
     assert(Store.schemaSql().includes("CREATE TABLE IF NOT EXISTS quads"));
   });

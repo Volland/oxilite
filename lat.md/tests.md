@@ -144,6 +144,34 @@ An update whose later operation fails (`CREATE GRAPH` on an existing graph) abor
 
 A 6000-triple bulk load is split into batches under D1's statement limits, all triples arrive, and statistics are refreshed for `explain()`.
 
+### Reasoning on D1
+
+RDFS subclass chains, an OWL transitive property and SQL-rule materialization (one D1 batch per round) work on a Miniflare D1 database.
+
+## Reasoning
+
+Query-time RDFS / OWL QL rewriting and OWL 2 RL materialization, each test run on the bundled SQLite and on the system `libsqlite3`, see [[architecture#Reasoning]].
+
+### Default has no inference
+
+A subclass axiom and an instance give no entailed type without reasoning, and the entailed type with `Reasoning::Rdfs`.
+
+### Transitive subclass chain
+
+A ⊑ B ⊑ C types instances of A as C; SPARQL updates that add or delete schema triples change query answers immediately, and `rdfs:subClassOf` patterns are answered from the closure.
+
+### Reasoning keeps single statements
+
+A reasoned BGP compiles fully to one SQL statement that reads `tbox_closure`.
+
+### Materialize then query
+
+`materialize()` derives facts through `owl:sameAs`, subclasses and inverse properties; they are visible only with `include_inferred`, re-running replaces them, and `clear_inferences()` removes them.
+
+### Agreement with reasonable
+
+On five sample ontologies (RDFS, property axioms, equality, class expressions with lists and chains, schema cycles) the SQL rules and the `reasonable` crate produce exactly the same closure.
+
 ## Node
 
 `@oxilite/node` tests over the napi-rs addon, next to the verbatim port of Oxigraph's `js/test/store.test.ts`, see [[architecture#Bindings]]. The port's failures must match `js:` entries of `testsuite/allowlist.toml`.
@@ -151,6 +179,10 @@ A 6000-triple bulk load is split into batches under D1's statement limits, all t
 ### File store persists across processes
 
 A child Node process writes a quad to a SQLite file; a store reopened on that file in the test process sees it.
+
+### Reasoning options
+
+`reasoning: "rdfs"` entails types per query, and `materialize()` with both engines (`sql`, `reasonable`) makes `owl:sameAs` facts visible with `include_inferred`.
 
 ### Explain returns SQL
 

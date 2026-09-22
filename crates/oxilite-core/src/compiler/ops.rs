@@ -604,8 +604,9 @@ impl Compiler<'_> {
         } else {
             format!(" WHERE {}", blk.wheres.join(" AND "))
         };
+        let item = &blk.from[0].item; // `quads q`, or the entailed-triple source
         Ok(format!(
-            "SELECT {q}.s AS n, {g} AS g FROM quads {q}{w} UNION SELECT {q}.o, {g} FROM quads {q}{w}"
+            "SELECT {q}.s AS n, {g} AS g FROM {item}{w} UNION SELECT {q}.o, {g} FROM {item}{w}"
         ))
     }
 

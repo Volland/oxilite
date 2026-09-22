@@ -249,6 +249,24 @@ impl NativeStore {
         String::from_utf8(bytes).map_err(err)
     }
 
+    /// Computes the OWL 2 RL closure into the inference table, with SQL rules or (`reasonable`)
+    /// in memory; returns the number of inferred triples.
+    #[napi]
+    pub fn materialize(&self, reasonable: Option<bool>) -> Result<f64> {
+        let n = if reasonable.unwrap_or(false) {
+            with_store!(self, s => s.materialize_with_reasonable())
+        } else {
+            with_store!(self, s => s.materialize())
+        };
+        Ok(n.map_err(err)? as f64)
+    }
+
+    /// Removes every materialized inference.
+    #[napi]
+    pub fn clear_inferences(&self) -> Result<()> {
+        with_store!(self, s => s.clear_inferences()).map_err(err)
+    }
+
     /// Refreshes planner statistics (run after large imports).
     #[napi]
     pub fn optimize(&self) -> Result<()> {

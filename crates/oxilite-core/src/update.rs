@@ -454,6 +454,10 @@ pub fn plan_update_with(
             },
         });
     }
+    // Writes to schema triples keep the reasoning closure current, in the same transaction.
+    if crate::reason::update_touches_schema(update) {
+        out.push(PlannedOp::Sql(crate::reason::closure_statements()));
+    }
     Ok(out)
 }
 

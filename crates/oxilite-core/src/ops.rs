@@ -91,10 +91,17 @@ pub fn insert_job<'a>(
     quads: impl IntoIterator<Item = QuadRef<'a>>,
     caps: &Capabilities,
 ) -> OneShot<u64> {
+    let quads: Vec<QuadRef<'a>> = quads.into_iter().collect();
+    let schema = quads.iter().any(|q| crate::reason::is_schema_quad(*q));
     let enc = EncodedQuads::new(quads);
     let quad_stmts = crate::writer::quad_insert_statements(&enc.quads, caps).len();
-    let stmts = enc.insert_statements(caps);
-    OneShot::new(Request::atomic(stmts), move |r| {
+    let mut stmts = enc.insert_statements(caps);
+    let end = stmts.len();
+    if schema {
+        stmts.extend(crate::reason::closure_statements());
+    }
+    OneShot::new(Request::atomic(stmts), move |mut r| {
+        r.truncate(end);
         Ok(count_tail(&r, quad_stmts))
     })
 }
@@ -112,10 +119,16 @@ pub fn remove_job<'a>(
     quads: impl IntoIterator<Item = QuadRef<'a>>,
     caps: &Capabilities,
 ) -> OneShot<u64> {
+    let quads: Vec<QuadRef<'a>> = quads.into_iter().collect();
+    let schema = quads.iter().any(|q| crate::reason::is_schema_quad(*q));
     let enc = EncodedQuads::new(quads);
-    let stmts = enc.delete_statements(caps);
-    OneShot::new(Request::atomic(stmts), |r| {
-        Ok(r.iter().map(|rs| rs.changes).sum())
+    let mut stmts = enc.delete_statements(caps);
+    let end = stmts.len();
+    if schema {
+        stmts.extend(crate::reason::closure_statements());
+    }
+    OneShot::new(Request::atomic(stmts), move |r| {
+        Ok(r.iter().take(end).map(|rs| rs.changes).sum())
     })
 }
 
@@ -333,24 +346,22 @@ pub fn insert_named_graph_job(g: NamedOrBlankNodeRef<'_>, caps: &Capabilities) -
 /// Removes a named graph and its quads; returns whether it existed.
 pub fn remove_named_graph_job(g: NamedOrBlankNodeRef<'_>) -> OneShot<bool> {
     let id = subject_id(g);
-    OneShot::new(
-        Request::atomic(vec![
-            Statement::new(format!("DELETE FROM quads WHERE g = {id}")),
-            Statement::new(format!("DELETE FROM graphs WHERE id = {id}")),
-        ]),
-        |r| Ok(r.iter().any(|rs| rs.changes > 0)),
-    )
+    let mut stmts = vec![
+        Statement::new(format!("DELETE FROM quads WHERE g = {id}")),
+        Statement::new(format!("DELETE FROM graphs WHERE id = {id}")),
+    ];
+    stmts.extend(crate::reason::closure_statements());
+    OneShot::new(Request::atomic(stmts), |r| {
+        Ok(r.iter().take(2).any(|rs| rs.changes > 0))
+    })
 }
 
 /// Removes all quads of a graph (keeps the graph name).
 pub fn clear_graph_job(g: GraphNameRef<'_>) -> OneShot<()> {
     let id = graph_id(g);
-    OneShot::new(
-        Request::atomic(vec![Statement::new(format!(
-            "DELETE FROM quads WHERE g = {id}"
-        ))]),
-        |_| Ok(()),
-    )
+    let mut stmts = vec![Statement::new(format!("DELETE FROM quads WHERE g = {id}"))];
+    stmts.extend(crate::reason::closure_statements());
+    OneShot::new(Request::atomic(stmts), |_| Ok(()))
 }
 
 /// Removes everything.
@@ -358,6 +369,8 @@ pub fn clear_job() -> OneShot<()> {
     OneShot::new(
         Request::atomic(vec![
             "DELETE FROM quads".into(),
+            "DELETE FROM quads_inf".into(),
+            "DELETE FROM tbox_closure".into(),
             "DELETE FROM graphs".into(),
             "DELETE FROM triple_terms".into(),
             "DELETE FROM terms".into(),
@@ -369,4 +382,55 @@ pub fn clear_job() -> OneShot<()> {
 /// Helper used by drivers: encodes a term to its id without I/O.
 pub fn encode_term(t: &Term) -> i64 {
     term_id(t.as_ref())
+}
+
+/// Recomputes the OWL 2 RL materialization (`quads_inf`): discards previous inferences, then
+/// runs rule rounds (one atomic request each, i.e. one D1 batch) until a round infers nothing.
+/// Returns the number of inferred triples. Rounds are not one transaction: readers may see a
+/// partial materialization while it runs.
+pub fn materialize_job(max_rounds: usize, caps: &Capabilities) -> impl Job<Output = u64> {
+    struct Materialize {
+        reset: Option<Request>,
+        round: usize,
+        max_rounds: usize,
+        counting: bool,
+    }
+    impl Job for Materialize {
+        type Output = u64;
+        fn step(&mut self, response: Option<Response>) -> Result<Step<u64>> {
+            if let Some(r) = self.reset.take() {
+                return Ok(Step::Execute(r));
+            }
+            if self.counting {
+                return Ok(Step::Done(
+                    scalar(&response.unwrap_or_default()).max(0) as u64
+                ));
+            }
+            let changed: u64 = response.iter().flatten().map(|rs| rs.changes).sum();
+            if self.round > 0 && (changed == 0 || self.round >= self.max_rounds) {
+                self.counting = true;
+                return Ok(Step::Execute(Request::read(vec![
+                    "SELECT COUNT(*) FROM quads_inf".into(),
+                ])));
+            }
+            self.round += 1;
+            Ok(Step::Execute(Request::atomic(
+                crate::reason::materialize_round(),
+            )))
+        }
+    }
+    Materialize {
+        reset: Some(Request::atomic(crate::reason::materialize_reset(caps))),
+        round: 0,
+        max_rounds,
+        counting: false,
+    }
+}
+
+/// Removes every materialized inference.
+pub fn clear_inferences_job() -> OneShot<()> {
+    OneShot::new(
+        Request::atomic(vec![Statement::new("DELETE FROM quads_inf")]),
+        |_| Ok(()),
+    )
 }

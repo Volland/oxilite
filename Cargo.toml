@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/oxilite-core", "crates/oxilite-rusqlite", "crates/oxilite-dylib", "crates/oxilite", "testsuite", "crates/oxilite-wasm", "crates/oxilite-d1", "bindings/node"]
+members = ["crates/oxilite-core", "crates/oxilite-rusqlite", "crates/oxilite-dylib", "crates/oxilite", "testsuite", "crates/oxilite-wasm", "crates/oxilite-d1", "bindings/node", "crates/oxilite-reason"]
 
 [workspace.package]
 version = "0.1.0"
@@ -30,6 +30,7 @@ oxilite-rusqlite = { path = "crates/oxilite-rusqlite", version = "0.1.0" }
 oxilite-dylib = { path = "crates/oxilite-dylib", version = "0.1.0" }
 oxilite = { path = "crates/oxilite", version = "0.1.0" }
 oxilite-d1 = { path = "crates/oxilite-d1", version = "0.1.0" }
+oxilite-reason = { path = "crates/oxilite-reason", version = "0.1.0" }
 
 # Small WebAssembly builds for Workers (1 MB / 10 MB script limits).
 [profile.wasm-release]

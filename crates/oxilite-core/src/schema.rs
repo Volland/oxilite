@@ -68,6 +68,16 @@ pub fn create_schema(options: &StoreOptions) -> Request {
         "CREATE TABLE IF NOT EXISTS stats_pred (\
             p INTEGER PRIMARY KEY, triples INTEGER NOT NULL, distinct_s INTEGER NOT NULL, distinct_o INTEGER NOT NULL) STRICT",
         "CREATE TABLE IF NOT EXISTS stats_class (o INTEGER PRIMARY KEY, instances INTEGER NOT NULL) STRICT",
+        // Reasoning: the schema closure (see `reason::closure_statements`) and materialized
+        // OWL 2 RL inferences, kept apart from asserted quads.
+        "CREATE TABLE IF NOT EXISTS tbox_closure (\
+            kind INTEGER NOT NULL, sub INTEGER NOT NULL, sup INTEGER NOT NULL, PRIMARY KEY (kind, sup, sub)) WITHOUT ROWID, STRICT",
+        "CREATE INDEX IF NOT EXISTS tbox_closure_sub ON tbox_closure(kind, sub, sup)",
+        "CREATE TABLE IF NOT EXISTS quads_inf (\
+            s INTEGER NOT NULL, p INTEGER NOT NULL, o INTEGER NOT NULL, g INTEGER NOT NULL DEFAULT 0, \
+            PRIMARY KEY (s, p, o, g)) WITHOUT ROWID, STRICT",
+        "CREATE INDEX IF NOT EXISTS quads_inf_posg ON quads_inf(p, o, s, g)",
+        "CREATE INDEX IF NOT EXISTS quads_inf_ospg ON quads_inf(o, s, p, g)",
         // Staging table for SPARQL UPDATE (DELETE/INSERT … WHERE) inside one atomic batch.
         "CREATE TABLE IF NOT EXISTS update_buffer (\
             op INTEGER NOT NULL, s INTEGER NOT NULL, p INTEGER NOT NULL, o INTEGER NOT NULL, g INTEGER NOT NULL) STRICT",

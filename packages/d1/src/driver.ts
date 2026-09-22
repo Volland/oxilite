@@ -54,6 +54,8 @@ export interface WasmEngine {
   size(): WasmJob;
   dump(format: string, graph?: string | null): WasmJob;
   clear(): WasmJob;
+  materialize(): WasmJob;
+  clearInferences(): WasmJob;
   schemaSql(): string;
 }
 export type EngineConstructor = new (capabilities?: string | null, options?: string | null) => WasmEngine;
@@ -216,6 +218,20 @@ export class D1Store {
   /** Number of quads. */
   async size(): Promise<number> {
     return ((await this.run(this.engine.size())) as { value: number }).value;
+  }
+
+  /**
+   * Computes the OWL 2 RL closure into a separate inference table with SQL rules (one D1
+   * batch per round; not atomic as a whole). Query it with `include_inferred: true`.
+   * Returns the number of inferred triples.
+   */
+  async materialize(): Promise<number> {
+    return ((await this.run(this.engine.materialize())) as { value: number }).value;
+  }
+
+  /** Removes every materialized inference. */
+  async clearInferences(): Promise<void> {
+    await this.run(this.engine.clearInferences());
   }
 
   /** Refreshes planner statistics (run after large imports). */

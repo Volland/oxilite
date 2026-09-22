@@ -47,6 +47,7 @@ pub mod io {
 
 /// SPARQL types (like `oxigraph::sparql`).
 pub mod sparql {
+    pub use oxilite_core::reason::Reasoning;
     pub use oxilite_core::QueryOptions;
     pub use oxrdf::{Variable, VariableNameParseError};
     pub use spareval::{

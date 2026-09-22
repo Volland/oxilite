@@ -2,7 +2,7 @@
 
 **An Oxigraph-compatible RDF database and SPARQL engine that uses SQLite as its storage engine. It runs anywhere SQLite runs, including Cloudflare D1.**
 
-> **Status: M1 (storage core), M2 (full SPARQL 1.1 query compiled to SQL) and M3 (atomic SPARQL Update, Cloudflare D1) implemented.** The Rust store, native backends, the D1 backend (Rust Workers and the `@oxilite/d1` TypeScript driver) and the Oxigraph compatibility harness work today; the Node.js package, reasoning and validation are specified and being implemented milestone by milestone. See [Roadmap](#roadmap).
+> **Status: M1 (storage core), M2 (full SPARQL 1.1 query compiled to SQL), M3 (atomic SPARQL Update, Cloudflare D1), the TypeScript packages and M4 (RDFS / OWL reasoning) implemented.** The Rust store, native backends, the D1 backend, `@oxilite/node`, `@oxilite/d1`, reasoning and the Oxigraph compatibility harness work today; validation and the performance milestone are specified and being implemented milestone by milestone. See [Roadmap](#roadmap).
 
 ---
 
@@ -284,7 +284,26 @@ Intentional differences:
 
 ## Reasoning and validation
 
-- **Reasoning (M4).** Per-query `Rdfs` / `OwlQl` entailment by rewriting against a small materialized TBox closure. Queries stay single statements and there are no extra writes. OWL 2 RL materialization is available on request via `materialize()`, using SQL fixpoint rules everywhere and `reasonable` natively.
+- **Reasoning (M4).** Per-query `Rdfs` / `OwlQl` entailment by rewriting against a small materialized TBox closure. Queries stay single statements and there are no extra writes. OWL 2 RL materialization is available on request via `materialize()`, using SQL fixpoint rules everywhere (D1 included) and, natively, `reasonable` (feature `reasonable`), with identical results.
+
+```rust
+use oxilite::sparql::{QueryOptions, Reasoning};
+
+// ex:Dog rdfs:subClassOf ex:Animal . ex:rex a ex:Dog .
+let opts = QueryOptions { reasoning: Reasoning::Rdfs, ..Default::default() };
+let out = store.query_output("SELECT ?x WHERE { ?x a <http://ex/Animal> }", &opts)?;   // ex:rex
+
+store.materialize()?;                                   // OWL 2 RL closure into quads_inf
+let opts = QueryOptions { include_inferred: true, ..Default::default() };
+```
+
+```ts
+store.query("SELECT ?x WHERE { ?x a ex:Animal }", { reasoning: "rdfs" });    // or "owl-ql"
+await d1store.materialize();                                                  // SQL rules, one D1 batch per round
+d1store.query(q, { include_inferred: true });
+```
+
+The schema closure is refreshed by `optimize()` and automatically, in the same transaction, by any write that touches `rdfs:subClassOf`, `rdfs:subPropertyOf`, `rdfs:domain`, `rdfs:range`, `owl:equivalentClass`, `owl:equivalentProperty`, `owl:inverseOf` or symmetric/transitive property declarations. Materialized inferences are not maintained: re-run `materialize()` after changing data. D1 databases created by an older migration need the new `tbox_closure` and `quads_inf` tables (re-run `npx oxilite-d1 schema`; every statement is `IF NOT EXISTS`).
 - **Validation (M5).** SHACL and ShEx through rudof, unchanged. Native stores implement rudof's `srdf` traits directly. On D1, the relevant subgraph is prefetched in a few batched queries (with a size limit).
 
 ---
@@ -298,7 +317,7 @@ Intentional differences:
 | **M2** Full SPARQL 1.1 query | OPTIONAL, UNION, MINUS, aggregates, paths, subqueries, `explain()` | ≥ 95% W3C query suite | ✅ done: 100% pass, 95% of evaluations fully in SQL ([COMPATIBILITY.md](COMPATIBILITY.md)) |
 | **M3** Update + D1 | atomic SPARQL UPDATE, `oxilite-d1`, wasm core | W3C update suite on rusqlite and local D1 | ✅ done: W3C update suites pass on every backend, D1 included |
 | TS bindings | `@oxilite/node`, `@oxilite/d1` | test suites + Oxigraph JS tests | ✅ done: Oxigraph `store.test.ts` 32/33 (1 allow-listed), both example Workers tested on Miniflare |
-| **M4** Reasoning | TBox closure, rewriting, OWL 2 RL | entailment tests; agreement with `reasonable` | specified |
+| **M4** Reasoning | TBox closure, rewriting, OWL 2 RL | entailment tests; agreement with `reasonable` | ✅ done: RDFS/OWL QL rewriting, SQL OWL 2 RL rules on every backend, identical to `reasonable` |
 | **M5** Validation | rudof SHACL/ShEx | rudof suites over oxilite | specified |
 | **M6** Performance | BSBM vs Oxigraph, FTS5 | published comparison | specified |
 

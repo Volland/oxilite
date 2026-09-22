@@ -271,6 +271,10 @@ export interface QueryOptions {
   default_graph?: TermLike | TermLike[];
   named_graphs?: TermLike[];
   results_format?: string;
+  /** Query-time entailment (oxilite extension): `"none"` (default), `"rdfs"` or `"owl-ql"`. */
+  reasoning?: "none" | "rdfs" | "owl-ql";
+  /** Also match inferences stored by `materialize()` (oxilite extension). */
+  include_inferred?: boolean;
 }
 
 /** Load options (Oxigraph's JS option names). */

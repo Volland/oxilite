@@ -1,0 +1,15 @@
+[package]
+name = "oxilite-reason"
+description = "OWL 2 RL materialization for oxilite with the `reasonable` reasoner (native backends)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+oxilite-core.workspace = true
+oxrdf.workspace = true
+reasonable = { version = "0.5.0-a1", features = ["rdf-12"] }
+
+[dev-dependencies]
+oxilite = { workspace = true, features = ["rusqlite"] }
+oxrdfio.workspace = true

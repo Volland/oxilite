@@ -20,6 +20,9 @@ use spareval::QueryResults;
 use std::io::{Read, Write};
 use std::sync::{Arc, RwLock};
 
+/// Upper bound on OWL 2 RL rule rounds (each round is one atomic request).
+pub const MAX_MATERIALIZE_ROUNDS: usize = 1000;
+
 /// Error type of storage operations (alias of [`oxilite_core::Error`]).
 pub type StorageError = Error;
 /// Error type of load operations.
@@ -264,8 +267,16 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
     /// Executes a SPARQL update atomically.
     pub fn update(&self, update: impl IntoUpdate) -> Result<()> {
         let update = update.into_update()?;
+        self.update_inner(&update)?;
+        if oxilite_core::reason::update_touches_schema(&update) {
+            self.reload_stats()?;
+        }
+        Ok(())
+    }
+
+    fn update_inner(&self, update: &spargebra::Update) -> Result<()> {
         let mut plan = plan_update_with(
-            &update,
+            update,
             &self.stats(),
             self.caps(),
             &QueryOptions::default(),
@@ -342,7 +353,7 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
     pub fn load_from_reader(&self, parser: impl Into<RdfParser>, reader: impl Read) -> Result<()> {
         let quads = parse_all(parser.into(), reader, None)?;
         self.run(ops::insert_job(quads.iter().map(Quad::as_ref), self.caps()))?;
-        Ok(())
+        self.after_write(quads.iter().map(Quad::as_ref))
     }
 
     pub fn load_from_slice(
@@ -355,7 +366,10 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
 
     /// Inserts a quad; returns `true` if it was not already present.
     pub fn insert<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool> {
-        Ok(self.run(ops::insert_job([quad.into()], self.caps()))? > 0)
+        let quad = quad.into();
+        let added = self.run(ops::insert_job([quad], self.caps()))? > 0;
+        self.after_write([quad])?;
+        Ok(added)
     }
 
     /// Inserts quads atomically.
@@ -364,12 +378,53 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
         if !quads.is_empty() {
             self.run(ops::insert_job(quads.iter().map(Quad::as_ref), self.caps()))?;
         }
-        Ok(())
+        self.after_write(quads.iter().map(Quad::as_ref))
     }
 
     /// Removes a quad; returns `true` if it was present.
     pub fn remove<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<bool> {
-        Ok(self.run(ops::remove_job([quad.into()], self.caps()))? > 0)
+        let quad = quad.into();
+        let removed = self.run(ops::remove_job([quad], self.caps()))? > 0;
+        self.after_write([quad])?;
+        Ok(removed)
+    }
+
+    /// Reloads the in-memory reasoning facts after a write that changed schema triples (the
+    /// closure itself was recomputed inside the write's transaction).
+    fn after_write<'a>(&self, quads: impl IntoIterator<Item = QuadRef<'a>>) -> Result<()> {
+        if quads.into_iter().any(oxilite_core::reason::is_schema_quad) {
+            self.reload_stats()?;
+        }
+        Ok(())
+    }
+
+    fn reload_stats(&self) -> Result<()> {
+        let stats = self.run(ops::stats_job(self.caps()))?;
+        *self
+            .inner
+            .stats
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = stats;
+        Ok(())
+    }
+
+    /// Computes the OWL 2 RL closure of the whole dataset into a separate inference table,
+    /// replacing previous inferences; returns the number of inferred triples. Queries see them
+    /// with `QueryOptions::include_inferred`. Runs SQL rules on every backend.
+    pub fn materialize(&self) -> Result<u64> {
+        self.run(ops::materialize_job(MAX_MATERIALIZE_ROUNDS, self.caps()))
+    }
+
+    /// Like [`Self::materialize`], computed in memory by the `reasonable` reasoner: much
+    /// faster on large datasets, with the same results (see the agreement tests).
+    #[cfg(feature = "reasonable")]
+    pub fn materialize_with_reasonable(&self) -> Result<u64> {
+        oxilite_reason::materialize(&*self.inner.backend)
+    }
+
+    /// Removes every materialized inference.
+    pub fn clear_inferences(&self) -> Result<()> {
+        self.run(ops::clear_inferences_job())
     }
 
     /// Dumps the whole dataset (dataset formats: N-Quads, TriG).
@@ -420,7 +475,8 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
     }
 
     pub fn clear_graph<'a>(&self, graph_name: impl Into<GraphNameRef<'a>>) -> Result<()> {
-        self.run(ops::clear_graph_job(graph_name.into()))
+        self.run(ops::clear_graph_job(graph_name.into()))?;
+        self.reload_stats()
     }
 
     /// Removes a named graph and its quads; returns `true` if it existed.
@@ -428,11 +484,14 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> Result<bool> {
-        self.run(ops::remove_named_graph_job(graph_name.into()))
+        let existed = self.run(ops::remove_named_graph_job(graph_name.into()))?;
+        self.reload_stats()?;
+        Ok(existed)
     }
 
     pub fn clear(&self) -> Result<()> {
-        self.run(ops::clear_job())
+        self.run(ops::clear_job())?;
+        self.reload_stats()
     }
 
     /// No-op: SQLite commits are durable (kept for Oxigraph API compatibility).

@@ -16,12 +16,16 @@ use oxrdf::Term;
 use spareval::{InternalQuad, QueryEvaluator, QueryResults, QueryableDataset};
 use spargebra::Query;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 /// A `spareval` dataset over a SQL backend.
 pub struct SqlDataset<'a, B: SyncBackend> {
     backend: &'a B,
     cache: RefCell<HashMap<i64, Term>>,
+    /// Query-time reasoning (quads are read from the entailed-triple source).
+    reasoning: crate::reason::Reasoning,
+    inferred: bool,
+    transitive: BTreeSet<i64>,
 }
 
 impl<'a, B: SyncBackend> SqlDataset<'a, B> {
@@ -29,7 +33,25 @@ impl<'a, B: SyncBackend> SqlDataset<'a, B> {
         Self {
             backend,
             cache: RefCell::new(HashMap::new()),
+            reasoning: crate::reason::Reasoning::None,
+            inferred: false,
+            transitive: BTreeSet::new(),
         }
+    }
+
+    /// Reads entailed triples, as the SQL compiler does for these options.
+    pub fn with_options(mut self, options: &crate::QueryOptions) -> Result<Self> {
+        self.reasoning = options.reasoning;
+        self.inferred = options.include_inferred;
+        if self.reasoning == crate::reason::Reasoning::OwlQl {
+            let stmt = crate::reason::transitive_statement(|c| self.id_col(c));
+            for row in self.rows(stmt.sql)? {
+                if let Some(p) = row.first().and_then(SqlValue::as_i64) {
+                    self.transitive.insert(p);
+                }
+            }
+        }
+        Ok(self)
     }
 
     fn id_col(&self, c: &str) -> String {
@@ -123,8 +145,27 @@ impl<'a, B: SyncBackend> QueryableDataset<'a> for SqlDataset<'a, B> {
             Some(None) => w.push(format!("g = {DEFAULT_GRAPH_ID}")),
             Some(Some(g)) => w.push(format!("g = {g}")),
         }
+        let ent = crate::reason::Entailment {
+            reasoning: self.reasoning,
+            inferred: self.inferred,
+            transitive: &self.transitive,
+            max_compound: self.backend.capabilities().max_compound_select,
+        };
+        let source = if ent.active() {
+            format!(
+                "{} AS quads",
+                ent.source(
+                    subject.copied(),
+                    predicate.copied(),
+                    object.copied(),
+                    &crate::reason::GraphFilter::Keep
+                )
+            )
+        } else {
+            "quads".into()
+        };
         let sql = format!(
-            "SELECT {}, {}, {}, {} FROM quads WHERE {}",
+            "SELECT {}, {}, {}, {} FROM {source} WHERE {}",
             self.id_col("s"),
             self.id_col("p"),
             self.id_col("o"),
@@ -232,7 +273,7 @@ pub fn evaluate<B: SyncBackend>(
 ) -> Result<QueryOutput> {
     let evaluator = QueryEvaluator::new();
     let mut prepared = evaluator.prepare(query);
-    let dataset = SqlDataset::new(backend);
+    let dataset = SqlDataset::new(backend).with_options(options)?;
     apply_dataset_options(prepared.dataset_mut(), query, options, |id| {
         dataset.lookup(id).ok()
     });
