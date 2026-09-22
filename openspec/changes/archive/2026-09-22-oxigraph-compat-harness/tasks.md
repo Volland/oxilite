@@ -15,7 +15,7 @@
 
 - [x] 3.1 Port `lib/oxigraph/tests/store.rs` against `oxilite::blocking::Store` (import change only); list excluded RocksDB-specific tests
 - [x] 3.2 Port `optimizer_regression.rs` queries into the differential corpus
-- [ ] 3.3 Port `js/test/store.test.ts` against `@oxilite/node` (after change `typescript-bindings`)
+- [x] 3.3 Port `js/test/store.test.ts` against `@oxilite/node` (after change `typescript-bindings`)
 
 ## 4. Differential corpus
 
@@ -29,4 +29,4 @@
 - [x] 5.1 `allowlist.toml` format (id, reason, decision link) with "stale entry" detection
 - [x] 5.2 Generate `COMPATIBILITY.md` (pass rates per suite, divergence table)
 - [x] 5.3 CI job running the harness on every PR
-- [ ] 5.4 (M3) D1 engine via `wrangler dev --local`; run the corpus and the query/update suites on it
+- [x] 5.4 (M3) D1 engine via `wrangler dev --local`; run the corpus and the query/update suites on it

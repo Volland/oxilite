@@ -9,7 +9,7 @@ Most D1 users write Workers in TypeScript, and many RDF applications run on Node
   - plus oxilite extras: `explain`, `optimize`
   - terms follow RDF/JS (`termType`, `value`, `language`, `datatype`), with a `DataFactory` included.
 - `@oxilite/d1`: a TypeScript driver running the wasm core (`oxilite-wasm`) against a `D1Database` binding, with the same API returning Promises, plus a helper to apply the schema migration.
-- Both packages are built with `tsc`, ship `.d.ts` files, and are tested with `node:test`. The D1 driver is tested against a D1-compatible mock over `node:sqlite`, and against `wrangler dev` in CI.
+- Both packages are built with `tsc`, ship `.d.ts` files, and are tested with vitest (Oxigraph's own JS tests use it). The D1 driver is tested against a local D1 (Miniflare, the engine behind `wrangler dev`), locally and in CI.
 
 ## Capabilities
 

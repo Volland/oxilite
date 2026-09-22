@@ -85,4 +85,4 @@ Tests specific to the D1 backend and TypeScript driver.
 - Ids above 2^53 survive the round-trip (transported as TEXT).
 - A large update is one atomic batch; a failure leaves the store unchanged.
 - No statement exceeds the configured size limit.
-- The D1 driver passes the Node package's test suite against a D1-compatible mock over `node:sqlite`.
+- The D1 driver passes its store API tests against a local D1 (Miniflare).

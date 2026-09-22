@@ -21,3 +21,8 @@ decision = "lat.md/decisions.md#D12 Set semantics for merged default graphs"
 id = "corpus:filter-bool-4"
 reason = "oxilite preserves lexical forms (\"1\"^^xsd:boolean stays \"1\"); Oxigraph stores values and returns the canonical \"true\" for STR()"
 decision = "lat.md/decisions.md#D2 Tagged 64-bit hash ids with inline small values"
+
+[[divergence]]
+id = "js:Store #query() SELECT with explicit default graph list"
+reason = "The default_graph option builds the RDF merge of the listed graphs, like FROM (set semantics): a triple in both the default graph and ex matches once; Oxigraph concatenates the graphs and returns it twice"
+decision = "lat.md/decisions.md#D12 Set semantics for merged default graphs"

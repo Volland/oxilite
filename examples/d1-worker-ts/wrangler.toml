@@ -1,0 +1,9 @@
+name = "oxilite-sparql-ts"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "oxilite"
+database_id = "<your database id>"
+migrations_dir = "migrations"

@@ -1,0 +1,13 @@
+{
+  "name": "oxilite-d1-worker-ts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "migration": "oxilite-d1 schema > migrations/0001_oxilite.sql",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "node test.mjs"
+  },
+  "dependencies": { "@oxilite/d1": "0.1.0" },
+  "devDependencies": { "miniflare": "^4", "esbuild": "*" }
+}

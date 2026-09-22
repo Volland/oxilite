@@ -57,9 +57,9 @@ jobs:
           targets: wasm32-unknown-unknown
       - run: cargo check -p oxilite-core --target wasm32-unknown-unknown
 
-  # The wasm core, @oxilite/d1 on Miniflare D1, the example Rust Worker, and the Oxigraph
-  # compatibility harness against D1 through the sidecar.
-  d1:
+  # The JavaScript packages (@oxilite/node with Oxigraph's JS store tests, @oxilite/d1 on
+  # Miniflare D1), both example Workers, and the compatibility harness against D1.
+  js:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -74,9 +74,13 @@ jobs:
       - run: cargo install wasm-bindgen-cli --version 0.2.128 --locked
       - run: cargo install worker-build --locked
       - run: npm ci
+      - run: sudo apt-get update && sudo apt-get install -y libsqlite3-0
       - run: npm run build:wasm -w @oxilite/d1
+      - run: npm run build:native -w @oxilite/node
       - run: npm run build
+      - run: npm test -w @oxilite/node
       - run: npm test -w @oxilite/d1
+      - run: npm test -w oxilite-d1-worker-ts
       - name: Example Rust Worker on local D1
         working-directory: examples/d1-worker
         run: worker-build --release && NODE_PATH=../../node_modules node test.mjs

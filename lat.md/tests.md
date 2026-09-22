@@ -144,6 +144,18 @@ An update whose later operation fails (`CREATE GRAPH` on an existing graph) abor
 
 A 6000-triple bulk load is split into batches under D1's statement limits, all triples arrive, and statistics are refreshed for `explain()`.
 
+## Node
+
+`@oxilite/node` tests over the napi-rs addon, next to the verbatim port of Oxigraph's `js/test/store.test.ts`, see [[architecture#Bindings]]. The port's failures must match `js:` entries of `testsuite/allowlist.toml`.
+
+### File store persists across processes
+
+A child Node process writes a quad to a SQLite file; a store reopened on that file in the test process sees it.
+
+### Explain returns SQL
+
+`explain()` returns the generated SQL for a SELECT, and `explainUpdate()` describes a compiled update.
+
 ## Planner benchmark
 
 `cargo run --release -p oxilite --example planner_bench` loads 350 010 quads (50 000 people) and compares the oxilite planner with SQLite's planner on three join-heavy queries.

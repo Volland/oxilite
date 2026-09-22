@@ -1,11 +1,18 @@
 {
   "name": "@oxilite/node",
   "version": "0.1.0",
-  "private": false,
   "description": "oxilite for Node.js: an Oxigraph-compatible SPARQL store on SQLite",
   "license": "MIT OR Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "dependencies": { "@oxilite/common": "0.1.0" }
+  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "files": ["dist", "oxilite.node"],
+  "scripts": {
+    "build:native": "node scripts/build-native.mjs",
+    "build": "tsc -p .",
+    "test": "vitest run --reporter=default --reporter=json --outputFile=test-results.json; node scripts/check-results.mjs test-results.json"
+  },
+  "dependencies": { "@oxilite/common": "0.1.0" },
+  "devDependencies": { "@rdfjs/data-model": "^2" }
 }

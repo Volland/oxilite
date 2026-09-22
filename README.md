@@ -160,10 +160,12 @@ Only the stable SQLite C API is bound (`open_v2`, `prepare_v2`, `step`, `column_
 ### Node.js (TypeScript)
 
 ```ts
-import { Store } from "@oxilite/node";
+import { Store, type Term } from "@oxilite/node";
 
-const store = new Store("data.sqlite");               // or new Store() in memory
+const store = new Store("data.sqlite");               // new Store() in memory, new Store(quads) like Oxigraph
+// or: new Store({ path: "data.sqlite", library: "/opt/vendor/lib/libsqlite3.so", graphIndex: false })
 store.load(`@prefix ex: <http://ex/> . ex:a ex:knows ex:b .`, { format: "text/turtle" });
+console.log(store.size);                               // a getter, as in Oxigraph
 
 for (const row of store.query("SELECT ?x WHERE { ?x ?p ?o }") as Map<string, Term>[]) {
   console.log(row.get("x")?.value);
@@ -171,7 +173,7 @@ for (const row of store.query("SELECT ?x WHERE { ?x ?p ?o }") as Map<string, Ter
 store.update("DELETE WHERE { ?s <http://ex/knows> ?o }");
 ```
 
-The API mirrors Oxigraph's JS package (`query`, `update`, `load`, `dump`, `add`, `delete`, `has`, `match`, `size`), with RDF/JS terms. Oxigraph's own `store.test.ts` is part of our test suite.
+The API mirrors Oxigraph's JS package (`query`, `update`, `load`, `dump`, `add`, `delete`, `has`, `match`, `size`), with RDF/JS terms, plus `explain`, `explainUpdate`, `bulkLoad`, `optimize` and `backup`. Oxigraph's own `store.test.ts` runs unchanged against it. Build the native addon from a checkout with `npm run build:native -w @oxilite/node`.
 
 ---
 
@@ -219,6 +221,8 @@ export default {
   },
 };
 ```
+
+A complete endpoint with its `wrangler.toml`, migration and a Miniflare end-to-end test is in [`examples/d1-worker-ts`](examples/d1-worker-ts/).
 
 `@oxilite/d1` runs the oxilite core as WebAssembly. The core compiles SPARQL to SQL, the driver sends it to `env.DB`, and the core decodes the rows. No Rust toolchain is needed in your Worker project.
 
@@ -289,11 +293,11 @@ Intentional differences:
 
 | Milestone | Scope | Done when | Status |
 |---|---|---|---|
-| Compat harness | Oxigraph test ports + differential corpus | runs in CI for every milestone | in progress (W3C suites, store API tests and differential corpus pass; D1 and JS parts follow M3/bindings) |
+| Compat harness | Oxigraph test ports + differential corpus | runs in CI for every milestone | ✅ done: W3C suites, Rust and JS store API ports, differential corpus, D1 variant |
 | **M1** Storage core | encoding, schema, backends, load/dump, BGP+FILTER → SQL, planner | W3C syntax suites + ported store API tests pass | ✅ done |
 | **M2** Full SPARQL 1.1 query | OPTIONAL, UNION, MINUS, aggregates, paths, subqueries, `explain()` | ≥ 95% W3C query suite | ✅ done: 100% pass, 95% of evaluations fully in SQL ([COMPATIBILITY.md](COMPATIBILITY.md)) |
-| **M3** Update + D1 | atomic SPARQL UPDATE, `oxilite-d1`, wasm core | W3C update suite on rusqlite and local D1 | done |
-| TS bindings | `@oxilite/node`, `@oxilite/d1` | node:test suites + Oxigraph JS tests | specified |
+| **M3** Update + D1 | atomic SPARQL UPDATE, `oxilite-d1`, wasm core | W3C update suite on rusqlite and local D1 | ✅ done: W3C update suites pass on every backend, D1 included |
+| TS bindings | `@oxilite/node`, `@oxilite/d1` | test suites + Oxigraph JS tests | ✅ done: Oxigraph `store.test.ts` 32/33 (1 allow-listed), both example Workers tested on Miniflare |
 | **M4** Reasoning | TBox closure, rewriting, OWL 2 RL | entailment tests; agreement with `reasonable` | specified |
 | **M5** Validation | rudof SHACL/ShEx | rudof suites over oxilite | specified |
 | **M6** Performance | BSBM vs Oxigraph, FTS5 | published comparison | specified |

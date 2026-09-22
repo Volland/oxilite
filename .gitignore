@@ -8,3 +8,8 @@ node_modules/
 /packages/*/dist/
 /packages/d1/wasm/
 /packages/common/dist/
+/bindings/node/oxilite.node
+/bindings/node/dist/
+/bindings/node/test-results.json
+/examples/d1-worker-ts/build/
+.wrangler/

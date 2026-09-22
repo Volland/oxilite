@@ -50,4 +50,6 @@ Done when a comparison table is published in the README.
 
 `@oxilite/node` (napi-rs) for Node.js and `@oxilite/d1` for Workers, both fully typed. Change: `typescript-bindings`; the Node part depends on M1, the D1 part on M3.
 
-Done when both packages have passing `node:test` suites and typed examples in the README.
+Done when both packages have passing test suites and typed examples in the README.
+
+Status: done. Both packages are tested with vitest (Oxigraph's own JS store tests included for `@oxilite/node`, Miniflare D1 for `@oxilite/d1`), and both example Workers pass end-to-end tests.
