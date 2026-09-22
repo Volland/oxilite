@@ -27,6 +27,9 @@ export async function demo(store) {
   assert.deepStrictEqual(names.map((b) => b.get("name").value), ["Ada", "Alan", "Grace"]);
   const reifiers = await store.query(`PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> SELECT ?r WHERE { ?r rdf:reifies ?t }`);
   assert.strictEqual(reifiers.length, 2, "only the two relationships with properties have reifiers");
+  const markers = await store.query(`PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> SELECT ?n WHERE { ?n rdf:type rdfs:Resource }`);
+  assert.strictEqual(markers.length, 4, "every created node has the rdfs:Resource marker");
+  assert(markers.every((b) => b.get("n").value.startsWith("urn:oxilite:node:")));
 
   // 3. Relationship properties, with null where a relationship has none.
   r = await cypher(`MATCH (p:Person)-[w:WORKS_AT]->(:Company {name: 'Acme'})
@@ -55,6 +58,10 @@ export async function demo(store) {
   const [node, rel] = r.rows[0];
   assert.deepStrictEqual([node.type, node.labels, node.properties], ["node", ["Person"], { born: 1815, name: "Ada" }]);
   assert.deepStrictEqual([rel.type, rel.relType, rel.properties], ["relationship", "KNOWS", { since: 2019 }]);
+
+  // Temporal values follow openCypher.
+  r = await cypher(`RETURN date('2026-09-22') + duration('P1M') AS d`);
+  assert.strictEqual(r.records[0].d.value, "2026-10-22");
 
   // 8. Writes: MERGE with parameters, a refused DELETE, DETACH DELETE.
   const hires = [{ name: "Alan", role: "researcher" }, { name: "Linus", role: "kernel" }];

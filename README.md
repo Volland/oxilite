@@ -9,6 +9,8 @@
 
 **An Oxigraph-compatible RDF database and SPARQL engine that uses SQLite as its storage engine. It runs anywhere SQLite runs, including Cloudflare D1.**
 
+**[oxilitedb.com](https://oxilitedb.com)** · [crates.io](https://crates.io/crates/oxilite) · [docs.rs](https://docs.rs/oxilite) · [npm](https://www.npmjs.com/package/@oxilite/node)
+
 > **Status: milestones M1–M7 implemented** — M1 (storage core), M2 (full SPARQL 1.1 query compiled to SQL), M3 (atomic SPARQL Update, Cloudflare D1), the TypeScript packages, M4 (RDFS / OWL reasoning), M5 (SHACL / ShEx validation with rudof), M6 (BSBM benchmarks, planner tuning, full-text search) and M7 (openCypher over the same data). See [Roadmap](#roadmap).
 
 ---
@@ -127,17 +129,32 @@ The filter is applied right after the first scan, before any join. The unary `+`
 ```bash
 cargo add oxilite                      # Rust (features: rusqlite (default), dylib, d1, reasonable, cypher)
 cargo install oxilite-cli              # the `oxilite` command and SPARQL endpoint
-npm install @oxilite/node              # Node.js (prebuilt for macOS arm64 in 0.2.0)
+npm install @oxilite/node              # Node.js (prebuilt for macOS arm64)
 npm install @oxilite/d1                # Cloudflare D1 (WebAssembly)
 ```
 
-Companion crates: `oxilite-validate` (SHACL/ShEx with rudof), `oxilite-reason` (OWL 2 RL with `reasonable`).
+Every package has its own README with installation, examples and its API:
+
+| Package | What it is for |
+|---|---|
+| [`oxilite`](crates/oxilite/README.md) | The store: a drop-in for `oxigraph::store::Store`, plus `AsyncStore` for D1 |
+| [`oxilite-core`](crates/oxilite-core/README.md) | The sans-IO core: term encoding, schema, SPARQL → SQL compiler and planner |
+| [`oxilite-rusqlite`](crates/oxilite-rusqlite/README.md) | In-process backend with a bundled SQLite (the default) |
+| [`oxilite-dylib`](crates/oxilite-dylib/README.md) | Backend that loads your own `libsqlite3` at runtime |
+| [`oxilite-d1`](crates/oxilite-d1/README.md) | Cloudflare D1 backend for Rust Workers |
+| [`oxilite-cypher`](crates/oxilite-cypher/README.md) | openCypher over the same data, OWL- and SHACL-aware |
+| [`oxilite-reason`](crates/oxilite-reason/README.md) | OWL 2 RL materialization with `reasonable` |
+| [`oxilite-validate`](crates/oxilite-validate/README.md) | SHACL and ShEx validation with rudof |
+| [`oxilite-cli`](crates/oxilite-cli/README.md) | The `oxilite` command and a SPARQL endpoint like `oxigraph serve` |
+| [`@oxilite/node`](bindings/node/README.md) | Node.js bindings, API of Oxigraph's JS package |
+| [`@oxilite/d1`](packages/d1/README.md) | Cloudflare D1 and Durable Objects from TypeScript (WebAssembly core) |
+| [`@oxilite/common`](packages/common/README.md) | RDF/JS terms and shared TypeScript types |
 
 ### Rust: drop-in for `oxigraph::store::Store`
 
 ```toml
 [dependencies]
-oxilite = "0.1"          # bundled SQLite via rusqlite
+oxilite = "0.2"          # bundled SQLite via rusqlite
 ```
 
 ```rust
@@ -270,7 +287,7 @@ A complete endpoint with its `wrangler.toml`, migration and a Miniflare end-to-e
 use oxilite::{d1::D1Backend, AsyncStore};
 use worker::*;
 
-// oxilite = { version = "0.1", default-features = false, features = ["d1"] }
+// oxilite = { version = "0.2", default-features = false, features = ["d1"] }
 #[event(fetch)]
 async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let store = AsyncStore::open_existing(D1Backend::new(env.d1("DB")?)).await.map_err(|e| e.to_string())?;
@@ -442,7 +459,7 @@ await d1store.cypher("UNWIND $rows AS row MERGE (p:Person {id: row.id}) SET p.na
 
 ## Project documentation
 
-- [`site/`](site/): the project website (static, deployed to GitHub Pages by `.github/workflows/pages.yml`). The logo is [`site/assets/logo.svg`](site/assets/logo.svg), with a PNG at [`site/assets/logo.png`](site/assets/logo.png).
+- [`site/`](site/): the project website, [oxilitedb.com](https://oxilitedb.com) (static, deployed to GitHub Pages by `.github/workflows/pages.yml`). The logo is [`site/assets/logo.svg`](site/assets/logo.svg), with a PNG at [`site/assets/logo.png`](site/assets/logo.png).
 - [`lat.md/`](lat.md/): the architecture knowledge graph (architecture, decisions, milestones, tests, test plan), checked by `lat check`.
 - [`openspec/changes/`](openspec/changes/): one change per milestone, each with a proposal, requirement specs with scenarios, a design, and a task list (`openspec validate --all --strict`).
 

@@ -6,9 +6,11 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
+documentation = "https://docs.rs/oxilite-cypher"
+readme = "README.md"
 authors.workspace = true
-keywords.workspace = true
-categories.workspace = true
+keywords = ["cypher", "opencypher", "property-graph", "rdf", "sqlite"]
+categories = ["database-implementations", "parser-implementations"]
 rust-version.workspace = true
 
 [dependencies]

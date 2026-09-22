@@ -2,28 +2,35 @@
   <a href="https://oxilitedb.com"><img src="https://raw.githubusercontent.com/Volland/oxilite/main/site/assets/logo.png" alt="oxilite" width="120"></a>
 </p>
 
-# @oxilite/common
+# oxilite-cli
 
-[![npm](https://img.shields.io/npm/v/@oxilite/common.svg)](https://www.npmjs.com/package/@oxilite/common) [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](https://github.com/Volland/oxilite#license)
+[![crates.io](https://img.shields.io/crates/v/oxilite-cli.svg)](https://crates.io/crates/oxilite-cli) [![docs.rs](https://img.shields.io/docsrs/oxilite-cli)](https://docs.rs/oxilite-cli) [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](https://github.com/Volland/oxilite#license)
 
-**RDF/JS terms and the shared TypeScript types of oxilite**, used by [`@oxilite/node`](https://www.npmjs.com/package/@oxilite/node) and [`@oxilite/d1`](https://www.npmjs.com/package/@oxilite/d1).
+**The `oxilite` command line:** load, query and explain a SQLite-backed RDF store, or serve it over the SPARQL 1.1 protocol with the same routes as `oxigraph serve`.
 
-**[Website](https://oxilitedb.com)** · [npm](https://www.npmjs.com/package/@oxilite/common) · **[Guide and architecture](https://github.com/Volland/oxilite#readme)** · [Changelog and issues](https://github.com/Volland/oxilite/issues)
+**[Website](https://oxilitedb.com)** · [API docs](https://docs.rs/oxilite-cli) · **[Guide and architecture](https://github.com/Volland/oxilite#readme)** · [Changelog and issues](https://github.com/Volland/oxilite/issues)
 
-You rarely install it directly: both packages re-export everything here.
+## Install
 
-```ts
-import { namedNode, literal, quad, DataFactory, type Term } from "@oxilite/node";   // or "@oxilite/d1"
-
-const q = quad(namedNode("http://example.com/ada"), namedNode("http://example.com/name"), literal("Ada", "en"));
+```bash
+cargo install oxilite-cli
 ```
 
-## What is inside
+## Usage
 
-- **RDF/JS terms:** `NamedNode`, `BlankNode`, `Literal` (with language and direction), `DefaultGraph`, `Variable` and `Quad` (also usable as an RDF 1.2 triple term), plus `DataFactory` and its shortcuts `namedNode`, `blankNode`, `literal`, `defaultGraph`, `variable`, `quad`, `triple`. They follow the [RDF/JS data model](https://rdf.js.org/data-model-spec/), so they mix with other RDF/JS libraries.
-- **SPARQL types:** `QueryOptions` (with oxilite's `reasoning` and `include_inferred`), `LoadOptions`, `DumpOptions`, `QueryResult`.
-- **Cypher types:** `CypherValue`, `CypherNode`, `CypherRelationship`, `CypherPath`, `CypherTemporal`, `CypherResult`, `CypherStats` and `CypherOptions` (`base`, `prefixes`, `names`, `multiValue`, `reasoning`, `shapes`…).
-- **JSON helpers:** `toJson` / `fromJson` convert terms to and from the JSON form the oxilite core exchanges.
+```bash
+oxilite load     -l data.sqlite -f dump.nt data.ttl              # bulk load, then refresh statistics
+oxilite query    -l data.sqlite -q 'SELECT * WHERE { ?s ?p ?o } LIMIT 5'
+oxilite update   -l data.sqlite -u 'INSERT DATA { <http://ex/a> <http://ex/p> 1 }'
+oxilite explain  -l data.sqlite -q 'SELECT …'                    # the SQL and the join order
+oxilite optimize -l data.sqlite                                  # planner statistics and reasoning closure
+oxilite serve    -l data.sqlite -b 127.0.0.1:7879                # /query, /update, /store
+oxilite serve    -l data.sqlite --library /usr/lib/libsqlite3.so # the same file on the system SQLite
+```
+
+`serve` speaks the SPARQL 1.1 Protocol and Graph Store Protocol at `/query`, `/update` and `/store`, so clients and tools written for `oxigraph serve` work unchanged. Query results come as JSON, XML, CSV or TSV, graph results in any RDF format. Run `oxilite help <command>` for every option.
+
+The database is an ordinary SQLite file: open it from Rust with [`oxilite`](https://crates.io/crates/oxilite), from Node.js with [`@oxilite/node`](https://www.npmjs.com/package/@oxilite/node), or with any SQLite tool.
 
 ## The oxilite family
 

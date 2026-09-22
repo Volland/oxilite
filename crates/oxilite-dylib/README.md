@@ -2,28 +2,35 @@
   <a href="https://oxilitedb.com"><img src="https://raw.githubusercontent.com/Volland/oxilite/main/site/assets/logo.png" alt="oxilite" width="120"></a>
 </p>
 
-# @oxilite/common
+# oxilite-dylib
 
-[![npm](https://img.shields.io/npm/v/@oxilite/common.svg)](https://www.npmjs.com/package/@oxilite/common) [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](https://github.com/Volland/oxilite#license)
+[![crates.io](https://img.shields.io/crates/v/oxilite-dylib.svg)](https://crates.io/crates/oxilite-dylib) [![docs.rs](https://img.shields.io/docsrs/oxilite-dylib)](https://docs.rs/oxilite-dylib) [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](https://github.com/Volland/oxilite#license)
 
-**RDF/JS terms and the shared TypeScript types of oxilite**, used by [`@oxilite/node`](https://www.npmjs.com/package/@oxilite/node) and [`@oxilite/d1`](https://www.npmjs.com/package/@oxilite/d1).
+**An oxilite backend that loads a SQLite shared library from a path at runtime.** No SQLite is linked at build time: use the system `libsqlite3`, a vendor-provided build, or SQLCipher.
 
-**[Website](https://oxilitedb.com)** · [npm](https://www.npmjs.com/package/@oxilite/common) · **[Guide and architecture](https://github.com/Volland/oxilite#readme)** · [Changelog and issues](https://github.com/Volland/oxilite/issues)
+**[Website](https://oxilitedb.com)** · [API docs](https://docs.rs/oxilite-dylib) · **[Guide and architecture](https://github.com/Volland/oxilite#readme)** · [Changelog and issues](https://github.com/Volland/oxilite/issues)
 
-You rarely install it directly: both packages re-export everything here.
+Only the stable SQLite C API is resolved (`open_v2`, `prepare_v2`, `step`, `column_*`, `finalize`, `errmsg`, `changes`, `exec`, and optionally `create_function_v2`), so **any SQLite ≥ 3.37** works. When the library allows user-defined functions, oxilite registers its own; otherwise it compiles to plain SQL (Shallow SQL), as on D1.
 
-```ts
-import { namedNode, literal, quad, DataFactory, type Term } from "@oxilite/node";   // or "@oxilite/d1"
+## Usage
 
-const q = quad(namedNode("http://example.com/ada"), namedNode("http://example.com/name"), literal("Ada", "en"));
+Through `oxilite` (feature `dylib`):
+
+```rust
+let store = oxilite::store::Store::open_with_library("/usr/lib/x86_64-linux-gnu/libsqlite3.so.0", "data.sqlite")?;
 ```
 
-## What is inside
+Or directly:
 
-- **RDF/JS terms:** `NamedNode`, `BlankNode`, `Literal` (with language and direction), `DefaultGraph`, `Variable` and `Quad` (also usable as an RDF 1.2 triple term), plus `DataFactory` and its shortcuts `namedNode`, `blankNode`, `literal`, `defaultGraph`, `variable`, `quad`, `triple`. They follow the [RDF/JS data model](https://rdf.js.org/data-model-spec/), so they mix with other RDF/JS libraries.
-- **SPARQL types:** `QueryOptions` (with oxilite's `reasoning` and `include_inferred`), `LoadOptions`, `DumpOptions`, `QueryResult`.
-- **Cypher types:** `CypherValue`, `CypherNode`, `CypherRelationship`, `CypherPath`, `CypherTemporal`, `CypherResult`, `CypherStats` and `CypherOptions` (`base`, `prefixes`, `names`, `multiValue`, `reasoning`, `shapes`…).
-- **JSON helpers:** `toJson` / `fromJson` convert terms to and from the JSON form the oxilite core exchanges.
+```rust
+use oxilite::store::Store;
+use oxilite_dylib::{find_system_library, DylibBackend};
+
+let library = find_system_library().expect("no system libsqlite3");
+let store = Store::with_backend(DylibBackend::open(library, "data.sqlite")?)?;
+```
+
+`SqliteLibrary::load(path)` loads a library once and reports its `version_number()`. The same database file can be opened with the bundled SQLite ([`oxilite-rusqlite`](https://crates.io/crates/oxilite-rusqlite)) and with a runtime library, for example by `oxilite serve --library`.
 
 ## The oxilite family
 

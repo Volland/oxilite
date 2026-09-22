@@ -7,11 +7,12 @@ license.workspace = true
 repository.workspace = true
 
 homepage.workspace = true
+documentation = "https://docs.rs/oxilite"
+readme = "README.md"
 authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
 rust-version.workspace = true
-readme = "../../README.md"
 
 [features]
 default = ["rusqlite"]

@@ -1,6 +1,6 @@
 {
   "name": "@oxilite/common",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "RDF/JS terms and result conversion shared by the oxilite JavaScript packages",
   "license": "MIT OR Apache-2.0",
   "type": "module",
@@ -17,15 +17,15 @@
     "url": "git+https://github.com/Volland/oxilite.git",
     "directory": "packages/common"
   },
-  "homepage": "https://github.com/Volland/oxilite#readme",
+  "homepage": "https://oxilitedb.com",
   "bugs": "https://github.com/Volland/oxilite/issues",
   "author": "Volodymyr Pavlyshyn",
   "keywords": [
     "rdf",
+    "rdfjs",
     "sparql",
-    "sqlite",
-    "oxigraph",
-    "rdfjs"
+    "cypher",
+    "oxilite"
   ],
   "publishConfig": {
     "access": "public"

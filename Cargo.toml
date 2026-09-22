@@ -3,11 +3,11 @@ resolver = "2"
 members = ["crates/oxilite-core", "crates/oxilite-rusqlite", "crates/oxilite-dylib", "crates/oxilite", "testsuite", "crates/oxilite-wasm", "crates/oxilite-d1", "bindings/node", "crates/oxilite-reason", "crates/oxilite-validate", "crates/oxilite-cypher", "crates/oxilite-cli", "bench"]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Volland/oxilite"
-homepage = "https://github.com/Volland/oxilite"
+homepage = "https://oxilitedb.com"
 authors = ["Volodymyr Pavlyshyn"]
 keywords = ["rdf", "sparql", "sqlite", "oxigraph", "cloudflare-d1"]
 categories = ["database-implementations"]
@@ -29,13 +29,13 @@ regex = "1"
 md-5 = "0.10"
 sha1 = "0.10"
 sha2 = "0.10"
-oxilite-core = { path = "crates/oxilite-core", version = "0.2.0" }
-oxilite-rusqlite = { path = "crates/oxilite-rusqlite", version = "0.2.0" }
-oxilite-dylib = { path = "crates/oxilite-dylib", version = "0.2.0" }
-oxilite = { path = "crates/oxilite", version = "0.2.0" }
-oxilite-d1 = { path = "crates/oxilite-d1", version = "0.2.0" }
-oxilite-reason = { path = "crates/oxilite-reason", version = "0.2.0" }
-oxilite-cypher = { path = "crates/oxilite-cypher", version = "0.2.0", default-features = false }
+oxilite-core = { path = "crates/oxilite-core", version = "0.2.1" }
+oxilite-rusqlite = { path = "crates/oxilite-rusqlite", version = "0.2.1" }
+oxilite-dylib = { path = "crates/oxilite-dylib", version = "0.2.1" }
+oxilite = { path = "crates/oxilite", version = "0.2.1" }
+oxilite-d1 = { path = "crates/oxilite-d1", version = "0.2.1" }
+oxilite-reason = { path = "crates/oxilite-reason", version = "0.2.1" }
+oxilite-cypher = { path = "crates/oxilite-cypher", version = "0.2.1", default-features = false }
 
 # Small WebAssembly builds for Workers (1 MB / 10 MB script limits).
 [profile.wasm-release]

@@ -1,7 +1,7 @@
 {
   "name": "@oxilite/node",
-  "version": "0.2.0",
-  "description": "oxilite for Node.js: an Oxigraph-compatible SPARQL store on SQLite",
+  "version": "0.2.1",
+  "description": "oxilite for Node.js: an Oxigraph-compatible SPARQL 1.1 and openCypher store on SQLite",
   "license": "MIT OR Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -22,7 +22,7 @@
     "test": "vitest run --reporter=default --reporter=json --outputFile=test-results.json; node scripts/check-results.mjs test-results.json"
   },
   "dependencies": {
-    "@oxilite/common": "0.2.0"
+    "@oxilite/common": "0.2.1"
   },
   "devDependencies": {
     "@rdfjs/data-model": "^2"
@@ -32,15 +32,19 @@
     "url": "git+https://github.com/Volland/oxilite.git",
     "directory": "bindings/node"
   },
-  "homepage": "https://github.com/Volland/oxilite#readme",
+  "homepage": "https://oxilitedb.com",
   "bugs": "https://github.com/Volland/oxilite/issues",
   "author": "Volodymyr Pavlyshyn",
   "keywords": [
     "rdf",
     "sparql",
+    "cypher",
+    "opencypher",
+    "property-graph",
     "sqlite",
     "oxigraph",
-    "rdfjs"
+    "rdfjs",
+    "knowledge-graph"
   ],
   "publishConfig": {
     "access": "public"

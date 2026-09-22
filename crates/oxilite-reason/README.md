@@ -2,28 +2,32 @@
   <a href="https://oxilitedb.com"><img src="https://raw.githubusercontent.com/Volland/oxilite/main/site/assets/logo.png" alt="oxilite" width="120"></a>
 </p>
 
-# @oxilite/common
+# oxilite-reason
 
-[![npm](https://img.shields.io/npm/v/@oxilite/common.svg)](https://www.npmjs.com/package/@oxilite/common) [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](https://github.com/Volland/oxilite#license)
+[![crates.io](https://img.shields.io/crates/v/oxilite-reason.svg)](https://crates.io/crates/oxilite-reason) [![docs.rs](https://img.shields.io/docsrs/oxilite-reason)](https://docs.rs/oxilite-reason) [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](https://github.com/Volland/oxilite#license)
 
-**RDF/JS terms and the shared TypeScript types of oxilite**, used by [`@oxilite/node`](https://www.npmjs.com/package/@oxilite/node) and [`@oxilite/d1`](https://www.npmjs.com/package/@oxilite/d1).
+**OWL 2 RL materialization for oxilite with the [`reasonable`](https://github.com/gtfierro/reasonable) reasoner**, for native backends.
 
-**[Website](https://oxilitedb.com)** · [npm](https://www.npmjs.com/package/@oxilite/common) · **[Guide and architecture](https://github.com/Volland/oxilite#readme)** · [Changelog and issues](https://github.com/Volland/oxilite/issues)
+**[Website](https://oxilitedb.com)** · [API docs](https://docs.rs/oxilite-reason) · **[Guide and architecture](https://github.com/Volland/oxilite#readme)** · [Changelog and issues](https://github.com/Volland/oxilite/issues)
 
-You rarely install it directly: both packages re-export everything here.
+oxilite already reasons in two ways without this crate: per-query RDFS / OWL QL rewriting, and OWL 2 RL materialization as SQL rules that also run on D1. `oxilite-reason` is the fast path for large native stores: it reads every asserted triple, runs `reasonable`'s Datalog engine in memory and writes the new conclusions into `quads_inf`, exactly where the SQL rules put theirs. Both give identical results.
 
-```ts
-import { namedNode, literal, quad, DataFactory, type Term } from "@oxilite/node";   // or "@oxilite/d1"
+## Usage
 
-const q = quad(namedNode("http://example.com/ada"), namedNode("http://example.com/name"), literal("Ada", "en"));
+Through `oxilite` (feature `reasonable`):
+
+```rust
+// oxilite = { version = "0.2", features = ["reasonable"] }
+use oxilite::sparql::QueryOptions;
+
+let added = store.materialize_with_reasonable()?;     // store.materialize() uses the SQL rules
+let opts = QueryOptions { include_inferred: true, ..Default::default() };
+let out = store.query_output("SELECT ?x WHERE { ?x a <http://example.com/Animal> }", &opts)?;
 ```
 
-## What is inside
+Or over any `SyncBackend`: `oxilite_reason::materialize(&backend)` stores the closure, `oxilite_reason::infer(&backend)` only returns it.
 
-- **RDF/JS terms:** `NamedNode`, `BlankNode`, `Literal` (with language and direction), `DefaultGraph`, `Variable` and `Quad` (also usable as an RDF 1.2 triple term), plus `DataFactory` and its shortcuts `namedNode`, `blankNode`, `literal`, `defaultGraph`, `variable`, `quad`, `triple`. They follow the [RDF/JS data model](https://rdf.js.org/data-model-spec/), so they mix with other RDF/JS libraries.
-- **SPARQL types:** `QueryOptions` (with oxilite's `reasoning` and `include_inferred`), `LoadOptions`, `DumpOptions`, `QueryResult`.
-- **Cypher types:** `CypherValue`, `CypherNode`, `CypherRelationship`, `CypherPath`, `CypherTemporal`, `CypherResult`, `CypherStats` and `CypherOptions` (`base`, `prefixes`, `names`, `multiValue`, `reasoning`, `shapes`…).
-- **JSON helpers:** `toJson` / `fromJson` convert terms to and from the JSON form the oxilite core exchanges.
+Materialized inferences are not maintained: re-run it after changing data, or clear them with `clear_inferences()`. The whole dataset must fit in memory, so D1 stores use the SQL rules instead. See [Reasoning and validation](https://github.com/Volland/oxilite#reasoning-and-validation).
 
 ## The oxilite family
 

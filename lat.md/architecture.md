@@ -250,7 +250,9 @@ A Node.js package and a Cloudflare D1 package, both typed TypeScript, over the s
 
 `@oxilite/node` (napi-rs) wraps `blocking::Store` on rusqlite or a dlopen'ed library: `query`, `update`, `load`, `dump`, `add`/`delete`, `has`, `match`, `size`, `explain`, `optimize`, `backup`, returning RDF/JS-style term objects. `@oxilite/d1` runs the wasm core against a `D1Database` binding and exposes the same API asynchronously.
 
-`@oxilite/node` loads `oxilite.<platform>-<arch>.node` (then a local `oxilite.node` build) and fails with build instructions when no binary matches; 0.1.0 and 0.2.0 are published with the darwin-arm64 binary only.
+`@oxilite/node` loads `oxilite.<platform>-<arch>.node` (then a local `oxilite.node` build) and fails with build instructions when no binary matches; Releases up to 0.2.1 are published with the darwin-arm64 binary only.
+
+Every published crate and npm package has its own README (absolute links and logo, so it renders on crates.io and npm) with install, examples, API and a shared table of the oxilite family; the website is https://oxilitedb.com, set as `homepage` everywhere, and each crate's `documentation` points to docs.rs.
 
 Both packages also expose `cypher(query, params, options)` and `explainCypher()`: parameters and options travel as JSON ([[crates/oxilite-cypher/src/json.rs]]), and results are plain objects (`CypherNode`, `CypherRelationship`, `CypherPath`, temporal values as ISO strings) with `records` keyed by column. The wasm engine builds Cypher by default (feature `cypher`; `cypher-lite` leaves out the bundled time zone database).
 
@@ -262,4 +264,4 @@ A static site in `site/` (landing page, articles in `site/articles/`, and German
 
 The site is plain HTML and one stylesheet in a white, black and orange palette. It loads no external fonts, scripts or trackers, which keeps the Datenschutz page to GitHub's hosting logs only. The logo (`site/assets/logo.svg`, rendered to `logo.png` with `rsvg-convert`) combines a SQLite-style tile, a quill drawn as a graph, and a small edge-worker cloud.
 
-The Cypher article describes M7 from its specification and marks the Cypher syntax as planned; its RDF 1.2 and SPARQL examples are run against the current release.
+The Cypher article walks through the M7 frontend; its steps are asserted by `examples/cypher-property-graph` on `@oxilite/node` and on Miniflare D1.

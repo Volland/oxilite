@@ -2,28 +2,36 @@
   <a href="https://oxilitedb.com"><img src="https://raw.githubusercontent.com/Volland/oxilite/main/site/assets/logo.png" alt="oxilite" width="120"></a>
 </p>
 
-# @oxilite/common
+# oxilite-rusqlite
 
-[![npm](https://img.shields.io/npm/v/@oxilite/common.svg)](https://www.npmjs.com/package/@oxilite/common) [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](https://github.com/Volland/oxilite#license)
+[![crates.io](https://img.shields.io/crates/v/oxilite-rusqlite.svg)](https://crates.io/crates/oxilite-rusqlite) [![docs.rs](https://img.shields.io/docsrs/oxilite-rusqlite)](https://docs.rs/oxilite-rusqlite) [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](https://github.com/Volland/oxilite#license)
 
-**RDF/JS terms and the shared TypeScript types of oxilite**, used by [`@oxilite/node`](https://www.npmjs.com/package/@oxilite/node) and [`@oxilite/d1`](https://www.npmjs.com/package/@oxilite/d1).
+**In-process SQLite backend for oxilite**, built on rusqlite with a bundled SQLite. It is the default backend of the [`oxilite`](https://crates.io/crates/oxilite) store.
 
-**[Website](https://oxilitedb.com)** · [npm](https://www.npmjs.com/package/@oxilite/common) · **[Guide and architecture](https://github.com/Volland/oxilite#readme)** · [Changelog and issues](https://github.com/Volland/oxilite/issues)
+**[Website](https://oxilitedb.com)** · [API docs](https://docs.rs/oxilite-rusqlite) · **[Guide and architecture](https://github.com/Volland/oxilite#readme)** · [Changelog and issues](https://github.com/Volland/oxilite/issues)
 
-You rarely install it directly: both packages re-export everything here.
+It also registers oxilite's SQL functions (SPARQL regular expressions, `REPLACE`, hashes, `ENCODE_FOR_URI`) and Unicode-aware `upper` / `lower`, so **every SPARQL function compiles to SQL** on this backend.
 
-```ts
-import { namedNode, literal, quad, DataFactory, type Term } from "@oxilite/node";   // or "@oxilite/d1"
+## Usage
 
-const q = quad(namedNode("http://example.com/ada"), namedNode("http://example.com/name"), literal("Ada", "en"));
+You normally get it through `oxilite` (feature `rusqlite`, on by default):
+
+```rust
+let store = oxilite::store::Store::open("data.sqlite")?;   // RusqliteBackend underneath
 ```
 
-## What is inside
+To build the backend yourself, for example over an existing `rusqlite::Connection`:
 
-- **RDF/JS terms:** `NamedNode`, `BlankNode`, `Literal` (with language and direction), `DefaultGraph`, `Variable` and `Quad` (also usable as an RDF 1.2 triple term), plus `DataFactory` and its shortcuts `namedNode`, `blankNode`, `literal`, `defaultGraph`, `variable`, `quad`, `triple`. They follow the [RDF/JS data model](https://rdf.js.org/data-model-spec/), so they mix with other RDF/JS libraries.
-- **SPARQL types:** `QueryOptions` (with oxilite's `reasoning` and `include_inferred`), `LoadOptions`, `DumpOptions`, `QueryResult`.
-- **Cypher types:** `CypherValue`, `CypherNode`, `CypherRelationship`, `CypherPath`, `CypherTemporal`, `CypherResult`, `CypherStats` and `CypherOptions` (`base`, `prefixes`, `names`, `multiValue`, `reasoning`, `shapes`…).
-- **JSON helpers:** `toJson` / `fromJson` convert terms to and from the JSON form the oxilite core exchanges.
+```rust
+use oxilite::store::Store;
+use oxilite_rusqlite::RusqliteBackend;
+
+let backend = RusqliteBackend::open("data.sqlite")?;        // or ::memory(), ::open_read_only(path)
+// let backend = RusqliteBackend::from_connection(conn)?;   // share your own connection
+let store = Store::with_backend(backend)?;
+```
+
+Atomic requests run in one transaction. The connection uses WAL mode for file databases.
 
 ## The oxilite family
 
