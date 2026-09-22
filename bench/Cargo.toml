@@ -1,0 +1,14 @@
+[package]
+name = "oxilite-bench"
+description = "Benchmark reports (BSBM) and the D1 write-cost report for oxilite"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+oxilite = { workspace = true, features = ["rusqlite"] }
+oxilite-core = { workspace = true, features = ["serde"] }
+oxrdf.workspace = true
+serde_json = "1"
+ureq = { version = "2", features = ["json"] }

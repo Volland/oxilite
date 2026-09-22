@@ -91,6 +91,8 @@ export interface D1StoreOptions {
   graphIndex?: boolean;
   /** The schema was applied by a migration: open without DDL. */
   migrated?: boolean;
+  /** Create the FTS5 full-text index over string literals (for `oxl:textMatch`). */
+  textIndex?: boolean;
 }
 
 /** An oxilite RDF store on a Cloudflare D1 database. */
@@ -101,7 +103,7 @@ export class D1Store {
   ) {}
 
   static async openWith(Engine: EngineConstructor, db: D1DatabaseLike, options: D1StoreOptions = {}): Promise<D1Store> {
-    const engine = new Engine(null, JSON.stringify({ graphIndex: options.graphIndex ?? true }));
+    const engine = new Engine(null, JSON.stringify({ graphIndex: options.graphIndex ?? true, textIndex: options.textIndex ?? false }));
     const store = new D1Store(db, engine);
     await store.run(options.migrated ? engine.openExisting() : engine.open());
     return store;

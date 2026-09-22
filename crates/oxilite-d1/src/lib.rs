@@ -140,5 +140,8 @@ pub use d1::D1Backend;
 
 /// The oxilite schema as a D1 migration script.
 pub fn migration_sql(graph_index: bool) -> String {
-    oxilite_core::schema::schema_sql(&oxilite_core::StoreOptions { graph_index })
+    oxilite_core::schema::schema_sql(&oxilite_core::StoreOptions {
+        graph_index,
+        ..Default::default()
+    })
 }

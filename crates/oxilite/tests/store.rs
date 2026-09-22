@@ -128,7 +128,10 @@ fn reopen_keeps_data() -> Result<()> {
 fn graph_index_is_optional() -> Result<()> {
     let store = Store::with_backend_and_options(
         RusqliteBackend::memory()?,
-        &StoreOptions { graph_index: false },
+        &StoreOptions {
+            graph_index: false,
+            ..StoreOptions::default()
+        },
     )?;
     let r = store.backend().execute(&Request::read(vec![
         "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'quads' ORDER BY name"

@@ -77,6 +77,15 @@ Generated SQL must parse on SQLite builds with a fixed parser stack (`YYSTACKDEP
 
 Hence per-term facts that would need deep expressions — triple-term equality and order, date timezone presence — are precomputed at write time; nested UNIONs compile to one flat N-way `UNION ALL`; and a query whose SQL exceeds `Capabilities::max_sql_len` is reported `Unsupported` (fallback) instead of being sent. The harness runs its dylib variant on the platform SQLite to catch regressions.
 
+SQL has no common subexpressions, so size also grows when an expression uses an operand several times. Four rules keep it linear:
+
+- Nested function calls whose operand SQL is large (e.g. `xsd:float(xsd:string(?price))`) are lifted: the operand becomes a column of a sealed subquery, in BIND, FILTER and aggregate arguments.
+- Lexical parsing binds the lexical form once per row with a correlated `(SELECT … FROM (SELECT lex AS lx))`.
+- Expressions that read many fields of a stored term join its `terms` row once instead of running one lookup per field.
+- Value aggregates read their argument from a subquery marked `LIMIT -1`, which SQLite does not flatten into the aggregate.
+
+`crates/oxilite/tests/plans.rs` checks every BSBM query stays under D1's 90 KB and scans no quad table or index.
+
 ### Graph patterns
 
 Basic graph patterns become self-joins on `quads` with the planner's order enforced by `CROSS JOIN`; other operators map to SQL join forms.
@@ -124,6 +133,8 @@ SQLite's own planner sees N identical copies of `quads` and has only per-index a
 
 Per-predicate triple counts and distinct subject/object counts, plus per-class instance counts, refreshed explicitly by `optimize()` or after bulk loads.
 
+`stats_po` adds skew: for predicates with at most 1024 distinct objects (besides `rdf:type`, which has per-class counts), pairs at least four times as frequent as their predicate's average, the 2000 most frequent kept. A constant object then gets its real count instead of the average.
+
 Stats are not maintained on every write: on D1 that would double write billing and create a hot row. Stale stats only degrade plans, never correctness. Without stats, static heuristics apply (bound subject ≫ bound object ≫ bound predicate). See [[crates/oxilite-core/src/stats.rs#Stats]].
 
 ## Updates and atomicity
@@ -157,6 +168,24 @@ Async backend over the D1 binding: `Atomic` requests become `db.batch()`, ids tr
 The wasm build of the core exposes the step machine to JavaScript, so a TypeScript driver can run SPARQL on `env.DB` without a Rust Worker.
 
 `oxilite-wasm` exports an `Engine` whose methods (query, update, load, match, dump…) return a `Job`; `Job.step(responseJson)` yields either the next SQL request or the final output as JSON (see [[crates/oxilite-core/src/json.rs]]). It is built for the `web` target (Workers) and the `nodejs` target (Miniflare tests, CLI).
+
+## Text search
+
+Optional full-text search over string literals with SQLite FTS5, which works natively and on D1. See [[crates/oxilite-core/src/text.rs]].
+
+With `StoreOptions::text_index`, `terms_fts` (external content over `terms`) indexes simple, language-tagged and directional strings; triggers on `terms` keep it current and enabling it on an existing store back-fills it. `oxl:textMatch(?literal, "fts query")` (`https://oxilite.dev/ns#textMatch`) compiles to `id IN (SELECT rowid FROM terms_fts WHERE terms_fts MATCH …)`. Without the index the fallback evaluator answers with the same tokenization (case-insensitive words, `word*` prefixes, every term required), so native stores get the same answers; D1 reports it unsupported. On D1 the index costs about 0.2 extra rows written per triple (see [[architecture#Benchmarks]]).
+
+## Command line and HTTP endpoint
+
+The `oxilite` binary (`crates/oxilite-cli`) loads, queries, explains and updates stores, and `oxilite serve` exposes the SPARQL 1.1 protocol on the routes of `oxigraph serve` (`/query`, `/update`, `/store`). See [[crates/oxilite-cli/src/main.rs]].
+
+It opens a SQLite file with the bundled SQLite, the same file through a SQLite shared library (`--library`), or a D1 database behind the local sidecar (`--d1-sidecar`). Results follow the `Accept` header (SPARQL JSON/XML/CSV/TSV, RDF formats for graphs). The benchmarks drive it with the official BSBM test driver.
+
+## Benchmarks
+
+The Berlin SPARQL Benchmark runs oxilite (bundled SQLite, system SQLite, D1 through the sidecar) against Oxigraph with RocksDB using the official BSBM tools (`bench/bsbm.sh`, submodule `bench/bsbm-tools`).
+
+The script generates a dataset, loads it into each engine, serves it, runs the explore and business-intelligence mixes with the BSBM test driver, and records load time, database size and the driver's XML results in `bench/results`. `bsbm-report` turns them into `summary.json` and the README table. `write-cost` measures D1 rows written per triple (index entries included) for each schema option on a local D1: about 4.8 by default, 3.8 without the graph index, 5.0 with the text index.
 
 ## Reasoning
 

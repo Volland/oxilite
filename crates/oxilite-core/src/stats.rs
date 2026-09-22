@@ -30,7 +30,12 @@ pub struct Stats {
     pub predicates: HashMap<i64, PredicateStats>,
     /// Instance count per `rdf:type` class.
     pub classes: HashMap<i64, f64>,
+    /// Triples per frequent (predicate, object) pair of low-cardinality predicates: values
+    /// much more common than their predicate's average (skew the average would hide).
+    pub pairs: HashMap<(i64, i64), f64>,
     pub graph_index: bool,
+    /// The full-text index exists (`oxl:textMatch` compiles to FTS5).
+    pub text_index: bool,
     /// Transitive properties (from `tbox_closure`), for query-time reasoning.
     pub transitive: BTreeSet<i64>,
 }
@@ -57,17 +62,23 @@ impl Stats {
                 id_col(caps, "o")
             )),
             crate::reason::transitive_statement(|c| id_col(caps, c)),
+            Statement::new(format!(
+                "SELECT {}, {}, n FROM stats_po",
+                id_col(caps, "p"),
+                id_col(caps, "o")
+            )),
         ])
     }
 
     pub fn from_response(response: &Response) -> Result<Self> {
-        expect_len(response, 4)?;
+        expect_len(response, 5)?;
         let mut stats = Self::default();
         for row in &response[0].rows {
             let key = col(row, 0)?.as_str().unwrap_or_default();
             let value = col(row, 1)?.clone().into_string().unwrap_or_default();
             match key {
                 "graph_index" => stats.graph_index = value == "1",
+                "text_index" => stats.text_index = value == "1",
                 "total" => {
                     stats.total = value.parse().unwrap_or(0.0);
                     stats.available = true;
@@ -103,6 +114,15 @@ impl Stats {
                 stats.transitive.insert(p);
             }
         }
+        for row in &response[4].rows {
+            if let (Some(p), Some(o), Some(n)) = (
+                col(row, 0)?.as_i64(),
+                col(row, 1)?.as_i64(),
+                col(row, 2)?.as_f64(),
+            ) {
+                stats.pairs.insert((p, o), n);
+            }
+        }
         Ok(stats)
     }
 
@@ -126,6 +146,13 @@ impl Stats {
             )),
             "INSERT OR REPLACE INTO oxilite_meta(key, value) SELECT 'total', CAST(COUNT(*) AS TEXT) FROM quads"
                 .into(),
+            "DELETE FROM stats_po".into(),
+            Statement::new(format!(
+                "INSERT INTO stats_po(p, o, n) SELECT q.p, q.o, COUNT(*) FROM quads q JOIN stats_pred sp ON sp.p = q.p \
+                 WHERE sp.distinct_o <= 1024 AND q.p <> {} GROUP BY q.p, q.o, sp.triples, sp.distinct_o \
+                 HAVING COUNT(*) >= 4.0 * sp.triples / sp.distinct_o ORDER BY COUNT(*) DESC LIMIT 2000",
+                rdf_type_id()
+            )),
         ]
     }
 }

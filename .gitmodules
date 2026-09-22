@@ -7,3 +7,6 @@
 [submodule "testsuite/shexTest"]
 	path = testsuite/shexTest
 	url = https://github.com/shexSpec/shexTest.git
+[submodule "bench/bsbm-tools"]
+	path = bench/bsbm-tools
+	url = https://github.com/Tpt/bsbm-tools.git

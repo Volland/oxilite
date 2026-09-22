@@ -13,7 +13,7 @@ use spargebra::algebra::{
     AggregateExpression, AggregateFunction, Expression, GraphPattern, PropertyPathExpression,
 };
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 /// How a variable is rendered in a UNION branch.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -313,10 +313,48 @@ impl Compiler<'_> {
         // fields several times.
         let mut aggregates: Vec<(Variable, AggregateExpression)> = aggregates.to_vec();
         let mut materialized = false;
+        let mut value_of: HashMap<Variable, Variable> = HashMap::new();
         for (_, agg) in &mut aggregates {
-            if let AggregateExpression::FunctionCall { expr, .. } = agg {
-                if !matches!(expr, Expression::Variable(_)) {
-                    let v = self.expr_term(expr, &b.cols)?;
+            if let AggregateExpression::FunctionCall { name, expr, .. } = agg {
+                // A variable read by a value aggregate (SUM, AVG, MIN, MAX…; COUNT only needs
+                // ids): its term row is joined once and its fields become inner columns.
+                if let Expression::Variable(v) = expr {
+                    if matches!(name, AggregateFunction::Count) {
+                        continue;
+                    }
+                    if let Some(h) = value_of.get(v) {
+                        *expr = Expression::Variable(h.clone());
+                        continue;
+                    }
+                    let v = v.clone();
+                    let restore = self.join_term_vars(&mut b, std::slice::from_ref(&v));
+                    let idx = self.var(&v);
+                    let joined = b.cols.get(&idx).cloned();
+                    Self::restore_terms(&mut b, restore);
+                    if let Some(bind) = joined.filter(|j| matches!(j.col, Col::Val(_))) {
+                        let hidden = self.fresh_var("val");
+                        b.cols.insert(
+                            hidden,
+                            Binding {
+                                col: bind.col,
+                                nullable: true,
+                                computed: true,
+                                correlated: false,
+                            },
+                        );
+                        let h = self.var_names[hidden].clone();
+                        value_of.insert(v, h.clone());
+                        *expr = Expression::Variable(h);
+                        materialized = true;
+                    }
+                    continue;
+                }
+                {
+                    let restore = self.join_terms(&mut b, expr);
+                    let (nb, lifted) = self.shallow(b, expr)?;
+                    b = nb;
+                    let v = self.expr_term(&lifted, &b.cols)?;
+                    Self::restore_terms(&mut b, restore);
                     let hidden = self.fresh_var("agg");
                     let col = match &v.id {
                         Some(id) if v.decodable => Col::Id(id.clone()),
@@ -337,6 +375,7 @@ impl Compiler<'_> {
             }
         }
         if materialized {
+            b.no_flatten = true;
             b = self.seal(b);
         }
         if aggregates

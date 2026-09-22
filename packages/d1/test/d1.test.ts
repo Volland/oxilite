@@ -124,6 +124,22 @@ describe("D1Store (Oxigraph JS API, async)", () => {
     await store.clearInferences();
   });
 
+  // @lat: [[tests#Text search#Text search on D1]]
+  it("full-text search with FTS5 on D1", async () => {
+    const db = await mf.getD1Database("DB");
+    const text = await D1Store.open(db, { textIndex: true });
+    await text.clear();
+    await text.load('<http://example.com/a> <http://example.com/l> "graph database" . <http://example.com/b> <http://example.com/l> "relational store" .', {
+      format: "text/turtle",
+    });
+    const r = (await text.query(
+      'SELECT ?s WHERE { ?s ?p ?l FILTER(<https://oxilite.dev/ns#textMatch>(?l, "graph")) }',
+    )) as Map<string, Term>[];
+    assert.deepStrictEqual(r.map((m) => m.get("s")?.value), ["http://example.com/a"]);
+    assert(text.explain('SELECT ?s WHERE { ?s ?p ?l FILTER(<https://oxilite.dev/ns#textMatch>(?l, "graph")) }').includes("MATCH"));
+    await text.clear();
+  });
+
   it("collision errors are typed", () => {
     assert(new OxiliteCollisionError("x") instanceof Error);
   });

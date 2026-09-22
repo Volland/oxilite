@@ -1,0 +1,568 @@
+{
+  "1000": {
+    "oxigraph": {
+      "businessIntelligence": {
+        "qmph": 520.1,
+        "queries": {
+          "1": {
+            "aqet": 0.130757,
+            "avg_results": 6.0,
+            "qps": 16.44,
+            "timeouts": 0.0
+          },
+          "2": {
+            "aqet": 0.876656,
+            "avg_results": 10.0,
+            "qps": 2.45,
+            "timeouts": 0.0
+          },
+          "3": {
+            "aqet": 0.099271,
+            "avg_results": 10.0,
+            "qps": 21.66,
+            "timeouts": 0.0
+          },
+          "4": {
+            "aqet": 2.396084,
+            "avg_results": 10.0,
+            "qps": 0.9,
+            "timeouts": 0.0
+          },
+          "5": {
+            "aqet": 0.016886,
+            "avg_results": 17.8,
+            "qps": 127.33,
+            "timeouts": 0.0
+          },
+          "6": {
+            "aqet": 0.015734,
+            "avg_results": 12.5,
+            "qps": 136.64,
+            "timeouts": 0.0
+          },
+          "7": {
+            "aqet": 5.139233,
+            "avg_results": 118.8,
+            "qps": 0.42,
+            "timeouts": 0.0
+          },
+          "8": {
+            "aqet": 0.110297,
+            "avg_results": 9.8,
+            "qps": 19.49,
+            "timeouts": 0.0
+          }
+        },
+        "runs": 5.0
+      },
+      "explore": {
+        "qmph": 489260.39,
+        "queries": {
+          "1": {
+            "aqet": 0.000427,
+            "avg_results": 0.59,
+            "qps": 8215.5,
+            "timeouts": 0.0
+          },
+          "10": {
+            "aqet": 0.00073,
+            "avg_results": 2.05,
+            "qps": 4803.13,
+            "timeouts": 0.0
+          },
+          "11": {
+            "aqet": 0.000314,
+            "avg_results": 10.0,
+            "qps": 11165.01,
+            "timeouts": 0.0
+          },
+          "12": {
+            "aqet": 0.000342,
+            "avg_results": 1551.17,
+            "qps": 10260.46,
+            "timeouts": 0.0
+          },
+          "2": {
+            "aqet": 0.000963,
+            "avg_results": 20.55,
+            "qps": 3639.24,
+            "timeouts": 0.0
+          },
+          "3": {
+            "aqet": 0.000426,
+            "avg_results": 0.29,
+            "qps": 8223.9,
+            "timeouts": 0.0
+          },
+          "4": {
+            "aqet": 0.000525,
+            "avg_results": 0.05,
+            "qps": 6672.72,
+            "timeouts": 0.0
+          },
+          "5": {
+            "aqet": 0.004915,
+            "avg_results": 3.1,
+            "qps": 713.22,
+            "timeouts": 0.0
+          },
+          "6": {
+            "aqet": 0.0,
+            "avg_results": null,
+            "qps": null,
+            "timeouts": null
+          },
+          "7": {
+            "aqet": 0.001072,
+            "avg_results": 9.8,
+            "qps": 3270.47,
+            "timeouts": 0.0
+          },
+          "8": {
+            "aqet": 0.000775,
+            "avg_results": 4.79,
+            "qps": 4523.36,
+            "timeouts": 0.0
+          },
+          "9": {
+            "aqet": 0.000213,
+            "avg_results": 949.5,
+            "qps": 16436.14,
+            "timeouts": 0.0
+          }
+        },
+        "runs": 100.0
+      },
+      "load": {
+        "engine": "oxigraph",
+        "load_seconds": 0.302,
+        "products": 1000,
+        "size_bytes": 43905024,
+        "triples": 374911
+      }
+    },
+    "oxilite": {
+      "businessIntelligence": {
+        "qmph": 899.01,
+        "queries": {
+          "1": {
+            "aqet": 0.076948,
+            "avg_results": 6.0,
+            "qps": 50.92,
+            "timeouts": 0.0
+          },
+          "2": {
+            "aqet": 0.201715,
+            "avg_results": 10.0,
+            "qps": 19.42,
+            "timeouts": 0.0
+          },
+          "3": {
+            "aqet": 0.402852,
+            "avg_results": 10.0,
+            "qps": 9.73,
+            "timeouts": 0.0
+          },
+          "4": {
+            "aqet": 3.832904,
+            "avg_results": 10.0,
+            "qps": 1.02,
+            "timeouts": 0.0
+          },
+          "5": {
+            "aqet": 2.369353,
+            "avg_results": 17.8,
+            "qps": 1.65,
+            "timeouts": 0.0
+          },
+          "6": {
+            "aqet": 0.910483,
+            "avg_results": 12.5,
+            "qps": 4.3,
+            "timeouts": 0.0
+          },
+          "7": {
+            "aqet": 0.044413,
+            "avg_results": 118.8,
+            "qps": 88.22,
+            "timeouts": 0.0
+          },
+          "8": {
+            "aqet": 0.134356,
+            "avg_results": 9.8,
+            "qps": 29.16,
+            "timeouts": 0.0
+          }
+        },
+        "runs": 5.0
+      },
+      "explore": {
+        "qmph": 335015.06,
+        "queries": {
+          "1": {
+            "aqet": 0.000818,
+            "avg_results": 0.59,
+            "qps": 4093.76,
+            "timeouts": 0.0
+          },
+          "10": {
+            "aqet": 0.001344,
+            "avg_results": 2.05,
+            "qps": 2491.3,
+            "timeouts": 0.0
+          },
+          "11": {
+            "aqet": 0.001011,
+            "avg_results": 10.0,
+            "qps": 3309.89,
+            "timeouts": 0.0
+          },
+          "12": {
+            "aqet": 0.00088,
+            "avg_results": 1551.17,
+            "qps": 3806.55,
+            "timeouts": 0.0
+          },
+          "2": {
+            "aqet": 0.001818,
+            "avg_results": 20.55,
+            "qps": 1841.45,
+            "timeouts": 0.0
+          },
+          "3": {
+            "aqet": 0.000887,
+            "avg_results": 0.29,
+            "qps": 3774.23,
+            "timeouts": 0.0
+          },
+          "4": {
+            "aqet": 0.000936,
+            "avg_results": 0.05,
+            "qps": 3575.65,
+            "timeouts": 0.0
+          },
+          "5": {
+            "aqet": 0.001643,
+            "avg_results": 3.1,
+            "qps": 2037.86,
+            "timeouts": 0.0
+          },
+          "6": {
+            "aqet": 0.0,
+            "avg_results": null,
+            "qps": null,
+            "timeouts": null
+          },
+          "7": {
+            "aqet": 0.001915,
+            "avg_results": 9.8,
+            "qps": 1748.56,
+            "timeouts": 0.0
+          },
+          "8": {
+            "aqet": 0.001625,
+            "avg_results": 4.79,
+            "qps": 2060.81,
+            "timeouts": 0.0
+          },
+          "9": {
+            "aqet": 0.000914,
+            "avg_results": 904.5,
+            "qps": 3664.8,
+            "timeouts": 0.0
+          }
+        },
+        "runs": 100.0
+      },
+      "load": {
+        "engine": "oxilite",
+        "load_seconds": 4.803,
+        "products": 1000,
+        "size_bytes": 85438464,
+        "triples": 374911
+      }
+    },
+    "oxilite-d1": {
+      "businessIntelligence": {
+        "qmph": 840.98,
+        "queries": {
+          "1": {
+            "aqet": 0.113261,
+            "avg_results": 6.0,
+            "qps": 34.15,
+            "timeouts": 0.0
+          },
+          "2": {
+            "aqet": 0.276791,
+            "avg_results": 10.0,
+            "qps": 13.97,
+            "timeouts": 0.0
+          },
+          "3": {
+            "aqet": 0.249172,
+            "avg_results": 10.0,
+            "qps": 15.52,
+            "timeouts": 0.0
+          },
+          "4": {
+            "aqet": 3.960822,
+            "avg_results": 10.0,
+            "qps": 0.98,
+            "timeouts": 0.0
+          },
+          "5": {
+            "aqet": 3.6585,
+            "avg_results": 17.8,
+            "qps": 1.06,
+            "timeouts": 0.0
+          },
+          "6": {
+            "aqet": 0.099213,
+            "avg_results": 12.5,
+            "qps": 38.99,
+            "timeouts": 0.0
+          },
+          "7": {
+            "aqet": 0.088038,
+            "avg_results": 118.8,
+            "qps": 43.94,
+            "timeouts": 0.0
+          },
+          "8": {
+            "aqet": 0.132837,
+            "avg_results": 9.8,
+            "qps": 29.12,
+            "timeouts": 0.0
+          }
+        },
+        "runs": 5.0
+      },
+      "explore": {
+        "qmph": 7982.08,
+        "queries": {
+          "1": {
+            "aqet": 0.056449,
+            "avg_results": 0.59,
+            "qps": 70.45,
+            "timeouts": 0.0
+          },
+          "10": {
+            "aqet": 0.080116,
+            "avg_results": 2.05,
+            "qps": 49.64,
+            "timeouts": 0.0
+          },
+          "11": {
+            "aqet": 0.061893,
+            "avg_results": 10.0,
+            "qps": 64.26,
+            "timeouts": 0.0
+          },
+          "12": {
+            "aqet": 0.057244,
+            "avg_results": 1551.17,
+            "qps": 69.48,
+            "timeouts": 0.0
+          },
+          "2": {
+            "aqet": 0.059129,
+            "avg_results": 20.55,
+            "qps": 67.26,
+            "timeouts": 0.0
+          },
+          "3": {
+            "aqet": 0.058998,
+            "avg_results": 0.29,
+            "qps": 67.41,
+            "timeouts": 0.0
+          },
+          "4": {
+            "aqet": 0.052941,
+            "avg_results": 0.05,
+            "qps": 75.12,
+            "timeouts": 0.0
+          },
+          "5": {
+            "aqet": 0.064813,
+            "avg_results": 3.1,
+            "qps": 61.36,
+            "timeouts": 0.0
+          },
+          "6": {
+            "aqet": 0.0,
+            "avg_results": null,
+            "qps": null,
+            "timeouts": null
+          },
+          "7": {
+            "aqet": 0.065757,
+            "avg_results": 9.8,
+            "qps": 60.48,
+            "timeouts": 0.0
+          },
+          "8": {
+            "aqet": 0.092171,
+            "avg_results": 4.79,
+            "qps": 43.15,
+            "timeouts": 0.0
+          },
+          "9": {
+            "aqet": 0.103549,
+            "avg_results": 904.5,
+            "qps": 38.41,
+            "timeouts": 0.0
+          }
+        },
+        "runs": 100.0
+      },
+      "load": {
+        "engine": "oxilite-d1",
+        "load_seconds": 16.554,
+        "products": 1000,
+        "size_bytes": 0,
+        "triples": 374911
+      }
+    },
+    "oxilite-dylib": {
+      "businessIntelligence": {
+        "qmph": 1233.21,
+        "queries": {
+          "1": {
+            "aqet": 0.086478,
+            "avg_results": 6.0,
+            "qps": 44.81,
+            "timeouts": 0.0
+          },
+          "2": {
+            "aqet": 1.431888,
+            "avg_results": 10.0,
+            "qps": 2.71,
+            "timeouts": 0.0
+          },
+          "3": {
+            "aqet": 0.251959,
+            "avg_results": 10.0,
+            "qps": 15.38,
+            "timeouts": 0.0
+          },
+          "4": {
+            "aqet": 5.1074,
+            "avg_results": 10.0,
+            "qps": 0.76,
+            "timeouts": 0.0
+          },
+          "5": {
+            "aqet": 0.903055,
+            "avg_results": 17.8,
+            "qps": 4.29,
+            "timeouts": 0.0
+          },
+          "6": {
+            "aqet": 0.038892,
+            "avg_results": 12.5,
+            "qps": 99.64,
+            "timeouts": 0.0
+          },
+          "7": {
+            "aqet": 0.019897,
+            "avg_results": 118.8,
+            "qps": 194.76,
+            "timeouts": 0.0
+          },
+          "8": {
+            "aqet": 0.098359,
+            "avg_results": 9.8,
+            "qps": 39.4,
+            "timeouts": 0.0
+          }
+        },
+        "runs": 5.0
+      },
+      "explore": {
+        "qmph": 348837.89,
+        "queries": {
+          "1": {
+            "aqet": 0.000824,
+            "avg_results": 0.59,
+            "qps": 4275.69,
+            "timeouts": 0.0
+          },
+          "10": {
+            "aqet": 0.001264,
+            "avg_results": 2.05,
+            "qps": 2786.96,
+            "timeouts": 0.0
+          },
+          "11": {
+            "aqet": 0.000938,
+            "avg_results": 10.0,
+            "qps": 3756.18,
+            "timeouts": 0.0
+          },
+          "12": {
+            "aqet": 0.000943,
+            "avg_results": 1551.17,
+            "qps": 3734.92,
+            "timeouts": 0.0
+          },
+          "2": {
+            "aqet": 0.002088,
+            "avg_results": 20.55,
+            "qps": 1686.99,
+            "timeouts": 0.0
+          },
+          "3": {
+            "aqet": 0.000815,
+            "avg_results": 0.29,
+            "qps": 4321.46,
+            "timeouts": 0.0
+          },
+          "4": {
+            "aqet": 0.000846,
+            "avg_results": 0.05,
+            "qps": 4160.89,
+            "timeouts": 0.0
+          },
+          "5": {
+            "aqet": 0.001604,
+            "avg_results": 3.1,
+            "qps": 2195.54,
+            "timeouts": 0.0
+          },
+          "6": {
+            "aqet": 0.0,
+            "avg_results": null,
+            "qps": null,
+            "timeouts": null
+          },
+          "7": {
+            "aqet": 0.001852,
+            "avg_results": 9.8,
+            "qps": 1901.3,
+            "timeouts": 0.0
+          },
+          "8": {
+            "aqet": 0.001513,
+            "avg_results": 4.79,
+            "qps": 2326.98,
+            "timeouts": 0.0
+          },
+          "9": {
+            "aqet": 0.00082,
+            "avg_results": 904.5,
+            "qps": 4292.4,
+            "timeouts": 0.0
+          }
+        },
+        "runs": 100.0
+      },
+      "load": {
+        "engine": "oxilite-dylib",
+        "load_seconds": 2.855,
+        "products": 1000,
+        "size_bytes": 85569536,
+        "triples": 374911
+      }
+    }
+  }
+}

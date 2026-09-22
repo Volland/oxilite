@@ -18,6 +18,7 @@ pub mod resolve;
 pub mod schema;
 pub mod sql;
 pub mod stats;
+pub mod text;
 pub mod update;
 pub mod writer;
 

@@ -132,6 +132,10 @@ pub(crate) struct Block {
     pub stage: Stage,
     /// Extra select-list entries (e.g. the aggregate that makes a bare column meaningful).
     pub extra_select: Vec<String>,
+    /// Render `LIMIT -1` so that SQLite does not flatten this subquery into an aggregate
+    /// query (flattening restriction 21): its computed columns are then evaluated once per row
+    /// instead of being inlined into every aggregate that reads them.
+    pub no_flatten: bool,
 }
 
 pub(crate) const VAL_FIELDS: [&str; 10] = ["i", "k", "l", "d", "g", "n", "t", "s", "b", "x"];
@@ -232,7 +236,7 @@ impl Block {
             sql.push_str(" ORDER BY ");
             sql.push_str(&self.order_by.join(", "));
         }
-        if self.limit.is_some() || self.offset > 0 {
+        if self.limit.is_some() || self.offset > 0 || self.no_flatten {
             let _ = write!(
                 sql,
                 " LIMIT {}",
@@ -364,6 +368,176 @@ impl<'a> Compiler<'a> {
             pending_triples: Vec::new(),
             plan_hint: Vec::new(),
         }
+    }
+
+    /// Joins `terms` once per stored-term variable an expression reads, so that its fields
+    /// come from one row instead of one correlated lookup each (see [`V::from_joined`]).
+    /// Returns the bindings to restore once the expression is compiled: other operators keep
+    /// seeing plain id columns.
+    pub(crate) fn join_terms(
+        &mut self,
+        b: &mut Block,
+        e: &Expression,
+    ) -> Vec<(usize, Binding, String)> {
+        if matches!(e, Expression::Variable(_) | Expression::Bound(_)) {
+            return Vec::new();
+        }
+        let mut vars = Vec::new();
+        expression_variables(e, &mut vars);
+        self.join_term_vars(b, &vars)
+    }
+
+    /// [`Self::join_terms`] for a list of variables.
+    pub(crate) fn join_term_vars(
+        &mut self,
+        b: &mut Block,
+        vars: &[Variable],
+    ) -> Vec<(usize, Binding, String)> {
+        let mut restore = Vec::new();
+        if b.stage >= Stage::Grouped || b.from.is_empty() || !b.is_plain() {
+            return restore;
+        }
+        for v in vars {
+            let Some(&idx) = self.vars.get(v) else {
+                continue;
+            };
+            let Some(bind) = b.cols.get(&idx) else {
+                continue;
+            };
+            let Col::Id(x) = &bind.col else {
+                continue;
+            };
+            if bind.correlated || bind.computed {
+                continue;
+            }
+            let x = x.clone();
+            let t = self.alias("t");
+            b.from.push(FromItem {
+                join: Join::Left(format!("{t}.id = {x}")),
+                item: format!("terms {t}"),
+            });
+            let mut joined = bind.clone();
+            let v = V::from_joined(&x, &t);
+            let marker = v.lex.clone();
+            joined.col = Col::Val(Box::new(v));
+            restore.push((idx, bind.clone(), marker));
+            b.cols.insert(idx, joined);
+        }
+        restore
+    }
+
+    /// Puts back the id bindings replaced by [`Self::join_terms`], unless the block was sealed
+    /// meanwhile (its bindings then name the subquery's columns).
+    pub(crate) fn restore_terms(b: &mut Block, restore: Vec<(usize, Binding, String)>) {
+        for (i, bind, marker) in restore {
+            if let Some(cur) = b.cols.get_mut(&i) {
+                if matches!(&cur.col, Col::Val(v) if v.lex == marker) {
+                    *cur = bind;
+                }
+            }
+        }
+    }
+
+    /// Keeps SQL shallow for nested function calls: a large argument (e.g. the canonical string
+    /// of a decimal inside `xsd:float(xsd:string(?price))`) is computed once as a column of a
+    /// sealed subquery, instead of being inlined everywhere the outer function uses it, which
+    /// multiplies SQL size (and per-row work) at each nesting level.
+    pub(crate) fn shallow(&mut self, b: Block, e: &Expression) -> Result<(Block, Expression)> {
+        use Expression as E;
+        let two = |me: &mut Self, b: Block, x: &E, y: &E| -> Result<(Block, E, E)> {
+            let (b, x) = me.shallow_arg(b, x)?;
+            let (b, y) = me.shallow_arg(b, y)?;
+            Ok((b, x, y))
+        };
+        Ok(match e {
+            E::FunctionCall(f, args) => {
+                let mut b = b;
+                let mut out = Vec::with_capacity(args.len());
+                for a in args {
+                    let (nb, a) = self.shallow_arg(b, a)?;
+                    b = nb;
+                    out.push(a);
+                }
+                (b, E::FunctionCall(f.clone(), out))
+            }
+            E::Equal(x, y) => {
+                let (b, x, y) = two(self, b, x, y)?;
+                (b, E::Equal(Box::new(x), Box::new(y)))
+            }
+            E::Less(x, y) => {
+                let (b, x, y) = two(self, b, x, y)?;
+                (b, E::Less(Box::new(x), Box::new(y)))
+            }
+            E::LessOrEqual(x, y) => {
+                let (b, x, y) = two(self, b, x, y)?;
+                (b, E::LessOrEqual(Box::new(x), Box::new(y)))
+            }
+            E::Greater(x, y) => {
+                let (b, x, y) = two(self, b, x, y)?;
+                (b, E::Greater(Box::new(x), Box::new(y)))
+            }
+            E::GreaterOrEqual(x, y) => {
+                let (b, x, y) = two(self, b, x, y)?;
+                (b, E::GreaterOrEqual(Box::new(x), Box::new(y)))
+            }
+            E::Add(x, y) => {
+                let (b, x, y) = two(self, b, x, y)?;
+                (b, E::Add(Box::new(x), Box::new(y)))
+            }
+            E::Subtract(x, y) => {
+                let (b, x, y) = two(self, b, x, y)?;
+                (b, E::Subtract(Box::new(x), Box::new(y)))
+            }
+            E::Multiply(x, y) => {
+                let (b, x, y) = two(self, b, x, y)?;
+                (b, E::Multiply(Box::new(x), Box::new(y)))
+            }
+            E::Divide(x, y) => {
+                let (b, x, y) = two(self, b, x, y)?;
+                (b, E::Divide(Box::new(x), Box::new(y)))
+            }
+            E::And(x, y) => {
+                let (b, x) = self.shallow(b, x)?;
+                let (b, y) = self.shallow(b, y)?;
+                (b, E::And(Box::new(x), Box::new(y)))
+            }
+            E::Or(x, y) => {
+                let (b, x) = self.shallow(b, x)?;
+                let (b, y) = self.shallow(b, y)?;
+                (b, E::Or(Box::new(x), Box::new(y)))
+            }
+            E::Not(x) => {
+                let (b, x) = self.shallow(b, x)?;
+                (b, E::Not(Box::new(x)))
+            }
+            _ => (b, e.clone()),
+        })
+    }
+
+    /// [`Self::shallow`] for an operand: after lifting inside it, a function call whose SQL is
+    /// large becomes a column of a sealed subquery.
+    fn shallow_arg(&mut self, b: Block, a: &Expression) -> Result<(Block, Expression)> {
+        const LIMIT: usize = 1_500;
+        let (mut b, a) = self.shallow(b, a)?;
+        if !matches!(a, Expression::FunctionCall(..)) {
+            return Ok((b, a));
+        }
+        let v = self.expr_term(&a, &b.cols)?;
+        if v.size() <= LIMIT {
+            return Ok((b, a));
+        }
+        let hidden = self.fresh_var("arg");
+        b.cols.insert(
+            hidden,
+            Binding {
+                col: Col::Val(Box::new(v)),
+                nullable: true,
+                computed: true,
+                correlated: false,
+            },
+        );
+        b = self.seal(b);
+        Ok((b, Expression::Variable(self.var_names[hidden].clone())))
     }
 
     pub(crate) fn var(&mut self, v: &Variable) -> usize {
@@ -505,8 +679,10 @@ impl<'a> Compiler<'a> {
             }
             GraphPattern::Filter { expr, inner } => {
                 let b = self.pattern(inner)?;
-                let mut b = self.plain(b);
-                let conds = self.filter_conditions(expr, &b.cols)?;
+                let b = self.plain(b);
+                let (b, expr) = self.shallow(b, expr)?;
+                let mut b = b;
+                let conds = self.filter_conditions(&expr, &b.cols)?;
                 b.wheres.extend(conds);
                 Ok(b)
             }
@@ -551,7 +727,12 @@ impl<'a> Compiler<'a> {
             } => {
                 let b = self.pattern(inner)?;
                 let mut b = self.plain(b);
+                let restore = self.join_terms(&mut b, expression);
+                let (b, expression) = self.shallow(b, expression)?;
+                let mut b = b;
+                let expression = &expression;
                 let v = self.expr_term(expression, &b.cols)?;
+                Self::restore_terms(&mut b, restore);
                 let idx = self.var(variable);
                 let (nullable, computed) = match expression {
                     Expression::Variable(x) => {
@@ -1219,6 +1400,48 @@ fn has_quad_access(p: &GraphPattern) -> bool {
         | GraphPattern::Slice { inner, .. }
         | GraphPattern::Group { inner, .. } => has_quad_access(inner),
         _ => true,
+    }
+}
+
+/// Variables an expression reads (outside EXISTS patterns), each once.
+fn expression_variables(e: &Expression, out: &mut Vec<Variable>) {
+    match e {
+        Expression::Variable(v) | Expression::Bound(v) if !out.contains(v) => out.push(v.clone()),
+        Expression::Or(a, b)
+        | Expression::And(a, b)
+        | Expression::Equal(a, b)
+        | Expression::SameTerm(a, b)
+        | Expression::Greater(a, b)
+        | Expression::GreaterOrEqual(a, b)
+        | Expression::Less(a, b)
+        | Expression::LessOrEqual(a, b)
+        | Expression::Add(a, b)
+        | Expression::Subtract(a, b)
+        | Expression::Multiply(a, b)
+        | Expression::Divide(a, b) => {
+            expression_variables(a, out);
+            expression_variables(b, out);
+        }
+        Expression::UnaryPlus(a) | Expression::UnaryMinus(a) | Expression::Not(a) => {
+            expression_variables(a, out)
+        }
+        Expression::In(a, l) => {
+            expression_variables(a, out);
+            for x in l {
+                expression_variables(x, out);
+            }
+        }
+        Expression::If(a, b, c) => {
+            for x in [a, b, c] {
+                expression_variables(x, out);
+            }
+        }
+        Expression::Coalesce(l) | Expression::FunctionCall(_, l) => {
+            for x in l {
+                expression_variables(x, out);
+            }
+        }
+        _ => {}
     }
 }
 

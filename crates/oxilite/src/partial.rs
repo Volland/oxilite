@@ -287,7 +287,12 @@ pub(crate) fn evaluate<B: SyncBackend + Send + Sync + 'static>(
         jobs,
         cache: Mutex::new(HashMap::new()),
     };
-    let evaluator = QueryEvaluator::new().with_default_service_handler(handler);
+    let evaluator = QueryEvaluator::new()
+        .with_default_service_handler(handler)
+        .with_custom_function(
+            oxilite_core::text::text_match_name(),
+            oxilite_core::text::text_match,
+        );
     let mut prepared = evaluator.prepare(&rewritten);
     let dataset = oxilite_core::fallback::SqlDataset::new(&*backend).with_options(options)?;
     oxilite_core::fallback::apply_dataset_options(prepared.dataset_mut(), query, options, |id| {

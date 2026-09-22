@@ -13,3 +13,4 @@ node_modules/
 /bindings/node/test-results.json
 /examples/d1-worker-ts/build/
 .wrangler/
+bench/bsbm-tools/td_data/

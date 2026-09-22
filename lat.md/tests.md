@@ -46,6 +46,14 @@ With statistics showing `ex:rare` has 10 triples and `rdf:type ex:Common` 1 000,
 
 In a chain of patterns, every pattern after the first shares a variable with an earlier one, so no Cartesian product is introduced.
 
+### Frequent values are not selective
+
+A (predicate, object) pair recorded in `stats_po` as far more frequent than its predicate's average makes the planner start from a rarer pattern instead.
+
+### BSBM plans use indexes
+
+Every BSBM explore and business-intelligence query template, on a small BSBM-shaped dataset, compiles fully to SQL under D1's 90 KB, runs, and its `EXPLAIN QUERY PLAN` scans no quad table or index.
+
 ### Heuristics without statistics
 
 Without statistics, a pattern with a constant subject is ordered before one with only a constant predicate.
@@ -171,6 +179,26 @@ A reasoned BGP compiles fully to one SQL statement that reads `tbox_closure`.
 ### Agreement with reasonable
 
 On five sample ontologies (RDFS, property axioms, equality, class expressions with lists and chains, schema cycles) the SQL rules and the `reasonable` crate produce exactly the same closure.
+
+## Text search
+
+FTS5 full-text search and `oxl:textMatch`, see [[architecture#Text search]].
+
+### Word match
+
+With the text index, word, multi-word and prefix queries (including across diacritics) find the right literals on bundled and system SQLite, compile to an FTS5 `MATCH`, and survive `clear()` and re-insertion.
+
+### Same answers without the index
+
+Without the text index the same queries give the same answers through the fallback evaluator.
+
+### Disabled by default
+
+A default store has no full-text table and its schema script creates none.
+
+### Text search on D1
+
+A D1 store opened with `textIndex: true` answers `textMatch` through FTS5 on Miniflare.
 
 ## Validation
 

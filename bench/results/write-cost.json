@@ -1,0 +1,29 @@
+[
+  {
+    "graph_index": true,
+    "rows_written": 24060,
+    "rows_written_per_triple": 4.812,
+    "schema": "graph index (default)",
+    "statements": 20,
+    "text_index": false,
+    "triples": 5000
+  },
+  {
+    "graph_index": false,
+    "rows_written": 19060,
+    "rows_written_per_triple": 3.812,
+    "schema": "no graph index",
+    "statements": 20,
+    "text_index": false,
+    "triples": 5000
+  },
+  {
+    "graph_index": true,
+    "rows_written": 25060,
+    "rows_written_per_triple": 5.012,
+    "schema": "graph index + text index",
+    "statements": 20,
+    "text_index": true,
+    "triples": 5000
+  }
+]

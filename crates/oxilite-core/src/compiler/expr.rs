@@ -57,6 +57,23 @@ pub(crate) struct V {
     pub tz: String,
 }
 
+impl V {
+    /// Total SQL text of the fields (how much inlining this value costs).
+    pub(crate) fn size(&self) -> usize {
+        self.id.as_ref().map_or(0, String::len)
+            + self.kind.len()
+            + self.lex.len()
+            + self.dt.len()
+            + self.lang.len()
+            + self.num.len()
+            + self.nt.len()
+            + self.ts.len()
+            + self.boolv.len()
+            + self.aux.len()
+            + self.tz.len()
+    }
+}
+
 pub(crate) const K_IRI: i64 = Tag::Iri as i64;
 pub(crate) const K_BNODE: i64 = Tag::BlankNode as i64;
 pub(crate) const K_STRING: i64 = Tag::String as i64;
@@ -133,6 +150,42 @@ impl V {
             computed_num: false,
             decodable: true,
         }
+    }
+
+    /// Like [`Self::from_id`], with the stored term's row joined once as `t` (`LEFT JOIN terms t
+    /// ON t.id = x`): every field reads that row instead of running its own lookup, which
+    /// matters when expressions (casts, arithmetic, aggregates) read many fields per row.
+    pub(crate) fn from_joined(x: &str, t: &str) -> Self {
+        let k = format!("(({x}) >> {PAYLOAD_BITS})");
+        let payload = format!("(({x}) & {PAYLOAD_MASK})");
+        let mut v = Self::from_id(x);
+        v.lex = format!(
+            "CASE {k} WHEN {K_INT} THEN CAST({payload} - {INT_OFFSET} AS TEXT) WHEN {K_BOOL} THEN CASE {payload} WHEN 1 THEN 'true' ELSE 'false' END ELSE {t}.lex END"
+        );
+        v.dt = format!(
+            "CASE {k} WHEN {K_STRING} THEN {} WHEN {K_LANG} THEN {} WHEN {K_DIRLANG} THEN {} WHEN {K_INT} THEN {} WHEN {K_BOOL} THEN {} WHEN {K_TYPED} THEN {t}.dt END",
+            xsd_str(xsd::STRING),
+            xsd_str(rdf::LANG_STRING),
+            sql_str("http://www.w3.org/1999/02/22-rdf-syntax-ns#dirLangString"),
+            xsd_str(xsd::INTEGER),
+            xsd_str(xsd::BOOLEAN),
+        );
+        v.lang = format!(
+            "CASE {k} WHEN {K_LANG} THEN {t}.lang WHEN {K_DIRLANG} THEN {t}.lang || '--' || CASE {t}.dir WHEN 2 THEN 'rtl' ELSE 'ltr' END END"
+        );
+        v.num = format!(
+            "CASE {k} WHEN {K_INT} THEN {payload} - {INT_OFFSET} WHEN {K_TYPED} THEN CASE WHEN {t}.nt IS NOT NULL THEN {t}.num END END"
+        );
+        v.nt = format!("CASE {k} WHEN {K_INT} THEN 1 WHEN {K_TYPED} THEN {t}.nt END");
+        v.ts = format!("CASE WHEN {k} = {K_TYPED} THEN {t}.ts END");
+        v.boolv = format!(
+            "CASE {k} WHEN {K_BOOL} THEN {payload} WHEN {K_TYPED} THEN CASE WHEN {t}.dt = {} THEN {t}.num END END",
+            xsd_str(xsd::BOOLEAN)
+        );
+        v.tz = format!(
+            "CASE WHEN {k} = {K_TYPED} AND {t}.ts IS NOT NULL THEN {t}.dt || '|' || {t}.dir END"
+        );
+        v
     }
 
     /// Value of a constant term.
@@ -1169,6 +1222,24 @@ impl Compiler<'_> {
                 v.stat = Stat::LangString;
                 E::T(v)
             }
+            Function::Custom(name) if name.as_str() == crate::text::TEXT_MATCH => {
+                let [value, Expression::Literal(query)] = args else {
+                    return Err(Error::unsupported("textMatch with a non-constant query"));
+                };
+                if !self.stats.text_index {
+                    return Err(Error::unsupported(
+                        "textMatch without the text index (StoreOptions::text_index)",
+                    ));
+                }
+                let v = self.expr_term(value, cols)?;
+                let Some(id) = v.id.clone() else {
+                    return Err(Error::unsupported("textMatch on a computed value"));
+                };
+                E::B(format!(
+                    "(({id}) IN (SELECT rowid FROM terms_fts WHERE terms_fts MATCH {}))",
+                    crate::sql::sql_str(query.value())
+                ))
+            }
             Function::Custom(name) => {
                 let a = self.args(args, cols)?;
                 if a.len() == 1
@@ -1311,6 +1382,13 @@ fn collapse(lex: &str) -> String {
     format!("trim({lex}, ' ' || char(9) || char(10) || char(13))")
 }
 
+/// Evaluates `body` with the (trimmed) lexical form bound once as `lx`: a correlated scalar
+/// subquery over a one-row FROM subquery is SQL's only per-row `let`. Validity checks read the
+/// lexical form a dozen times, so inlining it would multiply its SQL (and its evaluation).
+fn let_lex(t: &str, body: impl Fn(&str) -> String) -> String {
+    format!("(SELECT {} FROM (SELECT {t} AS lx))", body("lx"))
+}
+
 /// `t` is a valid `xsd:integer` lexical form.
 fn int_lex(t: &str) -> String {
     let u = format!("(CASE WHEN substr({t}, 1, 1) IN ('+', '-') THEN substr({t}, 2) ELSE {t} END)");
@@ -1369,26 +1447,29 @@ fn cast(a: &V, dt: &NamedNode) -> Result<V> {
             n = a.num
         )),
         "http://www.w3.org/2001/XMLSchema#integer" => V::integer(format!(
-            "CASE WHEN {is_bool} THEN ({b}) WHEN {is_num} THEN CASE WHEN abs({n}) < 9.2e18 THEN CAST({n} AS INTEGER) END WHEN {is_str} AND {il} THEN CAST({t} AS INTEGER) END",
+            "CASE WHEN {is_bool} THEN ({b}) WHEN {is_num} THEN CASE WHEN abs({n}) < 9.2e18 THEN CAST({n} AS INTEGER) END WHEN {is_str} THEN {parse} END",
             b = a.boolv,
             n = a.num,
-            il = int_lex(&t)
+            parse = let_lex(&t, |x| format!("CASE WHEN {} THEN CAST({x} AS INTEGER) END", int_lex(x)))
         )),
         "http://www.w3.org/2001/XMLSchema#decimal" => V::numeric(
             format!(
-                "CASE WHEN {is_bool} THEN ({b}) * 1.0 WHEN {is_num} THEN CASE WHEN abs({n}) < 9e999 THEN CAST({n} AS REAL) END WHEN {is_str} AND {dl} THEN CAST({t} AS REAL) END",
+                "CASE WHEN {is_bool} THEN ({b}) * 1.0 WHEN {is_num} THEN CASE WHEN abs({n}) < 9e999 THEN CAST({n} AS REAL) END WHEN {is_str} THEN {parse} END",
                 b = a.boolv,
                 n = a.num,
-                dl = dec_lex(&t)
+                parse = let_lex(&t, |x| format!("CASE WHEN {} THEN CAST({x} AS REAL) END", dec_lex(x)))
             ),
             numeric_type::DECIMAL.to_string(),
         ),
         "http://www.w3.org/2001/XMLSchema#float" | "http://www.w3.org/2001/XMLSchema#double" => V::numeric(
             format!(
-                "CASE WHEN {is_bool} THEN ({b}) * 1.0 WHEN {is_num} THEN CAST({n} AS REAL) WHEN {is_str} AND {dl} THEN CASE WHEN {t} IN ('INF', '+INF') THEN 9e999 WHEN {t} = '-INF' THEN -9e999 ELSE CAST({t} AS REAL) END END",
+                "CASE WHEN {is_bool} THEN ({b}) * 1.0 WHEN {is_num} THEN CAST({n} AS REAL) WHEN {is_str} THEN {parse} END",
                 b = a.boolv,
                 n = a.num,
-                dl = dbl_lex(&t)
+                parse = let_lex(&t, |x| format!(
+                    "CASE WHEN {} THEN CASE WHEN {x} IN ('INF', '+INF') THEN 9e999 WHEN {x} = '-INF' THEN -9e999 ELSE CAST({x} AS REAL) END END",
+                    dbl_lex(x)
+                ))
             ),
             if dts.ends_with("float") { numeric_type::FLOAT } else { numeric_type::DOUBLE }.to_string(),
         ),

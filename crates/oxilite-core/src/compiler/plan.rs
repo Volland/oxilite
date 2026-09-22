@@ -52,6 +52,16 @@ pub(crate) fn estimate(tp: &[Pos; 3], bound: &HashSet<usize>, stats: &Stats) -> 
                             c = c.min(1.0);
                         }
                     }
+                    Pos::Const(oid) => {
+                        c = stats
+                            .pairs
+                            .get(&(pid, oid))
+                            .copied()
+                            .unwrap_or(c / ps.distinct_objects);
+                        if sb {
+                            c = c.min(1.0);
+                        }
+                    }
                     _ => c /= ps.distinct_objects,
                 }
             }
@@ -193,6 +203,44 @@ mod tests {
             }
             bound.extend(vars);
         }
+    }
+
+    // @lat: [[tests#Planner#Frequent values are not selective]]
+    #[test]
+    fn frequent_values_are_not_selective() {
+        // ?x country ex:US (a value 90% of subjects share) vs ?x tag ?t (10 triples in all):
+        // the average (triples / distinct objects) would rank the country pattern first.
+        let country = named_node_id("http://ex/country");
+        let us = named_node_id("http://ex/US");
+        let tag = named_node_id("http://ex/tag");
+        let mut stats = Stats {
+            available: true,
+            total: 1010.0,
+            ..Stats::default()
+        };
+        stats.predicates.insert(
+            country,
+            PredicateStats {
+                triples: 1000.0,
+                distinct_subjects: 1000.0,
+                distinct_objects: 100.0,
+            },
+        );
+        stats.predicates.insert(
+            tag,
+            PredicateStats {
+                triples: 10.0,
+                distinct_subjects: 10.0,
+                distinct_objects: 10.0,
+            },
+        );
+        let patterns = [
+            [Pos::Var(0), Pos::Const(country), Pos::Const(us)],
+            [Pos::Var(0), Pos::Const(tag), Pos::Var(1)],
+        ];
+        assert_eq!(order(&patterns, &HashSet::new(), &stats), vec![0, 1]);
+        stats.pairs.insert((country, us), 900.0);
+        assert_eq!(order(&patterns, &HashSet::new(), &stats), vec![1, 0]);
     }
 
     // @lat: [[tests#Planner#Heuristics without statistics]]

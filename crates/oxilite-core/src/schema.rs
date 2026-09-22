@@ -15,11 +15,16 @@ pub const SCHEMA_VERSION: &str = "1";
 pub struct StoreOptions {
     /// Create the optional `quads_gspo` index (fast `GRAPH <g> { ?s ?p ?o }`, `CLEAR GRAPH`).
     pub graph_index: bool,
+    /// Create the full-text index over string literals (FTS5, see [`crate::text`]).
+    pub text_index: bool,
 }
 
 impl Default for StoreOptions {
     fn default() -> Self {
-        Self { graph_index: true }
+        Self {
+            graph_index: true,
+            text_index: false,
+        }
     }
 }
 
@@ -68,6 +73,8 @@ pub fn create_schema(options: &StoreOptions) -> Request {
         "CREATE TABLE IF NOT EXISTS stats_pred (\
             p INTEGER PRIMARY KEY, triples INTEGER NOT NULL, distinct_s INTEGER NOT NULL, distinct_o INTEGER NOT NULL) STRICT",
         "CREATE TABLE IF NOT EXISTS stats_class (o INTEGER PRIMARY KEY, instances INTEGER NOT NULL) STRICT",
+        // Frequent (predicate, object) pairs of low-cardinality predicates (planner skew).
+        "CREATE TABLE IF NOT EXISTS stats_po (p INTEGER NOT NULL, o INTEGER NOT NULL, n INTEGER NOT NULL, PRIMARY KEY (p, o)) WITHOUT ROWID, STRICT",
         // Reasoning: the schema closure (see `reason::closure_statements`) and materialized
         // OWL 2 RL inferences, kept apart from asserted quads.
         "CREATE TABLE IF NOT EXISTS tbox_closure (\
@@ -93,6 +100,9 @@ pub fn create_schema(options: &StoreOptions) -> Request {
     .collect::<Vec<_>>();
     if options.graph_index {
         s.push("CREATE INDEX IF NOT EXISTS quads_gspo ON quads(g, s, p, o)".into());
+    }
+    if options.text_index {
+        s.extend(crate::text::schema_statements());
     }
     s.push(
         format!(

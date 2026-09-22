@@ -2,7 +2,7 @@
 
 **An Oxigraph-compatible RDF database and SPARQL engine that uses SQLite as its storage engine. It runs anywhere SQLite runs, including Cloudflare D1.**
 
-> **Status: M1 (storage core), M2 (full SPARQL 1.1 query compiled to SQL), M3 (atomic SPARQL Update, Cloudflare D1), the TypeScript packages, M4 (RDFS / OWL reasoning) and M5 (SHACL / ShEx validation with rudof) implemented.** The Rust store, native backends, the D1 backend, `@oxilite/node`, `@oxilite/d1`, reasoning, validation and the Oxigraph compatibility harness work today; the performance milestone is specified and being implemented. See [Roadmap](#roadmap).
+> **Status: milestones M1–M6 implemented** — M1 (storage core), M2 (full SPARQL 1.1 query compiled to SQL), M3 (atomic SPARQL Update, Cloudflare D1), the TypeScript packages, M4 (RDFS / OWL reasoning), M5 (SHACL / ShEx validation with rudof) and M6 (BSBM benchmarks, planner tuning, full-text search). See [Roadmap](#roadmap).
 
 ---
 
@@ -177,6 +177,28 @@ The API mirrors Oxigraph's JS package (`query`, `update`, `load`, `dump`, `add`,
 
 ---
 
+### Command line and SPARQL endpoint
+
+```bash
+cargo install --path crates/oxilite-cli                 # the `oxilite` binary
+oxilite load  -l data.sqlite -f dump.nt                # bulk load, then refresh statistics
+oxilite query -l data.sqlite -q 'SELECT * WHERE { ?s ?p ?o } LIMIT 5'
+oxilite explain -l data.sqlite -q '…'                  # the SQL and the join order
+oxilite serve -l data.sqlite -b 127.0.0.1:7879         # /query, /update, /store like `oxigraph serve`
+oxilite serve -l data.sqlite --library /usr/lib/libsqlite3.dylib   # same file, system SQLite
+```
+
+### Full-text search
+
+Create the store with the text index (`StoreOptions { text_index: true, .. }`, `--text-index`, or `{ textIndex: true }` in JavaScript) and match literals with FTS5:
+
+```sparql
+PREFIX oxl: <https://oxilite.dev/ns#>
+SELECT ?product WHERE { ?product rdfs:label ?label FILTER(oxl:textMatch(?label, "graph data*")) }
+```
+
+With the index this is an FTS5 `MATCH` (on D1 too). Without it, native stores still answer through the fallback evaluator with the same word matching.
+
 ## Using oxilite with Cloudflare D1
 
 D1 is a managed, serverless SQLite. You can't load extensions or native code, and every call is a network round-trip billed per row read and written. oxilite is designed around exactly these constraints.
@@ -282,6 +304,47 @@ Intentional differences:
 
 ---
 
+## Performance
+
+Measured with the [Berlin SPARQL Benchmark](http://wbsg.informatik.uni-mannheim.de/bizer/berlinsparqlbenchmark/) and its official tools against Oxigraph 0.5.11 (RocksDB), on one laptop. Run `bench/bsbm.sh [products] [parallelism] [runs]` to reproduce, then `cargo run -p oxilite-bench --bin bsbm-report` to regenerate this table. QMpH is query mixes per hour, so higher is better.
+
+<!-- bsbm-results:begin -->
+
+**1000 products (374911 triples)**
+
+| engine | load (s) | size (MB) | explore QMpH | business intelligence QMpH |
+|---|---|---|---|---|
+| oxigraph | 0.30 | 43.9 | 489260 | 520 |
+| oxilite | 4.80 | 85.4 | 335015 | 899 |
+| oxilite-d1 | 16.55 | – | 7982 | 841 |
+| oxilite-dylib | 2.85 | 85.6 | 348838 | 1233 |
+
+| explore query (avg ms) | oxigraph | oxilite | oxilite-d1 | oxilite-dylib |
+|---|---|---|---|---|
+| Q1 | 0.43 | 0.82 | 56.45 | 0.82 |
+| Q2 | 0.96 | 1.82 | 59.13 | 2.09 |
+| Q3 | 0.43 | 0.89 | 59.00 | 0.81 |
+| Q4 | 0.53 | 0.94 | 52.94 | 0.85 |
+| Q5 | 4.92 | 1.64 | 64.81 | 1.60 |
+| Q7 | 1.07 | 1.92 | 65.76 | 1.85 |
+| Q8 | 0.78 | 1.62 | 92.17 | 1.51 |
+| Q9 | 0.21 | 0.91 | 103.55 | 0.82 |
+| Q10 | 0.73 | 1.34 | 80.12 | 1.26 |
+| Q11 | 0.31 | 1.01 | 61.89 | 0.94 |
+| Q12 | 0.34 | 0.88 | 57.24 | 0.94 |
+
+<!-- bsbm-results:end -->
+
+Every query returned the same results on all engines; explore Q9 (a DESCRIBE) differs only in RDF/XML byte size, because oxilite writes the same triples in a different order. `oxilite-d1` runs on a local D1 (Miniflare) behind an HTTP sidecar, so each query pays about 55 ms of round trips; it measures the D1 code path, not Cloudflare's latency. oxilite trades load speed and file size (three covering indexes over integer ids in one SQLite file) for running anywhere SQLite runs; on the aggregate-heavy business-intelligence mix it is faster than Oxigraph.
+
+**D1 write cost.** Rows written per inserted triple (D1's billing unit, index entries included), measured on a local D1 by `cargo run -p oxilite-bench --bin write-cost`:
+
+| schema | rows written per triple |
+|---|---|
+| graph index (default) | 4.81 |
+| without the graph index (`graphIndex: false`) | 3.81 |
+| graph index + text index | 5.01 |
+
 ## Reasoning and validation
 
 - **Reasoning (M4).** Per-query `Rdfs` / `OwlQl` entailment by rewriting against a small materialized TBox closure. Queries stay single statements and there are no extra writes. OWL 2 RL materialization is available on request via `materialize()`, using SQL fixpoint rules everywhere (D1 included) and, natively, `reasonable` (feature `reasonable`), with identical results.
@@ -330,7 +393,7 @@ let report = oxilite_validate::prefetch::validate_shacl_async(&d1_store, shapes_
 | TS bindings | `@oxilite/node`, `@oxilite/d1` | test suites + Oxigraph JS tests | ✅ done: Oxigraph `store.test.ts` 32/33 (1 allow-listed), both example Workers tested on Miniflare |
 | **M4** Reasoning | TBox closure, rewriting, OWL 2 RL | entailment tests; agreement with `reasonable` | ✅ done: RDFS/OWL QL rewriting, SQL OWL 2 RL rules on every backend, identical to `reasonable` |
 | **M5** Validation | rudof SHACL/ShEx | rudof suites over oxilite | ✅ done: W3C SHACL core and shexTest results identical to rudof in memory; bounded D1 prefetch |
-| **M6** Performance | BSBM vs Oxigraph, FTS5 | published comparison | specified |
+| **M6** Performance | BSBM vs Oxigraph, tuning, FTS5 | published comparison | ✅ done: BSBM results in [Performance](#performance), D1 write-cost report, FTS5 text search |
 
 ---
 

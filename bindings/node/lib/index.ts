@@ -54,6 +54,8 @@ export interface StoreOptions {
   library?: string;
   /** Create the optional graph index (default true); only used when the schema is created. */
   graphIndex?: boolean;
+  /** Create the FTS5 full-text index over string literals (for `oxl:textMatch`). */
+  textIndex?: boolean;
 }
 
 const j = (t?: TermLike | null) => (t ? JSON.stringify(toJson(t)) : null);
@@ -72,7 +74,7 @@ export class Store {
     this.native = new native.NativeStore(
       opts.path ?? null,
       opts.library ?? null,
-      JSON.stringify({ graphIndex: opts.graphIndex ?? true }),
+      JSON.stringify({ graphIndex: opts.graphIndex ?? true, textIndex: opts.textIndex ?? false }),
     );
     if (init && typeof init !== "string" && isIterable(init)) this.addAll(init);
   }

@@ -271,7 +271,8 @@ pub fn evaluate<B: SyncBackend>(
     query: &Query,
     options: &crate::QueryOptions,
 ) -> Result<QueryOutput> {
-    let evaluator = QueryEvaluator::new();
+    let evaluator = QueryEvaluator::new()
+        .with_custom_function(crate::text::text_match_name(), crate::text::text_match);
     let mut prepared = evaluator.prepare(query);
     let dataset = SqlDataset::new(backend).with_options(options)?;
     apply_dataset_options(prepared.dataset_mut(), query, options, |id| {
@@ -317,7 +318,8 @@ pub fn delete_insert<B: SyncBackend>(
     else {
         return Err(Error::Other("not a DELETE/INSERT operation".into()));
     };
-    let evaluator = QueryEvaluator::new();
+    let evaluator = QueryEvaluator::new()
+        .with_custom_function(crate::text::text_match_name(), crate::text::text_match);
     let prepared = evaluator.prepare_delete_insert(
         delete.clone(),
         insert.clone(),

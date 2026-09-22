@@ -15,7 +15,12 @@ async function execute(req) {
     return [{ rows: await db.prepare(req.statements[0].sql).raw(), changes: 0 }];
   }
   const results = await db.batch(req.statements.map((s) => db.prepare(s.sql)));
-  return results.map((r) => ({ rows: (r.results ?? []).map((row) => Object.values(row)), changes: r.meta?.changes ?? 0 }));
+  // rows_written (D1's billing unit, index entries included) feeds the write-cost report.
+  return results.map((r) => ({
+    rows: (r.results ?? []).map((row) => Object.values(row)),
+    changes: r.meta?.changes ?? 0,
+    rows_written: r.meta?.rows_written ?? 0,
+  }));
 }
 
 async function reset() {
