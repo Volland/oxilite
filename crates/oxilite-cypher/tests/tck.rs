@@ -844,8 +844,22 @@ fn load_allowlist() -> BTreeMap<String, String> {
 }
 
 // @lat: [[tests#Cypher#openCypher TCK]]
+/// Runs on its own thread: path-heavy scenarios (Match6/7/9, Pattern2) nest the compiled
+/// algebra about a hundred joins deep, and unoptimized `Compiler::pattern` frames are large
+/// enough to overflow the 2 MiB default test-thread stack.
 #[test]
 fn opencypher_tck() {
+    let run = std::thread::Builder::new()
+        .name("opencypher_tck".into())
+        .stack_size(16 << 20)
+        .spawn(run_tck)
+        .unwrap();
+    if let Err(e) = run.join() {
+        std::panic::resume_unwind(e);
+    }
+}
+
+fn run_tck() {
     let dir = tck_dir().join("features");
     if !dir.exists() {
         eprintln!(
