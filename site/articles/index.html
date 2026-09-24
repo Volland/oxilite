@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Articles – oxilite</title>
-  <meta name="description" content="Guides and design notes on oxilite: Verifiable Credentials and JSON-LD in SQLite, querying them with SPARQL and Cypher, property graphs, and graph memory for AI agents on Cloudflare Durable Objects.">
+  <meta name="description" content="Guides and design notes on oxilite: an overview of the RDF and SPARQL engine, Verifiable Credentials and JSON-LD in SQLite, querying them with SPARQL and Cypher, property graphs, and graph memory for AI agents on Cloudflare Durable Objects.">
   <meta property="og:title" content="oxilite articles">
   <meta property="og:description" content="Guides and design notes: what you can build with oxilite and how it works inside.">
   <meta property="og:image" content="../assets/logo.png">
@@ -38,7 +38,18 @@
 
     <section class="band-soft index-list">
       <div class="wrap">
-        <h2>JSON-LD and Verifiable Credentials<span class="dot">.</span></h2>
+        <h2>Start here<span class="dot">.</span></h2>
+        <p class="sub">What oxilite is, how it works inside, and everything it can do.</p>
+        <div class="articles">
+          <a class="article-card" href="introducing-oxilite.html">
+            <span class="kicker">Overview · RDF · SPARQL · SQLite</span>
+            <h3>Introducing oxilite: a knowledge graph in plain SQLite</h3>
+            <p>The long tour: Oxigraph compatibility, hash-id term encoding, one SQL statement per query, the planner, reasoning, validation, and the JSON-LD and Verifiable Credentials layer.</p>
+            <span class="more">Read the overview →</span>
+          </a>
+        </div>
+
+        <h2 class="group">JSON-LD and Verifiable Credentials<span class="dot">.</span></h2>
         <p class="sub">Keep documents exactly as issued, and still ask questions of what they claim.</p>
         <div class="articles">
           <a class="article-card" href="verifiable-credentials-jsonld.html">

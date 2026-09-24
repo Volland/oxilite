@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Introducing oxilite – a knowledge graph in plain SQLite</title>
+  <meta name="description" content="oxilite is an Oxigraph-compatible RDF database and SPARQL 1.1 engine that stores everything in plain SQLite, so it runs on your laptop, inside your app and on Cloudflare D1. A deep overview of the RDF core, the SQL compiler, reasoning, validation, and the JSON-LD and Verifiable Credentials extension.">
+  <meta property="og:title" content="Introducing oxilite: a knowledge graph in plain SQLite">
+  <meta property="og:description" content="Oxigraph semantics and API, SQLite storage, one SQL statement per query — plus JSON-LD documents and Verifiable Credentials kept byte for byte and queried as RDF.">
+  <meta property="og:image" content="../assets/logo.png">
+  <meta name="theme-color" content="#0a0a0a">
+  <link rel="canonical" href="https://oxilitedb.com/articles/introducing-oxilite">
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg">
+  <link rel="icon" type="image/png" href="../assets/logo.png">
+  <link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt=""><span>oxi<b>lite</b></span></a>
+      <nav class="nav" aria-label="Main">
+        <a href="../">Home</a>
+        <a href="./">Articles</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="article">
+    <article class="wrap">
+      <span class="kicker">RDF · SPARQL 1.1 · SQLite · JSON-LD · Verifiable Credentials</span>
+      <h1>Introducing oxilite: a knowledge graph in plain SQLite</h1>
+      <p class="standfirst">Oxigraph's data model, semantics and Rust API, with SQLite as the only storage engine — so the same graph runs in your laptop, inside your mobile app, and on Cloudflare D1 at the edge. This is the long tour: how it works inside, what it can do, and where its limits are.</p>
+      <p class="meta">Version 0.2.2 · Milestones M1–M7 implemented · <a href="https://github.com/Volland/oxilite">github.com/Volland/oxilite</a> · MIT or Apache-2.0</p>
+
+      <h2>The gap</h2>
+      <p><a href="https://github.com/oxigraph/oxigraph">Oxigraph</a> is an excellent Rust RDF database and SPARQL engine. It stores data in RocksDB, which needs native code, a local filesystem and a storage engine you can link against. That rules it out in exactly the places where a growing share of software now runs:</p>
+      <ul>
+        <li><strong>Serverless SQLite at the edge.</strong> Cloudflare D1 hands you a managed SQLite you can send SQL to. You cannot install extensions, load native libraries or run RocksDB, and every call is a network round-trip billed per row read and written.</li>
+        <li><strong>Hosts that ship their own SQLite.</strong> Mobile apps, embedded devices, sandboxes and platforms where the SQLite library is provided for you and extensions are disabled.</li>
+        <li><strong>Apps that already use SQLite</strong> and want a knowledge graph in the same file, backed up, shipped and replicated with the same tools they already have.</li>
+      </ul>
+      <p>oxilite closes that gap. It keeps the Oxigraph experience — the same data model, the same SPARQL semantics, the same Rust API — and implements it with <strong>nothing but portable SQL on a standard SQLite</strong>. No extensions. No custom functions (they are used when they happen to exist, and never required). No filesystem access beyond what the host SQLite already provides.</p>
+
+      <div class="callout">
+        <p><strong>In one line.</strong> <code>use oxigraph::store::Store;</code> becomes <code>use oxilite::store::Store;</code>, and your graph now runs wherever SQLite runs.</p>
+      </div>
+
+      <h2>What you get</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Capability</th><th>State</th></tr></thead>
+          <tbody>
+            <tr><td>RDF 1.2 data model, all Oxigraph parsers and serializers</td><td>Turtle, TriG, N-Triples, N-Quads, RDF/XML, JSON-LD; W3C syntax suites pass</td></tr>
+            <tr><td>SPARQL 1.1 Query, compiled to SQL</td><td>100% of the W3C query suite; 95% of evaluations run fully in one SQL statement</td></tr>
+            <tr><td>SPARQL 1.1 Update, atomic</td><td>W3C update suite passes on every backend, D1 included</td></tr>
+            <tr><td>RDFS and OWL-QL reasoning, OWL 2 RL materialization</td><td>Per-query rewriting, no extra writes; materialization agrees with <code>reasonable</code></td></tr>
+            <tr><td>SHACL and ShEx validation</td><td>rudof's engines unchanged; W3C SHACL core and shexTest results identical to rudof in memory</td></tr>
+            <tr><td>openCypher over the same data</td><td>96.2% of the openCypher TCK</td></tr>
+            <tr><td>JSON-LD documents and Verifiable Credentials</td><td>Byte-for-byte storage, a named graph each; 450 W3C <code>toRdf</code> tests pass</td></tr>
+            <tr><td>Full-text search</td><td>FTS5, natively and on D1</td></tr>
+            <tr><td>SPARQL 1.1 Protocol endpoint and CLI</td><td><code>oxilite serve</code>, on the routes of <code>oxigraph serve</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>The shape of the thing</h2>
+      <p>The centre of oxilite is a core that <strong>never touches a database</strong>. Every operation is a pure function from RDF or SPARQL input to SQL statements, and from result rows back to RDF terms. A backend is only ever asked: <em>run these statements, atomically if I say so</em>.</p>
+
+      <figure>
+        <svg viewBox="0 0 760 330" role="img" aria-labelledby="arch-title arch-desc">
+          <title id="arch-title">The sans-IO core and its four backends</title>
+          <desc id="arch-desc">SPARQL, RDF and the Store API enter oxilite-core, which parses to algebra, plans, compiles to SQL and decodes responses. The core emits requests of SQL statements in read or atomic mode, which are executed by four interchangeable backends: bundled rusqlite, a libsqlite3 loaded at runtime, a Rust Worker on Cloudflare D1, and the core compiled to WebAssembly behind a TypeScript driver.</desc>
+          <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13">
+            <rect x="230" y="10" width="300" height="34" rx="8" fill="#fff" stroke="#0a0a0a" stroke-width="2"/>
+            <text x="380" y="32" text-anchor="middle" font-weight="700">SPARQL · Cypher · RDF · Store API</text>
+            <path d="M380 44 L380 66" stroke="#0a0a0a" stroke-width="2"/>
+            <path d="M374 60 L380 70 L386 60 z" fill="#0a0a0a"/>
+
+            <rect x="150" y="72" width="460" height="104" rx="12" fill="#0a0a0a"/>
+            <text x="380" y="96" text-anchor="middle" fill="#ff6b1a" font-weight="700" font-size="14">oxilite-core &nbsp;·&nbsp; sans-IO</text>
+            <text x="380" y="120" text-anchor="middle" fill="#fff">algebra → planner → SQL compiler → Request</text>
+            <text x="380" y="140" text-anchor="middle" fill="#fff">Response → decoder → results</text>
+            <text x="380" y="162" text-anchor="middle" fill="#9a9a9a" font-size="12">never opens a file, never opens a socket</text>
+
+            <path d="M380 176 L380 200" stroke="#ff6b1a" stroke-width="2"/>
+            <text x="392" y="196" fill="#d9520a" font-size="12" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">Request { statements, Read | Atomic }</text>
+            <path d="M90 200 L670 200" stroke="#ff6b1a" stroke-width="2"/>
+            <path d="M90 200 L90 232 M283 200 L283 232 M477 200 L477 232 M670 200 L670 232" stroke="#ff6b1a" stroke-width="2"/>
+
+            <rect x="20" y="232" width="140" height="72" rx="10" fill="#fff" stroke="#0a0a0a" stroke-width="2"/>
+            <text x="90" y="256" text-anchor="middle" font-weight="700">rusqlite</text>
+            <text x="90" y="276" text-anchor="middle" font-size="12" fill="#5a5a5a">bundled SQLite,</text>
+            <text x="90" y="292" text-anchor="middle" font-size="12" fill="#5a5a5a">in process</text>
+
+            <rect x="213" y="232" width="140" height="72" rx="10" fill="#fff" stroke="#0a0a0a" stroke-width="2"/>
+            <text x="283" y="256" text-anchor="middle" font-weight="700">dylib</text>
+            <text x="283" y="276" text-anchor="middle" font-size="12" fill="#5a5a5a">your libsqlite3,</text>
+            <text x="283" y="292" text-anchor="middle" font-size="12" fill="#5a5a5a">loaded at runtime</text>
+
+            <rect x="407" y="232" width="140" height="72" rx="10" fill="#fff" stroke="#0a0a0a" stroke-width="2"/>
+            <text x="477" y="256" text-anchor="middle" font-weight="700">D1 · Rust</text>
+            <text x="477" y="276" text-anchor="middle" font-size="12" fill="#5a5a5a">a Worker on</text>
+            <text x="477" y="292" text-anchor="middle" font-size="12" fill="#5a5a5a">worker::D1Database</text>
+
+            <rect x="600" y="232" width="140" height="72" rx="10" fill="#fff" stroke="#0a0a0a" stroke-width="2"/>
+            <text x="670" y="256" text-anchor="middle" font-weight="700">D1 · wasm</text>
+            <text x="670" y="276" text-anchor="middle" font-size="12" fill="#5a5a5a">TypeScript driver</text>
+            <text x="670" y="292" text-anchor="middle" font-size="12" fill="#5a5a5a">on env.DB</text>
+          </g>
+        </svg>
+        <figcaption>One compiler, four ways to reach SQLite. Operations that need several round-trips — a query, then a lookup of the terms in its results — are step machines: <code>step(response)</code> returns either the next request or the finished output.</figcaption>
+      </figure>
+
+      <p>That single decision is what makes the edge case work. A backend that answers over the network, in batches, with no ability to run your code, is just another implementation of <em>run these statements</em>. The compiler adapts to it through a <code>Capabilities</code> record: maximum SQL length, maximum statements per request, whether user-defined functions exist, whether interactive transactions exist, whether 64-bit integers have to travel as text.</p>
+
+      <h2>Terms are integers you can compute</h2>
+      <p>Every RDF term becomes a tagged, positive 64-bit integer: one sign bit, four tag bits, fifty-nine bits of payload. The tags cover IRIs, blank nodes, simple strings, language strings, directional language strings, other typed literals and RDF 1.2 triple terms. The payload is an xxh3 hash of a canonical key.</p>
+      <p>Two things follow, and they are the reason oxilite is viable on a remote database:</p>
+      <ul>
+        <li><strong>Writes never read anything back.</strong> The same term hashes to the same id in every process, on every machine, forever. Inserting is <code>INSERT OR IGNORE</code> and nothing else — no dictionary lookup, no round-trip, no sequence.</li>
+        <li><strong>Query constants become SQL integer literals at compile time.</strong> <code>?s a ex:Person</code> compiles to <code>q.p = 2305843…</code> before a single row is touched.</li>
+      </ul>
+      <p>Canonical <code>xsd:integer</code> values (up to ±2<sup>58</sup>) and booleans are <em>inlined</em>: they live inside the id itself and need no dictionary row at all. Integer ids carry <code>value + 2^58</code>, so they sort by numeric value, and <code>FILTER(?age &gt; 30)</code> becomes arithmetic on the id — or, when a range is bound, an index range scan. Non-canonical lexical forms such as <code>"012"^^xsd:integer</code> are hashed instead, so term identity stays exact.</p>
+      <p>Hashes can collide. At 190 000 terms the probability is around 10<sup>-9</sup>, and oxilite does not rely on luck: a <code>BEFORE INSERT</code> trigger on the dictionary aborts the whole batch if an id ever maps to a different term.</p>
+
+      <h2>Seven small tables</h2>
+      <p>The schema is deliberately plain. Any SQLite tool can open it, and any SQLite backup is a graph backup.</p>
+<pre><code><span class="k">CREATE TABLE</span> quads (s <span class="k">INTEGER NOT NULL</span>, p <span class="k">INTEGER NOT NULL</span>, o <span class="k">INTEGER NOT NULL</span>,
+                    g <span class="k">INTEGER NOT NULL DEFAULT</span> 0,              <span class="c">-- 0 = the default graph</span>
+                    <span class="k">PRIMARY KEY</span> (s, p, o, g)) <span class="k">WITHOUT ROWID</span>, <span class="k">STRICT</span>;
+<span class="k">CREATE INDEX</span> quads_posg <span class="k">ON</span> quads(p, o, s, g);
+<span class="k">CREATE INDEX</span> quads_ospg <span class="k">ON</span> quads(o, s, p, g);
+<span class="k">CREATE INDEX</span> quads_gspo <span class="k">ON</span> quads(g, s, p, o);                  <span class="c">-- optional</span>
+
+<span class="k">CREATE TABLE</span> terms (id <span class="k">INTEGER PRIMARY KEY</span>, lex <span class="k">TEXT NOT NULL</span>, dt <span class="k">TEXT</span>, lang <span class="k">TEXT</span>,
+                    dir <span class="k">INTEGER</span>, num <span class="k">REAL</span>, nt <span class="k">INTEGER</span>, ts <span class="k">REAL</span>) <span class="k">STRICT</span>;
+<span class="c">-- + triple_terms (RDF 1.2), graphs, stats_pred, stats_class, update_buffer, oxilite_meta</span></code></pre>
+      <p>Three points are worth dwelling on.</p>
+      <p><strong>Three covering permutations, not nine.</strong> <code>quads</code> is a <code>WITHOUT ROWID</code> clustered index on <code>spog</code>; the two secondary indexes contain every column, so <em>every</em> triple-pattern scan is index-only — SQLite never has to fetch a row. Oxigraph keeps nine index orders; oxilite keeps three (plus an optional graph index) because on D1 each extra index is a billed write on every insert. Measured on a local D1, the default schema writes 4.81 rows per triple, 3.81 without the graph index.</p>
+      <p><strong>Typed side columns.</strong> The dictionary carries <code>num</code> (numeric value), <code>nt</code> (numeric type rank) and <code>ts</code> (epoch seconds), with partial indexes. Numeric and date comparisons never re-parse a lexical form at query time.</p>
+      <p><strong>Facts that SQL would need deep expressions for are precomputed at write time.</strong> Triple-term value equality and sort order, whether a date carries a timezone — all computed in Rust when the term is stored. This is not only speed: generated SQL has to parse on SQLite builds with a fixed parser stack (<code>YYSTACKDEPTH=100</code>, as on stock macOS and Ubuntu), so expression depth is a correctness constraint, not a preference.</p>
+
+      <h2>One SQL statement per query</h2>
+      <p>This is the heart of it. A SPARQL query — joins, <code>OPTIONAL</code>, <code>UNION</code>, <code>MINUS</code>, subqueries, aggregates, property paths, <code>ORDER BY</code>, <code>LIMIT</code> — compiles into a <em>single</em> <code>SELECT</code> whenever it possibly can.</p>
+      <p>On a local SQLite that is merely fast. On D1 it is the difference between a working database and a toy: an evaluator that scans one triple pattern at a time pays a network round-trip per pattern, per row. oxilite pays one or two round-trips for the whole query.</p>
+      <p>Here is the compiler's own output for a three-pattern star with a filter:</p>
+<pre><code><span class="k">SELECT</span> ?name <span class="k">WHERE</span> {
+  ?p a ex:Person ; ex:age ?age ; ex:name ?name .
+  <span class="k">FILTER</span>(?age &gt; 30)
+}</code></pre>
+<pre><code><span class="k">SELECT</span> q2.o <span class="k">AS</span> v2
+<span class="k">FROM</span> quads q1 <span class="k">CROSS JOIN</span> quads q0 <span class="k">CROSS JOIN</span> quads q2
+<span class="k">WHERE</span> q1.p = 2305843… <span class="k">AND</span> +q1.g = 0
+  <span class="k">AND</span> (<span class="k">CASE</span> (q1.o &gt;&gt; 59) <span class="k">WHEN</span> 6 <span class="k">THEN</span> (q1.o &amp; 576460752303423487) - 288230376151711744
+       <span class="k">WHEN</span> 5 <span class="k">THEN</span> (<span class="k">SELECT</span> num <span class="k">FROM</span> terms <span class="k">WHERE</span> id = q1.o <span class="k">AND</span> nt <span class="k">IS NOT NULL</span>) <span class="k">END</span>) &gt; 30
+  <span class="k">AND</span> q0.s = q1.s <span class="k">AND</span> q0.p = 2305843… <span class="k">AND</span> q0.o = 2305843… <span class="k">AND</span> +q0.g = 0
+  <span class="k">AND</span> q2.s = q1.s <span class="k">AND</span> q2.p = 2305843… <span class="k">AND</span> +q2.g = 0</code></pre>
+      <p>Read it closely and the design shows through. <code>ex:age</code> is scanned <em>first</em>, not <code>rdf:type</code>, because statistics say it is more selective. The filter is applied immediately after that scan, before any join. Inline integers are compared arithmetically — the <code>CASE</code> arm for tag 6 unpacks the value straight out of the id — and only non-inline numbers such as decimals and doubles consult the dictionary. The unary <code>+</code> on graph conditions is SQLite's "do not use an index for this" convention: without it SQLite happily picks the graph index for <code>g = 0</code>, which nearly every quad matches. That one character made star queries two orders of magnitude faster.</p>
+
+      <h3>How the operators map</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>SPARQL</th><th>SQL</th></tr></thead>
+          <tbody>
+            <tr><td>Basic graph pattern</td><td>self-joins on <code>quads</code>, order forced with <code>CROSS JOIN</code></td></tr>
+            <tr><td><code>OPTIONAL</code></td><td><code>LEFT JOIN</code>, filter in the <code>ON</code> clause, parenthesised to keep index use</td></tr>
+            <tr><td><code>UNION</code></td><td><code>UNION ALL</code> of sealed branches, missing variables padded with NULL</td></tr>
+            <tr><td><code>MINUS</code></td><td><code>NOT EXISTS</code> with compatibility and domain-overlap conditions</td></tr>
+            <tr><td><code>FILTER EXISTS</code></td><td>correlated <code>EXISTS</code> with outer bindings substituted</td></tr>
+            <tr><td><code>VALUES</code> / <code>BIND</code></td><td>a <code>VALUES</code> table / a computed column</td></tr>
+            <tr><td><code>GRAPH</code></td><td>conditions on <code>g</code>; merged datasets deduplicate with <code>NOT EXISTS</code> on a lower <code>g</code></td></tr>
+            <tr><td><code>path*</code>, <code>path+</code>, <code>path?</code></td><td>recursive CTEs, seeded from a constant endpoint when one exists</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Property paths deserve a note. When a closure is joined with a pattern that binds one end — <code>?c a ex:C . ?c ex:knows+ ?x</code> — the recursive CTE is seeded from that pattern's distinct values rather than computing the transitive closure of the whole graph. That is the classic magic-set trick, and <code>explain()</code> flags the cases where it could not be applied.</p>
+      <p>SPARQL's three-valued logic falls out for free: a SPARQL value is a bundle of SQL fragments (kind, lexical form, datatype, language, number, timestamp, boolean), and SQL <code>NULL</code> <em>is</em> the SPARQL error. Functions are tiered — SQL built-ins first, then rewrites (a simple <code>REGEX</code> becomes <code>instr</code>/<code>substr</code>), then native UDFs where the backend has them.</p>
+
+      <h3>When SQL cannot express it</h3>
+      <p>Some queries do not compile. A custom function inside a <code>FILTER</code>, or SQL that would exceed the backend's statement limit, raises <code>Unsupported</code>. On native backends oxilite does not simply give up and fall back to a slow evaluator for the whole query. It rewrites the query so that each <strong>largest compilable subtree</strong> becomes a <code>SERVICE &lt;urn:oxilite:sql:N&gt;</code> call, hands it to Oxigraph's own <code>spareval</code>, and answers those service calls with precompiled SQL. Only the operators genuinely above SQL's reach run in Rust.</p>
+      <p>On D1 there is no synchronous access, so there is no fallback: the query reports <code>unsupported</code> rather than silently becoming slow. <code>explain()</code> tells you why and lists which subqueries would still have run as SQL. Using <code>explain()</code> in development to confirm your queries compile fully is the single best habit for a D1 deployment.</p>
+
+      <h2>The planner</h2>
+      <p>SQLite's query planner sees an N-way self-join of one table and has only per-index averages to work with. It cannot tell <code>rdf:type</code> — which matches a third of the database — from a predicate that matches four triples. So oxilite orders the patterns itself, greedily: most selective first, then repeatedly the cheapest pattern <em>connected</em> to an already-bound variable, which avoids accidental Cartesian products. <code>CROSS JOIN</code> pins the order; SQLite still chooses the index for each pattern, which it is good at.</p>
+      <p>The right-hand side of an <code>OPTIONAL</code> is planned as if the left side were already bound, because SQLite evaluates it once per left row. That keeps <code>OPTIONAL</code> on a foreign key linear rather than quadratic.</p>
+      <p>Statistics are per-predicate triple counts, distinct subject and object counts, and per-class instance counts, plus a skew table: for predicates with at most 1024 distinct objects, predicate–object pairs at least four times more frequent than that predicate's average, the 2000 most frequent kept. A constant object then gets its real count instead of an average.</p>
+      <p>They are refreshed <strong>explicitly</strong>, by <code>optimize()</code> or after a bulk load — never on every write. On D1 maintaining them per write would double the write bill and create a hot row, and stale statistics only ever degrade a plan, never a result.</p>
+      <p>On 350 010 quads, on a laptop, in-process:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>query</th><th>oxilite planner</th><th>SQLite's planner</th></tr></thead>
+          <tbody>
+            <tr><td>star with a rare badge</td><td>75 µs</td><td>7.2 ms</td></tr>
+            <tr><td>friends of badged people</td><td>96 µs</td><td>87 µs</td></tr>
+            <tr><td>city + age range filter</td><td>478 µs</td><td>7.8 ms</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Atomic means one batch</h2>
+      <p>D1 has no interactive transactions. <code>batch()</code> is the only atomic unit it offers. So oxilite adopts a single universal rule: <strong>one request is one transaction is one D1 batch</strong>, and every write compiles to self-reading SQL that fits inside it.</p>
+      <p><code>DELETE/INSERT … WHERE</code> is the interesting case, because SPARQL requires the <code>WHERE</code> clause to be evaluated against the state <em>before</em> any modification. oxilite evaluates it once into a staging table, computing the rows to delete and the rows to insert, then deletes, then inserts, then clears the staging table — all inside the same batch. The semantics hold without ever holding a transaction open across a round-trip.</p>
+      <p>Conditions that SQL cannot express as data become constraint failures instead. A guard table has <code>CHECK</code> columns named after the SPARQL condition they protect — <code>graph_does_not_exist</code>, <code>graph_already_exists</code>, <code>computed_value_not_storable</code> — so <code>CREATE GRAPH</code> on an existing graph inserts a non-<code>NULL</code> value, fails the check, aborts the batch, and is mapped back to the right SPARQL error. <code>explain_update()</code> shows the SQL of every operation.</p>
+
+      <h2>Reasoning without extra writes</h2>
+      <p>Reasoning is chosen per query: <code>None</code> (the default, as in Oxigraph), <code>Rdfs</code>, or <code>OwlQl</code>.</p>
+<pre><code><span class="c">// ex:Dog rdfs:subClassOf ex:Animal . ex:rex a ex:Dog .</span>
+<span class="k">let</span> opts = QueryOptions { reasoning: Reasoning::Rdfs, ..Default::default() };
+store.query_output(<span class="s">"SELECT ?x WHERE { ?x a &lt;http://ex/Animal&gt; }"</span>, &amp;opts)?;   <span class="c">// ex:rex</span></code></pre>
+      <p>The mechanism is <em>query rewriting against a materialized TBox closure</em>, not data materialization. A small table holds the class closure, the RDFS and OWL property closures (subproperty, equivalence, inverses and symmetry composed with a direction bit), the transitive properties, and the classes a property's subjects and objects belong to via domains and ranges. It is computed from the asserted quads with recursive CTEs, and refreshed automatically — in the same atomic request — by any write that touches a schema triple.</p>
+      <p>The compiler then swaps each pattern's <code>quads</code> table for a derived table of entailed triples: a <code>SELECT DISTINCT</code> over <code>UNION ALL</code> arms for asserted triples, sub- and inverse properties, types through the class closure, and domains and ranges. Queries stay single statements, property paths and <code>OPTIONAL</code> and even the fallback evaluator all see the same entailments, and <strong>no rows are written</strong>. On a billed-per-write database that matters a great deal, and the answers are always fresh.</p>
+      <p>Full OWL 2 RL is available when you want it, explicitly. <code>materialize()</code> runs the rule set as <code>INSERT OR IGNORE … SELECT</code> statements, one atomic request per round, until a round adds nothing — the same code on bundled SQLite, on a loaded library and on D1. Natively, <code>materialize_with_reasonable()</code> computes the same closure in memory with <a href="https://github.com/gtfierro/reasonable">reasonable</a>, and an agreement test checks the two against each other on sample ontologies. Materialized inferences are not maintained; re-run it when the data changes.</p>
+
+      <h2>Validation: rudof's engines, unchanged</h2>
+      <p>SHACL and ShEx validation is not reimplemented. <code>oxilite-validate</code> implements <a href="https://github.com/rudof-project/rudof">rudof</a>'s RDF traits over the store, so rudof's own SHACL (native and SPARQL engines) and ShEx validators run against oxilite directly. Neighbourhood lookups become SQL pattern scans, and rudof's SPARQL-mode validation runs through the oxilite compiler. Because rudof already builds on the Oxigraph 0.5 crate family, there are no type conversions in between.</p>
+<pre><code><span class="k">let</span> report = validate_shacl(&amp;store, shapes_ttl, &amp;ShaclValidationMode::Native)?;
+<span class="k">let</span> results = validate_shex(&amp;store, shexc, <span class="s">"http://example.com/"</span>, <span class="s">"&lt;http://example.com/alice&gt;@&lt;http://example.com/Person&gt;"</span>)?;</code></pre>
+      <p>On the W3C SHACL core suite (226 reports per backend) and the shexTest validation suite (1161 validations), the results over an oxilite store are <em>exactly</em> rudof's results over its in-memory graph.</p>
+      <p>rudof does not build its validators for wasm32, so D1 is validated from native code — a CLI, a server, CI — over the D1 HTTP API. A prefetch pulls in only what the shapes need: targets, the class hierarchy, and a breadth-first neighbourhood to a configured depth, one request per hop and chunk. Past a configured limit it fails loudly with the size it found, rather than truncating and reporting a conformance it cannot justify.</p>
+
+      <h2>The same data as a property graph</h2>
+      <p>oxilite also speaks <strong>openCypher</strong>, over the very same quads. Nodes are IRIs or blank nodes, labels are <code>rdf:type</code>, node properties are literal triples, and a relationship is an asserted triple — so following <code>-[:KNOWS]-&gt;</code> is one join on a covering index. Relationship properties and parallel relationships live on RDF 1.2 reifiers, created only when actually needed.</p>
+<pre><code>store.cypher(<span class="s">"CREATE (:Person {name: 'Ada'})-[:KNOWS {since: 2020}]-&gt;(:Person {name: 'Alan'})"</span>);
+<span class="c">// SPARQL sees the same data:</span>
+<span class="c">// ASK { ?a ex:KNOWS ?b . ?r rdf:reifies &lt;&lt;( ?a ex:KNOWS ?b )&gt;&gt; ; ex:since 2020 }</span></code></pre>
+      <p>Cypher reads are lowered to SPARQL algebra and go through the same compiler, planner and reasoning rewrites; what SQL cannot express — writes, lists, maps, <code>collect()</code>, temporal arithmetic — runs in Rust over the returned rows. A writing statement is one read followed by one atomic write. <code>shortestPath</code> is a breadth-first search doing one SQL request per level for all sources at once, so it works on D1 too.</p>
+      <p>Because it is all RDF underneath, OWL and SHACL apply: with reasoning on, labels match subclasses and relationship types match their subproperties and inverses; SHACL shapes stored in the dataset act as the property graph's schema, and a write that breaks <code>sh:datatype</code>, cardinality, <code>sh:in</code> or <code>sh:pattern</code> is rejected before anything is sent. 3733 of the 3880 openCypher TCK scenarios pass. There is <a href="property-graphs-cypher.html">a whole walkthrough</a> on this.</p>
+
+      <h2>JSON-LD and Verifiable Credentials</h2>
+      <p>The newest part of oxilite, and the one that most changes what it is <em>for</em>.</p>
+      <p>A Verifiable Credential is a JSON-LD document, and the people who hold one need it in two incompatible ways at once. They need it <strong>as JSON, exactly as issued</strong>, because they will present it, forward it, archive it and verify its signature — and a copy rebuilt from a database is not the document that was signed. They also need it <strong>as data</strong>: which degrees are still valid, who issued them, which credential asserts this particular claim.</p>
+      <p>oxilite keeps both, and keeps them honest about which is which.</p>
+
+      <h3>The raw document is the source of truth</h3>
+      <p>The JSON is stored byte for byte in a keyed table. Its RDF is <em>derived data</em>, written into a named graph of its own. The bytes come back unchanged; re-serializing from RDF would lose member order, formatting and everything JSON-LD drops on the way in.</p>
+      <p>Derived data can drift — SPARQL UPDATE is allowed to edit those graphs, and sometimes that is exactly what you want. Rather than put triggers on the quad table (a write cost on every single quad, billed on D1), oxilite gives you two explicit operations: <code>check()</code> reconverts every document and reports the difference, and <code>rebuild()</code> regenerates a graph from the stored bytes.</p>
+<pre><code>store.update(<span class="s">`DELETE WHERE { GRAPH &lt;${id}&gt; { ?d &lt;https://schema.org/name&gt; ?n } }`</span>);
+vcs.documents.check();       <span class="c">// [{ key: id, missing: 1, extra: 0 }]</span>
+vcs.documents.rebuild(id);   <span class="c">// true, and check() is [] again</span></code></pre>
+
+      <h3>One graph per credential</h3>
+      <p>By default a document is keyed by its <code>@id</code>/<code>id</code>, and its triples go into the named graph of that same IRI. That single choice pays for itself repeatedly:</p>
+      <ul>
+        <li><strong>Provenance is free.</strong> "Which credential says this?" is just <code>GRAPH ?cred { … }</code>, and <code>documentForGraph(?cred)</code> hands you back the original JSON.</li>
+        <li><strong>Replace and remove need no read.</strong> Clearing a graph clears exactly that credential's triples, so a put is one atomic batch with no round-trip first.</li>
+        <li><strong>Proofs stay out of the way.</strong> JSON-LD declares <code>proof</code> as a graph container, so each proof lands in its own graph, owned by the credential and linked with <code>sec:proof</code>. Your claim queries never trip over a <code>proofValue</code>, and removing the credential removes its proofs.</li>
+      </ul>
+      <p>Keys and graphs are configurable: the key can be a JSON Pointer such as <code>/credentialSubject/id</code>, a content hash, or an explicit value; the graph can be an IRI template, one fixed graph, or the default graph. VCDM 2.0 makes <code>id</code> optional, so credentials without one get <code>urn:oxilite:doc:sha256:&lt;hex&gt;</code> — which also means storing the same credential twice keeps a single copy.</p>
+      <p>Blank nodes are labelled from a hash of the document's key and their position, never from a global counter. Two credentials therefore never share an anonymous node, and re-storing a document produces identical labels, so a repeated put is genuinely idempotent.</p>
+
+      <h3>Metadata you can look up without SPARQL</h3>
+      <p>Issuer, subject, types and the validity window are copied into indexed columns as the document is stored, so the everyday questions are one SQL statement with keyset paging:</p>
+<pre><code>vcs.find({ issuer: <span class="s">"did:example:academy"</span>, validAt: <span class="k">new</span> Date() });
+vcs.find({ subject: <span class="s">"did:example:ebfeb1f712ebc6f1c276e12ec21"</span>, type: <span class="s">"ExampleDegreeCredential"</span> });</code></pre>
+      <p><code>validAt</code> reads <code>validFrom</code>/<code>validUntil</code> from VCDM 2.0 credentials and <code>issuanceDate</code>/<code>expirationDate</code> from 1.1 ones. Which indexes exist is your choice, because on D1 every index entry is a billed write: <code>store.credentials({ indexes: { subject: false } })</code>.</p>
+      <p>A presentation is stored as itself, and each credential it embeds is <em>also</em> stored as a credential in its own right, in the same atomic write, with the keys recorded in the presentation's <code>refs</code>. You can find, query and remove an embedded credential separately.</p>
+
+      <h3>Offline by construction</h3>
+      <p>JSON-LD normally wants the network: contexts are IRIs, and expansion fetches them. Inside a Worker that is unacceptable, and in a wallet it is a privacy leak. So oxilite's context loader never performs I/O inside the JSON-LD processor. It answers from memory — contexts registered on the handle, then the W3C credential, security and DID contexts bundled by <code>ssi-json-ld</code> — and records what it could not find. The job reads those misses from a <code>jsonld_contexts</code> table and retries, in rounds, since a context may import others.</p>
+<pre><code><span class="k">const</span> docs = store.jsonld();
+docs.putContext(<span class="s">"https://example.org/contexts/recipe.jsonld"</span>,
+  { <span class="s">"@context"</span>: { <span class="s">"@vocab"</span>: <span class="s">"https://schema.org/"</span>, ingredients: <span class="s">"recipeIngredient"</span> } });
+docs.put(<span class="s">`{"@context": "https://example.org/contexts/recipe.jsonld",
+          "@id": "https://example.org/recipes/pancakes", "@type": "Recipe",
+          "name": "Pancakes", "ingredients": ["flour", "milk", "eggs"]}`</span>);</code></pre>
+      <p>An unknown context fails with a <code>JsonLdError</code> carrying the JSON-LD error code, and <em>nothing is written</em>. Downloading is opt-in, native-only, and <code>cacheFetched</code> persists what it fetched so the document works on D1 afterwards. The conversion itself uses the <a href="https://crates.io/crates/json-ld">json-ld</a> crate and passes 450 tests of the W3C JSON-LD 1.1 <code>toRdf</code> suite.</p>
+
+      <h3>What it is not</h3>
+      <p>Storing a credential says <strong>nothing</strong> about whether it is valid. oxilite runs a structural check with <code>ssi-vc</code> — context order, required types, issuer, subject — and stores the bytes. It does not verify proofs. Verify the stored JSON with a library such as <a href="https://github.com/spruceid/ssi">ssi</a>, then act on it. Status-list revocation checks, framing or compaction on read, and enveloped JOSE/COSE credentials inside presentations are all out of scope today.</p>
+      <p>Two walkthroughs go deeper: <a href="verifiable-credentials-jsonld.html">storing credentials</a> and <a href="querying-jsonld-credentials.html">querying them</a>, both asserted end to end by runnable examples in the repository.</p>
+
+      <h2>Where it runs</h2>
+      <p>Four backends, one API. Native Rust on a bundled SQLite; a <code>libsqlite3</code> you point at by path at runtime (only the stable C API is bound, so any SQLite ≥ 3.37 works); a Rust Worker on D1; and the core compiled to WebAssembly behind a TypeScript driver, so a Workers project needs no Rust toolchain at all. The same <code>@oxilite/d1</code> package also runs on a Durable Object's embedded SQLite through a small adapter, which gives every agent or user a private graph — <a href="agent-memory-durable-objects.html">there is a guide</a> for that.</p>
+<pre><code><span class="k">use</span> oxilite::store::Store;             <span class="c">// was: use oxigraph::store::Store;</span>
+
+<span class="k">let</span> store = Store::open(<span class="s">"data.sqlite"</span>)?;
+store.load_from_reader(RdfFormat::Turtle, TURTLE.as_bytes())?;
+store.update(<span class="s">"INSERT DATA { &lt;http://ex/a&gt; &lt;http://ex/p&gt; 42 }"</span>)?;
+store.optimize()?;                      <span class="c">// refresh statistics (replaces RocksDB compact)</span></code></pre>
+<pre><code><span class="k">import</span> { D1Store } <span class="k">from</span> <span class="s">"@oxilite/d1"</span>;
+<span class="k">import</span> wasm <span class="k">from</span> <span class="s">"@oxilite/d1/oxilite.wasm"</span>;
+
+<span class="k">const</span> store = <span class="k">await</span> D1Store.open(env.DB, { wasm, migrated: <span class="k">true</span> });
+<span class="k">await</span> store.update(sparqlUpdate);        <span class="c">// one atomic D1 batch</span>
+<span class="k">await</span> store.queryJson(sparqlQuery);</code></pre>
+      <p>There is a CLI too — <code>oxilite load</code>, <code>query</code>, <code>explain</code>, and <code>oxilite serve</code>, which exposes the SPARQL 1.1 Protocol on the same routes as <code>oxigraph serve</code>, against a file, a library you name, or a D1 database behind a local sidecar.</p>
+
+      <h2>What it costs</h2>
+      <p>Measured with the Berlin SPARQL Benchmark and its official tools against Oxigraph 0.5.11 on RocksDB, one laptop, 1000 products (374 911 triples). QMpH is query mixes per hour, higher is better.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>engine</th><th>load (s)</th><th>size (MB)</th><th>explore QMpH</th><th>business intelligence QMpH</th></tr></thead>
+          <tbody>
+            <tr><td>oxigraph (RocksDB)</td><td>0.30</td><td>43.9</td><td>489 260</td><td>520</td></tr>
+            <tr><td>oxilite (bundled SQLite)</td><td>4.80</td><td>85.4</td><td>335 015</td><td>899</td></tr>
+            <tr><td>oxilite (system SQLite)</td><td>2.85</td><td>85.6</td><td>348 838</td><td>1233</td></tr>
+            <tr><td>oxilite (local D1)</td><td>16.55</td><td>–</td><td>7982</td><td>841</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Read this honestly. Oxigraph loads sixteen times faster and produces a file half the size — oxilite pays for three covering indexes over integer ids in one SQLite file. On the lookup-heavy explore mix Oxigraph is ahead. On the aggregate-heavy business-intelligence mix oxilite is <em>faster</em>, because those queries become one SQL statement that SQLite executes well. The D1 row runs against a local Miniflare D1 behind an HTTP sidecar, so each query pays about 55 ms of round trips; it measures the D1 code path, not Cloudflare's production latency. Every query returned the same results on every engine.</p>
+      <p>That is the trade: load speed and disk for the ability to run anywhere SQLite runs.</p>
+
+      <h2>"Behaves like Oxigraph" is tested, not claimed</h2>
+      <p>The compatibility harness runs Oxigraph's <em>own</em> tests against oxilite:</p>
+      <ul>
+        <li>Oxigraph's W3C manifest runner, ported, over <code>rdf-tests</code> and <code>oxigraph-tests</code>. Every test gets three verdicts: oxilite vs. expected, Oxigraph vs. expected, and oxilite vs. Oxigraph.</li>
+        <li>Oxigraph's store API tests (<code>lib/oxigraph/tests/store.rs</code>) against <code>oxilite::blocking::Store</code>, changing only the import.</li>
+        <li>Oxigraph's JavaScript tests (<code>js/test/store.test.ts</code>) against <code>@oxilite/node</code>: 32 of 33, with the one difference allow-listed.</li>
+        <li>A differential corpus run on both engines — with statistics on and off, with our planner and with SQLite's — whose results must match.</li>
+      </ul>
+      <p>Divergences are allow-listed individually, each linked to the decision that caused it, and a <code>COMPATIBILITY.md</code> is generated from the run. The deliberate ones: <code>backup</code> is <code>VACUUM INTO</code> and <code>compact</code> is <code>optimize()</code>; ORDER BY over incomparable literals uses a total SQL order where Oxigraph's comparator is non-transitive; a triple present in several merged default graphs matches once, as the RDF merge requires, where Oxigraph may return duplicates; decimals are compared as IEEE doubles, though the lexical form is always preserved exactly; and on D1, queries needing the fallback evaluator report <code>unsupported</code> instead of running.</p>
+
+      <h2>Honest limits</h2>
+      <ul>
+        <li><strong>Loading is slower than Oxigraph</strong>, and the file is larger. If you need fast bulk ingest into a local process and nothing else, RocksDB wins.</li>
+        <li><strong>On D1, some queries will not run.</strong> Anything needing the Rust fallback, and anything whose SQL exceeds 90 KB, reports <code>unsupported</code>. <code>explain()</code> is how you find out before your users do.</li>
+        <li><strong>Terms are never garbage-collected on delete</strong>, as in Oxigraph. The dictionary only grows.</li>
+        <li><strong><code>SERVICE</code> (federation) is out of scope</strong> for v1.</li>
+        <li><strong>A Cypher writing statement on D1 is not isolated</strong> between its read and its batch — the batch itself is atomic, but another writer may act in between.</li>
+        <li><strong>Prebuilt Node binaries are darwin-arm64 only</strong> up to 0.2.2; other platforms build the addon from source.</li>
+      </ul>
+
+      <h2>Start here</h2>
+<pre><code>cargo add oxilite                      <span class="c"># Rust: rusqlite (default), dylib, d1, cypher, jsonld, vc, reasonable</span>
+cargo install oxilite-cli              <span class="c"># the `oxilite` command and a SPARQL endpoint</span>
+npm install @oxilite/node              <span class="c"># Node.js</span>
+npm install @oxilite/d1                <span class="c"># Cloudflare D1 and Durable Objects (WebAssembly)</span></code></pre>
+      <p>Milestones M1 through M7 are implemented: storage core, full SPARQL 1.1 query, atomic update and D1, reasoning, validation, performance work, openCypher — plus the JSON-LD and Verifiable Credentials layer. The design reasoning lives in the repository as a knowledge graph of its own, in <code>lat.md/</code>, and every milestone has a specification under <code>openspec/changes/</code>.</p>
+
+      <div class="callout">
+        <p><strong>The takeaway.</strong> oxilite is a bet that the interesting constraint of the next decade is not how fast a triple store can go on one machine, but <em>where</em> it is allowed to run. A knowledge graph that is a single SQLite file — queryable with SPARQL and Cypher, reasoned over with OWL, validated with SHACL, and able to hold a Verifiable Credential exactly as it was signed — can live in a Worker, in a phone, in a Durable Object, or in the same file as the rest of your application.</p>
+        <p>It is MIT or Apache-2.0, like Oxigraph. Issues, benchmarks on your own data, and disagreements are all welcome at <a href="https://github.com/Volland/oxilite">github.com/Volland/oxilite</a>.</p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt="" width="28" height="28"><span>oxilite</span></a>
+      <span>MIT or Apache-2.0</span>
+      <nav aria-label="Rechtliches">
+        <a href="../impressum.html">Impressum</a>
+        <a href="../datenschutz.html">Datenschutz</a>
+        <a href="../agb.html">AGB</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>
