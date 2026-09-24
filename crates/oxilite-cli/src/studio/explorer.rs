@@ -256,6 +256,8 @@ pub fn ontology(target: &Target) -> Result<Value> {
     )?
     .iter()
     .filter_map(|r| Some((iri(&r[0])?, count(&r[1]))))
+    // Vocabulary terms (owl:Class, owl:ObjectProperty…) are typed things too, not the ontology.
+    .filter(|(c, _)| !is_meta(c))
     .collect();
     let subclass: Vec<(String, String)> = rows(
         target,
@@ -278,9 +280,26 @@ pub fn ontology(target: &Target) -> Result<Value> {
         Some(json!({"iri": iri(&r[0])?, "domain": iri(&r[1]), "range": range, "datatype": datatype}))
     })
     .collect();
+    let subclass: Vec<(String, String)> = subclass
+        .into_iter()
+        .filter(|(c, s)| !is_meta(c) && !is_meta(s))
+        .collect();
     Ok(json!({
         "classes": classes.iter().map(|(c, n)| json!({"iri": c, "instances": n})).collect::<Vec<_>>(),
         "subclass": subclass.iter().map(|(c, s)| json!([c, s])).collect::<Vec<_>>(),
         "properties": properties,
     }))
+}
+
+/// A term of the RDF, RDFS, OWL, XSD or SHACL vocabularies.
+fn is_meta(iri: &str) -> bool {
+    [
+        "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+        "http://www.w3.org/2000/01/rdf-schema#",
+        "http://www.w3.org/2002/07/owl#",
+        "http://www.w3.org/2001/XMLSchema#",
+        "http://www.w3.org/ns/shacl#",
+    ]
+    .iter()
+    .any(|ns| iri.starts_with(ns))
 }

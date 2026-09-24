@@ -882,6 +882,10 @@ A type inferred through two subclass steps is explained by the subclass template
 
 Asserted triples are leaves, and triples that do not hold are reported absent.
 
+### Why picks the rule whose premises hold
+
+When several rules can derive a triple, the explanation uses one whose premises hold: a report two levels down is explained by the recursive rule through the middle manager, not by the direct rule.
+
 ### Manifest tests run and snapshot
 
 Tests are listed with their lines; a query test fails without an expected file until a snapshot is written, and a stale expectation reports what is missing.

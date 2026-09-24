@@ -1033,6 +1033,12 @@ fn ontology_diagram_data() {
         classes.contains(&"http://ex.org/Company") && classes.contains(&"http://ex.org/Employee"),
         "{o}"
     );
+    assert!(
+        !classes
+            .iter()
+            .any(|c| c.starts_with("http://www.w3.org/2002/07/owl#")),
+        "no OWL vocabulary: {o}"
+    );
     assert_eq!(
         o["subclass"],
         json!([["http://ex.org/Employee", "http://ex.org/Person"]])
@@ -1070,4 +1076,24 @@ fn datalog_debugger_counts_per_rule() {
     assert_eq!(rules[2]["bodyMatches"], 0, "an empty rule stands out");
     assert_eq!(rules[2]["line"], 3);
     assert!(!d["plan"].as_str().unwrap().is_empty());
+}
+
+// @lat: [[tests#Studio server#Why picks the rule whose premises hold]]
+#[test]
+fn why_picks_the_rule_whose_premises_hold() {
+    let data =
+        "@prefix ex: <http://ex.org/> .\nex:ada ex:manages ex:bob .\nex:bob ex:manages ex:eve .\n";
+    let rules = "@prefix ex: <http://ex.org/> .\nex:reportsTo(?x, ?m) :- ex:manages(?m, ?x).\nex:reportsTo(?x, ?top) :- ex:manages(?m, ?x), ex:reportsTo(?m, ?top).\n";
+    let mut c = Client::start(workspace(&[("data.ttl", data), ("rules/org.dl", rules)]));
+    // eve reports to ada only through bob: the direct rule must not be chosen.
+    let tree = c.ok(
+        "oxilite/why",
+        json!({"s": iri("http://ex.org/eve"), "p": iri("http://ex.org/reportsTo"), "o": iri("http://ex.org/ada")}),
+    );
+    let premises = tree["premises"].as_array().unwrap();
+    assert_eq!(premises.len(), 2, "{tree}");
+    assert!(premises.iter().all(|p| p["status"] != "absent"), "{tree}");
+    assert_eq!(premises[0]["status"], "asserted");
+    assert_eq!(premises[1]["status"], "inferred");
+    assert_eq!(premises[1]["premises"][0]["status"], "asserted");
 }

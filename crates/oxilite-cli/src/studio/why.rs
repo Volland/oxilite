@@ -309,6 +309,18 @@ impl Explainer<'_> {
                     _ => None,
                 })
                 .collect();
+            // A rule explains the triple only if its premises hold: with every body variable
+            // bound by the head nothing was checked yet, so check now and try the next rule.
+            let mut hold = true;
+            for p in &premises {
+                if !self.holds(p)? {
+                    hold = false;
+                    break;
+                }
+            }
+            if !hold {
+                continue;
+            }
             return Ok(Some((rule_text(rule, &|_| None), premises)));
         }
         Ok(None)
