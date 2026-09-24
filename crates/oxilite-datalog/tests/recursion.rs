@@ -57,7 +57,9 @@ fn mutual_recursion_even() {
 #[test]
 fn mutual_recursion_odd() {
     let s = chain();
-    let r = s.datalog(&format!("{PREFIX}{EVEN_ODD}?- odd(?x).")).unwrap();
+    let r = s
+        .datalog(&format!("{PREFIX}{EVEN_ODD}?- odd(?x)."))
+        .unwrap();
     assert_eq!(
         sorted(&r),
         vec!["<http://example.org/n1>", "<http://example.org/n3>"]
@@ -72,7 +74,10 @@ fn mutual_recursion_is_one_tagged_member() {
         .datalog_sql(&format!("{PREFIX}{EVEN_ODD}?- even(?x)."))
         .unwrap();
     assert!(sql.contains("WITH RECURSIVE"), "{sql}");
-    assert!(sql.contains("tag"), "expected a discriminant column in:\n{sql}");
+    assert!(
+        sql.contains("tag"),
+        "expected a discriminant column in:\n{sql}"
+    );
     let explain = s
         .explain_datalog(&format!("{PREFIX}{EVEN_ODD}?- even(?x)."))
         .unwrap();
@@ -107,7 +112,11 @@ fn non_linear_recursion_agrees_with_the_linear_form() {
         v
     };
     assert_eq!(key(&non_linear), key(&linear));
-    assert_eq!(non_linear.rows.len(), 10, "4 + 3 + 2 + 1 pairs on the chain");
+    assert_eq!(
+        non_linear.rows.len(),
+        10,
+        "4 + 3 + 2 + 1 pairs on the chain"
+    );
 }
 
 // @lat: [[tests#Datalog#Doubling reaches the fixpoint faster]]
@@ -159,7 +168,11 @@ fn iteration_cleans_up_its_work_rows() {
         let r = s
             .datalog(&format!("{PREFIX}{NON_LINEAR}?- path(?x, ?y)."))
             .unwrap();
-        assert_eq!(r.rows.len(), 10, "a second run must not see the first's rows");
+        assert_eq!(
+            r.rows.len(),
+            10,
+            "a second run must not see the first's rows"
+        );
     }
 }
 
@@ -352,4 +365,65 @@ fn materializing_an_iterated_component_cleans_up() {
     // the second run does not read the inferences the first one wrote.
     assert_eq!(s.datalog_materialize(&program).unwrap().inferred, 10);
     assert_eq!(s.datalog_materialize(&program).unwrap().inferred, 10);
+}
+
+// @lat: [[tests#Datalog#Producers keep their own conclusions]]
+#[test]
+fn producers_keep_their_own_conclusions() {
+    use oxilite::model::{NamedNode, Quad};
+    let s = Store::new().unwrap();
+    s.update(
+        "PREFIX ex: <http://example.org/> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+         INSERT DATA { ex:ada ex:parent ex:bob . ex:bob ex:parent ex:cy . ex:ada a ex:Mother . ex:Mother rdfs:subClassOf ex:Parent }",
+    )
+    .unwrap();
+    let ex = |l: &str| NamedNode::new(format!("http://example.org/{l}")).unwrap();
+    let typed = Quad::new(
+        ex("ada"),
+        NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap(),
+        ex("Parent"),
+        oxilite::model::GraphName::DefaultGraph,
+    );
+    let ancestor = Quad::new(
+        ex("ada"),
+        ex("ancestor"),
+        ex("cy"),
+        oxilite::model::GraphName::DefaultGraph,
+    );
+    s.materialize().unwrap();
+    let rules = Options {
+        producer: "rules/ancestry.dl".into(),
+        ..Options::default()
+    };
+    s.datalog_materialize_with(
+        &format!(
+            "{PREFIX}ex:ancestor(?x, ?y) :- ex:parent(?x, ?y).\n\
+             ex:ancestor(?x, ?z) :- ex:parent(?x, ?y), ex:ancestor(?y, ?z)."
+        ),
+        &rules,
+    )
+    .unwrap();
+    // Materializing the rules left the OWL conclusion in place, and each is attributed.
+    assert_eq!(s.inference_producers(&typed).unwrap(), ["owl2rl"]);
+    assert_eq!(
+        s.inference_producers(&ancestor).unwrap(),
+        ["rules/ancestry.dl"]
+    );
+    // Re-running OWL 2 RL keeps the rule conclusions.
+    s.materialize().unwrap();
+    assert_eq!(
+        s.inference_producers(&ancestor).unwrap(),
+        ["rules/ancestry.dl"]
+    );
+    // Clearing one producer removes only its conclusions.
+    s.clear_inferences_of("rules/ancestry.dl").unwrap();
+    assert!(s.inference_producers(&ancestor).unwrap().is_empty());
+    assert_eq!(s.inference_producers(&typed).unwrap(), ["owl2rl"]);
+    let asserted = Quad::new(
+        ex("ada"),
+        ex("parent"),
+        ex("bob"),
+        oxilite::model::GraphName::DefaultGraph,
+    );
+    assert!(s.inference_producers(&asserted).unwrap().is_empty());
 }

@@ -393,9 +393,7 @@ impl Engine {
     pub fn datalog(&self, program: &str, options: Option<String>) -> Result<Job, JsError> {
         let options = datalog_options(options)?;
         let job = oxilite_datalog::prepare(program, &self.caps, &options).map_err(js)?;
-        Ok(wrap(job, |r| {
-            Ok(oxilite_datalog::json::result_to_json(&r))
-        }))
+        Ok(wrap(job, |r| Ok(oxilite_datalog::json::result_to_json(&r))))
     }
 
     #[cfg(feature = "datalog")]
@@ -410,9 +408,7 @@ impl Engine {
         let options = datalog_options(options)?;
         let job =
             oxilite_datalog::MaterializeJob::new(program, &self.caps, &options).map_err(js)?;
-        Ok(wrap(job, |s| {
-            Ok(oxilite_datalog::json::stats_to_json(&s))
-        }))
+        Ok(wrap(job, |s| Ok(oxilite_datalog::json::stats_to_json(&s))))
     }
 
     #[cfg(feature = "datalog")]

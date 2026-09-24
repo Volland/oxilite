@@ -678,7 +678,7 @@ pub fn materialize_round() -> Vec<Statement> {
             first = v.first, rest = v.rest, nil = v.nil, chain = v.chain
         ),
     ];
-    rules
+    let mut statements: Vec<Statement> = rules
         .into_iter()
         .map(|r| {
             let (with, body) = match r.strip_prefix("WITH ") {
@@ -692,7 +692,9 @@ pub fn materialize_round() -> Vec<Statement> {
                 non_literal("r.s")
             ))
         })
-        .collect()
+        .collect();
+    statements.push(inference_attribute(OWL_PRODUCER));
+    statements
 }
 
 /// Renames the three result columns of a rule's first SELECT to `s, p, o`.
@@ -762,10 +764,51 @@ fn split_with(rest: &str) -> (String, String) {
     )
 }
 
-/// Statements run before materialization: previous inferences are discarded, and the
-/// vocabulary that rule conclusions use (`owl:sameAs`, `rdfs:subClassOf`, …) gets its term
-/// rows, since it may not appear in the data.
+/// The producer id of OWL 2 RL materialization (SQL rules and `reasonable` alike).
+pub const OWL_PRODUCER: &str = "owl2rl";
+
+/// The id a producer name is stored under in `quads_inf_src` and `inf_producers`.
+pub fn producer_id(name: &str) -> i64 {
+    // A positive 62-bit hash: stable across runs and backends, computed without a lookup.
+    (xxhash_rust::xxh3::xxh3_64(name.as_bytes()) >> 2) as i64
+}
+
+/// Discards one producer's inferences: its attributions go, and so does every inferred quad no
+/// other producer derived. The producer is (re)registered under its name.
+pub fn inference_reset(name: &str) -> Vec<Statement> {
+    let id = producer_id(name);
+    vec![
+        Statement::new(format!(
+            "INSERT OR REPLACE INTO inf_producers(id, name) VALUES ({id}, '{}')",
+            name.replace('\'', "''")
+        )),
+        Statement::new(format!("DELETE FROM quads_inf_src WHERE src = {id}")),
+        Statement::new(
+            "DELETE FROM quads_inf WHERE NOT EXISTS (SELECT 1 FROM quads_inf_src q \
+             WHERE q.s = quads_inf.s AND q.p = quads_inf.p AND q.o = quads_inf.o AND q.g = quads_inf.g)",
+        ),
+    ]
+}
+
+/// Attributes every inferred quad no producer claims yet to `name`. Run after a producer
+/// writes, so what it derived (and nobody had derived before) is recorded as its own.
+pub fn inference_attribute(name: &str) -> Statement {
+    Statement::new(format!(
+        "INSERT OR IGNORE INTO quads_inf_src(src, s, p, o, g) SELECT {}, i.s, i.p, i.o, i.g FROM quads_inf i \
+         WHERE NOT EXISTS (SELECT 1 FROM quads_inf_src q WHERE q.s = i.s AND q.p = i.p AND q.o = i.o AND q.g = i.g)",
+        producer_id(name)
+    ))
+}
+
+/// Statements run before OWL 2 RL materialization (see [`materialize_reset_for`]).
 pub fn materialize_reset(caps: &crate::sql::Capabilities) -> Vec<Statement> {
+    materialize_reset_for(caps, OWL_PRODUCER)
+}
+
+/// Statements run before a producer materializes: its previous inferences are discarded, and
+/// the vocabulary that rule conclusions use (`owl:sameAs`, `rdfs:subClassOf`, …) gets its term
+/// rows, since it may not appear in the data.
+pub fn materialize_reset_for(caps: &crate::sql::Capabilities, producer: &str) -> Vec<Statement> {
     let mut rows = crate::encoding::EncodedRows::default();
     for iri in [
         rdf::TYPE.as_str(),
@@ -787,7 +830,7 @@ pub fn materialize_reset(caps: &crate::sql::Capabilities) -> Vec<Statement> {
         rows.iri(&format!("{OWL}{local}"));
     }
     rows.dedup();
-    let mut out = vec![Statement::new("DELETE FROM quads_inf")];
+    let mut out = inference_reset(producer);
     out.extend(crate::writer::term_statements(&rows, caps));
     out
 }

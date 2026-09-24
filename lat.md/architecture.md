@@ -183,7 +183,105 @@ With `StoreOptions::text_index`, `terms_fts` (external content over `terms`) ind
 
 The `oxilite` binary (`crates/oxilite-cli`) loads, queries, explains and updates stores, and `oxilite serve` exposes the SPARQL 1.1 protocol on the routes of `oxigraph serve` (`/query`, `/update`, `/store`). See [[crates/oxilite-cli/src/main.rs]].
 
-It opens a SQLite file with the bundled SQLite, the same file through a SQLite shared library (`--library`), or a D1 database behind the local sidecar (`--d1-sidecar`). Results follow the `Accept` header (SPARQL JSON/XML/CSV/TSV, RDF formats for graphs). The benchmarks drive it with the official BSBM test driver.
+It also checks projects (`oxilite check`, [[architecture#Studio server#Check command]]), serves agents (`oxilite mcp`, [[architecture#Studio server#Agent tools]]) and runs the studio's language server (`oxilite studio-server`). It opens a SQLite file with the bundled SQLite, the same file through a SQLite shared library (`--library`), or a D1 database behind the local sidecar (`--d1-sidecar`). Results follow the `Accept` header (SPARQL JSON/XML/CSV/TSV, RDF formats for graphs). The benchmarks drive it with the official BSBM test driver.
+
+## Studio server
+
+`oxilite studio-server` is the language server behind oxilite studio, the VS Code extension: LSP over standard input and output with custom `oxilite/*` requests. See [[crates/oxilite-cli/src/studio/mod.rs]].
+
+It runs in its own process so a panic or a long operation never takes the editor down, and it links the engine crates directly (SHACL included, which has no JavaScript binding). It is built on `lsp-server`, which needs no async runtime, matching the blocking `Store`. Requests: `oxilite/query` (SPARQL, returning the RDF/JS payload of `output_to_json` plus `elapsedMs` and `truncated`, capped at a row limit), `oxilite/status` and `oxilite/reload`; the server sends `oxilite/storeChanged` after every load. The studio's own design lives in the `oxilite-studio` repository; OpenSpec change `studio-server-skeleton`.
+
+### Project store
+
+The workspace's files loaded into a scratch store: data and ontologies into their graphs, shapes and rules kept aside, inferences materialized by producer. See [[crates/oxilite-cli/src/studio/project.rs#Project]].
+
+The store lives at `<root>/.oxilite/studio.sqlite` (the server writes a `.gitignore` there) and is derived data, deleted on start. Hidden directories, `node_modules` and `target` are skipped; formats come from the extension (`.owl` is RDF/XML). Each file is parsed completely before any quad is written, with its IRI as base and its blank nodes renamed, so a syntax error loads nothing from that file and becomes a diagnostic at the parser's position.
+
+A watched-file change reloads per graph: every graph a changed file belonged to or now belongs to is cleared and refilled from its files, and a manifest change reloads everything. Queries read the union of graphs with the profile's reasoning: `rdfs` and `owlql` rewrite queries, `owl2rl` materializes. Materialization runs OWL 2 RL, then each rule file under its relative path as producer, then OWL 2 RL again when rules exist; a failing rule file is a diagnostic and its producer is cleared. With a manifest, ontology graphs are registered in the schema registry, so reasoning reads their axioms only.
+
+### Project manifest
+
+`oxilite.toml` names graphs (IRI, globs, `data` or `ontology`), shapes and rules globs, the reasoning profile, validation options and tests; without it, conventions decide. See [[crates/oxilite-cli/src/studio/manifest.rs#Layout]].
+
+The manifest is the whole truth: a file no glob matches is not loaded. Without one, a file's graph is its `file:` IRI and its role comes from the extension (`.dl` rules) and content (SHACL shape classes make shapes, `owl:Ontology` an ontology). A manifest that does not parse is a diagnostic on `oxilite.toml`, and the conventions apply until it is fixed.
+
+### Live validation
+
+SHACL runs on a worker thread after every change; each result becomes a diagnostic on the line of the focus node's statement with the failing path, linked to its shape. See [[crates/oxilite-cli/src/studio/validate.rs#Job]].
+
+With reasoning on, a copy of the entailed graph is validated, so `sh:class` sees types that follow from the ontology; `validation.inferred = false` restricts it to asserted triples. A named shape is located where it is defined, a blank property shape where its path appears in a shapes file. Each run carries the project's generation and stops early, or is dropped, once a newer change has arrived. `oxilite/validationStarted` and `oxilite/validationChanged` report progress, and `oxilite/validationReport` returns the whole report.
+
+### Store Explorer
+
+`oxilite/explorer` returns tree nodes lazily: graphs with counts, the asserted class hierarchy with asserted and inferred instance counts, properties by use, files with their roles, and prefixes. See [[crates/oxilite-cli/src/studio/explorer.rs#children]].
+
+`oxilite/describe` marks each statement about a resource as asserted or inferred (absent without reasoning) and names the producers of materialized ones, for the resource view. Queries and explains run on worker threads, so a long query does not block completion or diagnostics.
+
+### Language features
+
+Completion, hover, definitions, references, outlines and live syntax diagnostics for SPARQL and the Turtle family, from a lenient scanner and the strict parsers. See [[crates/oxilite-cli/src/studio/lang.rs#complete]].
+
+The scanner ([[crates/oxilite-cli/src/studio/scanner.rs#scan]]) never fails: it tokenizes half-typed text with UTF-16 positions, resolves prefixed names and relative IRIs, and guesses each term's role (subject, predicate, object) by walking the triple structure. Completion uses the role: predicates in predicate position, classes after `a`, prefixed names in the store's own frequency order, and an edit declaring a prefix the document lacks. Syntax errors come from `spargebra` and the RDF parsers on every change; SPARQL predicates the connected store never uses get a warning.
+
+### Source index
+
+Where every IRI occurs in the workspace's text RDF files, and in which role, built while loading. See [[crates/oxilite-cli/src/studio/index.rs#SourceIndex]].
+
+Definitions are subject occurrences; references are all occurrences; `triple_location` finds the line of a subject's statement with a given predicate, which is where SHACL results are reported. Occurrences are stored with small file ids to stay compact at a million triples.
+
+### Connections
+
+A request runs against the active connection or a named one: the Project store, or an attached SQLite store whose updates persist. See [[crates/oxilite-cli/src/studio/conn.rs#Target]].
+
+`oxilite/query` runs a query, or an update when the text is one; an update on an attached store fails with code 1001 until it is re-sent with `confirmed`, and an update on the Project store is marked ephemeral. `oxilite/explain`, `oxilite/describe`, `oxilite/connections`, `oxilite/attach`, `oxilite/detach` and `oxilite/activate` complete the set, and `oxilite/connectionsChanged` reports changes. Each connection's vocabulary (predicates and classes by frequency, labels, comments) is computed on first use and dropped when the store changes.
+
+### Rules, Cypher and files
+
+`oxilite/datalog` runs a program's goal and `oxilite/cypher` a Cypher statement on the active connection; explain takes a `language`; `oxilite/import` and `oxilite/export` load and dump files. See [[crates/oxilite-cli/src/studio/conn.rs#Target#cypher]].
+
+Datalog results come back as a solutions table; Cypher results as `kind: "cypher"` with the values' JSON (nodes, relationships, paths), which the graph view draws. Cypher names map to IRIs through a vocabulary built from the workspace's prefixes and a base namespace: the manifest's `[cypher] base`, else the store's most used namespace, so `:Person` means the data's own class. A Cypher statement that writes, or an import, on an attached store needs `confirmed` like an update. Datalog documents get parse and program-check diagnostics (safety, stratification, arity) placed on the rule they name, and completion of predicates and classes; Cypher documents get parse diagnostics and completion of labels, relationship types and property keys by their Cypher names.
+
+### Justifications
+
+`oxilite/why` explains an entailed triple as a proof tree: asserted leaves with their source line, inferences with the rule and premises behind them, recursively. See [[crates/oxilite-cli/src/studio/why.rs#Explainer]].
+
+A conclusion of a rule file is explained by re-running that rule's body in the Datalog engine with its head bound to the triple; the first solution gives the premises. OWL 2 RL and RDFS conclusions are explained by rule templates (subclass, equivalence, domain, range, subproperty, inverse, symmetric, transitive, `sameAs`) run as SPARQL with the conclusion bound, over the connection's own reasoning. The producers recorded in `quads_inf_src` pick which rules are tried; a premise already on the path is not expanded again, and depth is capped. A triple that does not hold is reported as absent.
+
+### Knowledge-graph tests
+
+Tests in the manifest compare query results with an expected file, check SHACL conformance or exactly which shapes fail, or check entailments. See [[crates/oxilite-cli/src/studio/kgtest.rs#Runner]].
+
+A test runs against the Project store as it is, or an overlay: its `data` fixture with the project's ontologies, or a copy of the project when it changes reasoning or rules. Results compare as multisets unless the query orders them; expected files are SPARQL results (JSON, XML, CSV, TSV), RDF for graph results, or JSON for Cypher. "Update snapshot" writes the current results in the expected file's format. Shapes in failing-shape lists resolve workspace prefixes, and a blank property shape counts for the named shape owning it. The server offers `oxilite/tests`, `oxilite/runTest` and `oxilite/updateSnapshot` to the editor's Test Explorer.
+
+### Check command
+
+`oxilite check [root]` loads a project exactly like the Project store and reports load and rule errors, SHACL results with file and line, and test outcomes; it exits with 1 on any error, violation or failing test. See [[crates/oxilite-cli/src/studio/check.rs#check]].
+
+`--json` prints the report as JSON for CI annotations. It shares every code path with the editor's live diagnostics, so CI and the studio agree.
+
+### D1 connections
+
+An attached store can be a Cloudflare D1 database over its HTTP API, run through a blocking backend so every studio request works on it unchanged. See [[crates/oxilite-cli/src/studio/d1.rs#D1Http]].
+
+A request's statements go to `/raw` as one multi-statement `sql` string, which D1 runs as a batch; with `Capabilities::d1()` 64-bit ids come back as text, so JSON keeps them exact. A meter adds up requests, rows read and rows written from each result's `meta`, and every payload on D1 carries its own cost. Connections to D1 open read-only unless asked; a write needs confirmation with an estimate (about 4.8 rows per quad for `INSERT DATA` and `DELETE DATA`), and materialization is an explicit, confirmed request since it is not atomic across rounds. Counting a D1 store's triples is a billed scan, so the connection list shows the meter instead. A `wrangler dev` database file under `.wrangler/state` attaches as a local SQLite file. Every connection's store sits behind [[crates/oxilite-cli/src/studio/d1.rs#Handle]], so SQLite and D1 share the code.
+
+### Agent tools
+
+`oxilite mcp` serves the studio's operations as Model Context Protocol tools over standard input and output: SPARQL and Datalog queries, a schema summary, SHACL validation, justifications and reload. See [[crates/oxilite-cli/src/studio/mcp.rs#Mcp]].
+
+It loads a project like the Project store (`--root`, in memory) or opens a store file read-only (`--location`). Answers are compact text an agent reads well: tab-separated tables, N-Triples, validation results with file and line, proof trees as JSON. The editor registers it as an MCP server for the workspace.
+
+### Datalog debugger
+
+`oxilite/datalogDebug` reports, for each rule of a program, how many ways its body matches and how many facts its head predicate holds, with the strata and strategies the engine chose. See [[crates/oxilite-cli/src/studio/debug.rs#debug]].
+
+Each count runs the program with an extra goal over one rule's body or head, capped at 100 000, so a rule that matches nothing or explodes stands out next to its line.
+
+### ShEx and full-text search
+
+ShEx schemas validate with their shape maps in the same background run as SHACL; the manifest's `text_index` builds the store's full-text index. See [[crates/oxilite-cli/src/studio/project.rs#Project#shex_jobs]].
+
+A schema pairs with its manifest `[[shex]]` shape map (a file or inline), or by convention with the `.sm` file of the same name. Each nonconformant node becomes a result and a diagnostic on its statement, linked to the shape's line in the `.shex` file (the scanner indexes ShExC names too). `oxl:textMatch` answers without the index as well; the index makes it a `terms_fts` lookup. `oxilite/ontology` returns classes with instance counts, subclass links and properties with their domains and ranges for the ontology diagram ([[crates/oxilite-cli/src/studio/explorer.rs#ontology]]).
 
 ## Benchmarks
 
@@ -219,7 +317,7 @@ RDFS/OWL-QL reasoning by query rewriting against a small materialized TBox closu
 
 Reasoning is chosen per query (`QueryOptions::reasoning`: `None | Rdfs | OwlQl`, default `None` like Oxigraph). The compiler swaps each pattern's `quads` table for a derived table of entailed triples (a `SELECT DISTINCT` over UNION ALL arms: asserted, sub/inverse properties, types through the class closure, domains and ranges), so queries stay single statements and paths, OPTIONAL and the fallback all see the same entailments. A transitive property becomes a recursive CTE, walked from a constant endpoint when there is one. With a merged default graph the derived table merges graphs itself, so each entailed triple appears once. Literals never become subjects.
 
-`materialize()` runs OWL 2 RL rules as `INSERT OR IGNORE INTO quads_inf … SELECT` statements over asserted plus inferred triples (all graphs merged, conclusions in graph 0, triples already asserted there skipped), one atomic request per round until a round adds nothing: the same code on SQLite, dlopen and D1 (where a round is one batch, and the whole run is not atomic). The rules are the ones `reasonable` implements (equality, property axioms, class expressions including lists and property chains, `scm-sco`, `scm-eqc1`, and `owl:Thing` typing); `materialize_with_reasonable()` (feature `reasonable`, crate `oxilite-reason`) computes the same closure in memory, and an agreement test checks both on sample ontologies. `include_inferred` makes queries read `quads ∪ quads_inf`.
+`materialize()` runs OWL 2 RL rules as `INSERT OR IGNORE INTO quads_inf … SELECT` statements over asserted plus inferred triples (all graphs merged, conclusions in graph 0, triples already asserted there skipped), one atomic request per round until a round adds nothing: the same code on SQLite, dlopen and D1 (where a round is one batch, and the whole run is not atomic). The rules are the ones `reasonable` implements (equality, property axioms, class expressions including lists and property chains, `scm-sco`, `scm-eqc1`, and `owl:Thing` typing); `materialize_with_reasonable()` (feature `reasonable`, crate `oxilite-reason`) computes the same closure in memory, and an agreement test checks both on sample ontologies. `include_inferred` makes queries read `quads ∪ quads_inf`. Every inference is attributed to its producer in `quads_inf_src`, so `clear_inferences_of(producer)` and a re-run of one producer leave the others' conclusions in place, and `inference_producers(quad)` names who derived a quad ([[decisions#D28 Inferences are attributed to producers]]).
 
 ## Validation
 
@@ -303,7 +401,7 @@ The job issues the compiled SQL, then asks the shared term resolver for the term
 
 What a program derives can be stored instead of queried, in `quads_inf` — the table OWL 2 RL materialization already writes. See [[crates/oxilite-datalog/src/materialize.rs#MaterializeJob]].
 
-A user rule is then visible to SPARQL and Cypher through the `include_inferred` option that already exists ([[architecture#Reasoning]]), and the two share one lifecycle: running either replaces what the other stored. Only rule heads with an RDF form are storable — an IRI with two arguments is a predicate, with one a class — so a head that is not a triple is rejected before anything is written rather than half-applied. A component needing iteration is evaluated once and read by every head, since they share a run.
+A user rule is then visible to SPARQL and Cypher through the `include_inferred` option that already exists ([[architecture#Reasoning]]), and each run replaces only its own producer's conclusions ([[decisions#D28 Inferences are attributed to producers]]). Only rule heads with an RDF form are storable — an IRI with two arguments is a predicate, with one a class — so a head that is not a triple is rejected before anything is written rather than half-applied. A component needing iteration is evaluated once and read by every head, since they share a run.
 
 ### Reach
 
@@ -388,6 +486,8 @@ Cloudflare proxies the DNS, so its dashboard settings (Block AI bots, Bot Fight 
 Articles live in `site/articles/`, one HTML file each, behind an index at `site/articles/index.html` reachable at `/articles`. Every page's menu carries an Articles entry pointing there, and the landing page keeps its own `#articles` section of the same cards, linking through to the index.
 
 `site/articles/introducing-oxilite.html` is the overview article and the announcement's canonical URL: the gap Oxigraph leaves, the sans-IO core, term encoding, the schema, the single-statement compiler and its fallback, the planner, atomicity, reasoning, validation, the Cypher frontend, the JSON-LD and Verifiable Credentials layer, the BSBM numbers, the tested Oxigraph compatibility and the limits. It leads the articles index and the landing page's `#articles` section. Its claims are drawn from this file, [[decisions]] and the README rather than from a runnable example, so a change to any of those should be reflected in it.
+
+The landing page's `#studio` section introduces oxilite studio, the VS Code extension built on [[architecture#Studio server]], with its Marketplace install and the build-from-source path for platforms without a bundled server. `site/articles/oxilite-studio.html` is its tour: install, conventions, completion, reasoning with "why?", live SHACL, the manifest and `oxilite check`, attached SQLite and D1 stores, notebooks, MCP, and the limits. Its examples come from the studio server's tests, so a change to those behaviours should be reflected in it. The studio logo is `site/assets/studio.svg` (rendered to `studio.png`).
 
 The site is plain HTML and one stylesheet in a white, black and orange palette. It loads no external fonts, scripts or trackers, which keeps the Datenschutz page to the hosting logs of GitHub Pages and Cloudflare, and Cloudflare's bot-protection cookies. The logo (`site/assets/logo.svg`, rendered to `logo.png` with `rsvg-convert`) combines a SQLite-style tile, a quill drawn as a graph, and a small edge-worker cloud.
 

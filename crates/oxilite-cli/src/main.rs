@@ -8,6 +8,7 @@
 // @lat: [[architecture#Command line and HTTP endpoint]]
 
 mod db;
+mod studio;
 
 use clap::{Parser, Subcommand};
 use db::Db;
@@ -117,6 +118,32 @@ enum Command {
         #[command(flatten)]
         location: Location,
     },
+    /// Checks a project like oxilite studio does: load errors, rule errors, SHACL results and the
+    /// tests in `oxilite.toml`. Exits with status 1 when anything fails.
+    Check {
+        /// The project root (default: the current directory).
+        #[arg(default_value = ".")]
+        root: String,
+        /// Print the report as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Serves the studio's tools (query, schema, validate, why) to agents over the Model Context
+    /// Protocol on standard input and output.
+    Mcp {
+        /// The project root to load like oxilite studio's Project store (default: here).
+        #[arg(long)]
+        root: Option<String>,
+        /// Open this store file read-only instead of loading a project.
+        #[arg(long, conflicts_with = "root")]
+        location: Option<String>,
+    },
+    /// Runs the language server behind oxilite studio (LSP over standard input and output).
+    StudioServer {
+        /// Scratch store location (default `<workspace>/.oxilite/studio.sqlite`; `:memory:` works).
+        #[arg(long)]
+        store: Option<String>,
+    },
 }
 
 fn main() {
@@ -221,6 +248,20 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             Ok(())
         }
         Command::Optimize { location } => Ok(Db::open(&location)?.optimize()?),
+        Command::StudioServer { store } => studio::run(store),
+        Command::Mcp { root, location } => studio::mcp::serve(root.map(Into::into), location),
+        Command::Check { root, json } => {
+            let (passed, report) = studio::check::check(root.into())?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else {
+                print!("{}", studio::check::render(&report));
+            }
+            if !passed {
+                std::process::exit(1);
+            }
+            Ok(())
+        }
     }
 }
 

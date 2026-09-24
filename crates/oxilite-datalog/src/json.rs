@@ -8,7 +8,8 @@ use crate::sql::Options;
 use oxilite_core::json::term_to_json;
 use serde_json::{json, Map, Value};
 
-/// Reads `{ "useDefaultGraphAsUnion": bool, "includeInferred": bool, "maxIterations": number }`.
+/// Reads `{ "useDefaultGraphAsUnion": bool, "includeInferred": bool, "maxIterations": number,
+/// "producer": string }`.
 ///
 /// The names match `CypherOptions`, so the two dialects read the same from JavaScript.
 pub fn options_from_json(v: &Value) -> Result<Options> {
@@ -17,11 +18,14 @@ pub fn options_from_json(v: &Value) -> Result<Options> {
         return if v.is_null() {
             Ok(out)
         } else {
-            Err(DatalogError::unsupported("datalog options must be an object"))
+            Err(DatalogError::unsupported(
+                "datalog options must be an object",
+            ))
         };
     };
     let flag = |m: &Map<String, Value>, k: &str| m.get(k).and_then(Value::as_bool);
-    if let Some(b) = flag(map, "useDefaultGraphAsUnion").or_else(|| flag(map, "unionDefaultGraph")) {
+    if let Some(b) = flag(map, "useDefaultGraphAsUnion").or_else(|| flag(map, "unionDefaultGraph"))
+    {
         out.union_default_graph = b;
     }
     if let Some(b) = flag(map, "includeInferred") {
@@ -29,6 +33,9 @@ pub fn options_from_json(v: &Value) -> Result<Options> {
     }
     if let Some(n) = map.get("maxIterations").and_then(Value::as_u64) {
         out.max_iterations = n as usize;
+    }
+    if let Some(p) = map.get("producer").and_then(Value::as_str) {
+        out.producer = p.to_owned();
     }
     Ok(out)
 }

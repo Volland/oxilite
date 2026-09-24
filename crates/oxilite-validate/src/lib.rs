@@ -97,11 +97,8 @@ pub fn shacl_schema_from_store<B: SyncBackend + Send + Sync + 'static>(
             }
         }
     };
-    let turtle = store.dump_graph_to_writer(
-        graph.as_ref(),
-        oxilite::io::RdfFormat::NTriples,
-        Vec::new(),
-    )?;
+    let turtle =
+        store.dump_graph_to_writer(graph.as_ref(), oxilite::io::RdfFormat::NTriples, Vec::new())?;
     let turtle = String::from_utf8(turtle)
         .map_err(|e| Error::Shapes(format!("shapes graph is not valid UTF-8: {e}")))?;
     shacl_schema(&turtle, &RDFFormat::NTriples, None)

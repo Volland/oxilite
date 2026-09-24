@@ -204,7 +204,10 @@ impl<'a> Lexer<'a> {
                     if word == "prefix" || word == "base" {
                         Tok::AtPrefix
                     } else {
-                        return Err(DatalogError::parse(span, format!("unknown directive @{word}")));
+                        return Err(DatalogError::parse(
+                            span,
+                            format!("unknown directive @{word}"),
+                        ));
                     }
                 }
                 b'&' => {

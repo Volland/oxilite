@@ -9,7 +9,7 @@
 
 use oxilite_core::encoding::{EncodedRows, DEFAULT_GRAPH_ID};
 use oxilite_core::writer::{insert_statements_into, term_statements};
-use oxilite_core::{ops, run_sync, Request, Result, Statement, SyncBackend};
+use oxilite_core::{ops, run_sync, Request, Result, SyncBackend};
 use oxrdf::{GraphNameRef, QuadRef, Triple};
 use reasonable::reasoner::Reasoner;
 use std::collections::HashSet;
@@ -64,9 +64,12 @@ pub fn materialize<B: SyncBackend>(backend: &B) -> Result<u64> {
         })
         .collect();
     rows.dedup();
-    let mut stmts = vec![Statement::new("DELETE FROM quads_inf")];
+    let mut stmts = oxilite_core::reason::inference_reset(oxilite_core::reason::OWL_PRODUCER);
     stmts.extend(term_statements(&rows, &caps));
     stmts.extend(insert_statements_into("quads_inf", &ids, &caps));
+    stmts.push(oxilite_core::reason::inference_attribute(
+        oxilite_core::reason::OWL_PRODUCER,
+    ));
     backend.execute(&Request::atomic(stmts))?;
     Ok(ids.len() as u64)
 }

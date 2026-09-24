@@ -151,10 +151,7 @@ impl Db {
     }
 
     /// Stores what a Datalog program derives, as inferences.
-    pub fn datalog_materialize(
-        &self,
-        program: &str,
-    ) -> Result<oxilite::datalog::MaterializeStats> {
+    pub fn datalog_materialize(&self, program: &str) -> Result<oxilite::datalog::MaterializeStats> {
         Ok(match self {
             Db::Native(s) => s.datalog_materialize(program)?,
             Db::Library(s) => s.datalog_materialize(program)?,

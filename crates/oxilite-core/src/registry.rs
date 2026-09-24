@@ -192,10 +192,7 @@ pub fn scope(role: SchemaRole, column: &str) -> String {
 
 /// SQL: a quad source restricted to the graphs that may contribute to `role`.
 pub fn scoped_quads(role: SchemaRole) -> String {
-    format!(
-        "(SELECT s, p, o, g FROM quads WHERE {})",
-        scope(role, "g")
-    )
+    format!("(SELECT s, p, o, g FROM quads WHERE {})", scope(role, "g"))
 }
 
 /// SQL: a quad source with every registered schema graph removed, whatever its role and

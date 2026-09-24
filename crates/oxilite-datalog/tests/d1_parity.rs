@@ -131,11 +131,12 @@ fn d1_never_gets_a_compound_recursive_term() {
 fn a_function_needing_udfs_is_refused_on_d1() {
     // D1 provides no user-defined functions, so REGEX must be refused rather than emitted.
     assert!(!d1().udf);
-    let program = format!(
-        "{PREFIX}a(?p) :- ex:name(?p, ?n), REGEX(?n, \"^A\").\n?- a(?p)."
-    );
+    let program = format!("{PREFIX}a(?p) :- ex:name(?p, ?n), REGEX(?n, \"^A\").\n?- a(?p).");
     let err = compile(&program, &d1(), &Options::default()).unwrap_err();
-    assert!(err.to_string().contains("user-defined functions"), "got: {err}");
+    assert!(
+        err.to_string().contains("user-defined functions"),
+        "got: {err}"
+    );
 }
 
 // @lat: [[tests#Datalog#D1 materialization stays within the statement budget]]
@@ -168,9 +169,7 @@ fn materialization_fits_d1s_statement_budget() {
 fn statements_are_self_contained() {
     // The backend contract is that statements carry their own constants; a `?` placeholder
     // would mean a bound parameter D1 is never given.
-    let program = format!(
-        "{PREFIX}p(?x) :- ex:age(?x, ?a), ?a >= 18, ?a < 65.\n?- p(?x)."
-    );
+    let program = format!("{PREFIX}p(?x) :- ex:age(?x, ?a), ?a >= 18, ?a < 65.\n?- p(?x).");
     for sql in statements(&program) {
         assert!(!sql.contains('?'), "placeholder in:\n{sql}");
     }

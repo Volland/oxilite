@@ -295,11 +295,7 @@ impl NativeStore {
 
     /// Stores what a Datalog program derives as inferences, beside the OWL ones.
     #[napi]
-    pub fn datalog_materialize(
-        &self,
-        program: String,
-        options: Option<String>,
-    ) -> Result<String> {
+    pub fn datalog_materialize(&self, program: String, options: Option<String>) -> Result<String> {
         let opts = datalog_args(options)?;
         let s = with_store!(self, s => s.datalog_materialize_with(&program, &opts)).map_err(err)?;
         Ok(oxilite::datalog::json::stats_to_json(&s).to_string())

@@ -436,6 +436,8 @@ pub fn clear_job() -> OneShot<()> {
         Request::atomic(vec![
             "DELETE FROM quads".into(),
             "DELETE FROM quads_inf".into(),
+            "DELETE FROM quads_inf_src".into(),
+            "DELETE FROM inf_producers".into(),
             "DELETE FROM tbox_closure".into(),
             "DELETE FROM shapes_index".into(),
             "DELETE FROM shapes_in".into(),
@@ -622,7 +624,48 @@ pub fn materialize_job(max_rounds: usize, caps: &Capabilities) -> impl Job<Outpu
 /// Removes every materialized inference.
 pub fn clear_inferences_job() -> OneShot<()> {
     OneShot::new(
-        Request::atomic(vec![Statement::new("DELETE FROM quads_inf")]),
+        Request::atomic(vec![
+            Statement::new("DELETE FROM quads_inf"),
+            Statement::new("DELETE FROM quads_inf_src"),
+        ]),
         |_| Ok(()),
+    )
+}
+
+/// Removes the inferences of one producer, keeping what other producers also derived.
+pub fn clear_inferences_of_job(producer: &str) -> OneShot<()> {
+    OneShot::new(
+        Request::atomic(crate::reason::inference_reset(producer)),
+        |_| Ok(()),
+    )
+}
+
+/// The names of the producers that derived a quad (empty when it is not inferred). The
+/// default graph matches the graph-0 conclusions every producer writes.
+pub fn inference_producers_job(quad: QuadRef<'_>) -> OneShot<Vec<String>> {
+    let [s, p, o, g] = [
+        subject_id(quad.subject),
+        named_node_id(quad.predicate.as_str()),
+        term_id(quad.object),
+        graph_id(quad.graph_name),
+    ];
+    OneShot::new(
+        Request::read(vec![Statement::new(format!(
+            "SELECT p.name FROM quads_inf_src q JOIN inf_producers p ON p.id = q.src \
+             WHERE q.s = {s} AND q.p = {p} AND q.o = {o} AND q.g = {g} ORDER BY p.name"
+        ))]),
+        |r| {
+            Ok(r.first()
+                .map(|rs| {
+                    rs.rows
+                        .iter()
+                        .filter_map(|row| match row.first() {
+                            Some(SqlValue::Text(t)) => Some(t.clone()),
+                            _ => None,
+                        })
+                        .collect()
+                })
+                .unwrap_or_default())
+        },
     )
 }

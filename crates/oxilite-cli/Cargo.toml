@@ -19,9 +19,12 @@ name = "oxilite"
 path = "src/main.rs"
 
 [dependencies]
-oxilite = { workspace = true, features = ["rusqlite", "dylib", "datalog"] }
+oxilite = { workspace = true, features = ["rusqlite", "dylib", "datalog", "cypher"] }
 oxilite-core = { workspace = true, features = ["serde"] }
+oxilite-validate = { path = "../oxilite-validate", version = "0.3.0" }
 oxrdf.workspace = true
+oxiri.workspace = true
+regex.workspace = true
 oxrdfio.workspace = true
 spargebra.workspace = true
 clap = { version = "4", features = ["derive"] }
@@ -30,3 +33,11 @@ form_urlencoded = "1"
 futures = { version = "0.3", default-features = false, features = ["executor"] }
 ureq = { version = "2", features = ["json"] }
 serde_json = "1"
+lsp-server = "0.7"
+lsp-types = "0.97"
+url = "2"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+globset = "0.4"
+crossbeam-channel = "0.5"
+rudof_rdf = "0.3.21"

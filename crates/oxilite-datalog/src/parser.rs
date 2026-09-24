@@ -124,9 +124,8 @@ impl Parser {
                             }
                         }
                     }
-                    let atom = atom.ok_or_else(|| {
-                        DatalogError::parse(self.span(), "a goal needs an atom")
-                    })?;
+                    let atom = atom
+                        .ok_or_else(|| DatalogError::parse(self.span(), "a goal needs an atom"))?;
                     program.goal = Some(Goal { atom, constraints });
                 }
                 _ => program.rules.push(self.rule()?),
@@ -149,7 +148,12 @@ impl Parser {
         };
         let iri = match self.bump() {
             Some(Tok::Iri(i)) => i,
-            _ => return Err(DatalogError::parse(span, "expected an IRI after the prefix")),
+            _ => {
+                return Err(DatalogError::parse(
+                    span,
+                    "expected an IRI after the prefix",
+                ))
+            }
         };
         self.expect(&Tok::Dot, "`.` after the @prefix directive")?;
         self.prefixes.insert(name, iri);
@@ -188,7 +192,8 @@ impl Parser {
             if let Some(func) = agg_fn(name) {
                 self.bump();
                 self.bump();
-                let distinct = matches!(self.peek(), Some(Tok::Name(n)) if n.eq_ignore_ascii_case("distinct"));
+                let distinct =
+                    matches!(self.peek(), Some(Tok::Name(n)) if n.eq_ignore_ascii_case("distinct"));
                 if distinct {
                     self.bump();
                 }
@@ -197,12 +202,7 @@ impl Parser {
                     Some(Tok::Var(v)) => v,
                     // `COUNT(*)` counts rows; bind it to the group itself.
                     Some(Tok::Star) => "*".to_owned(),
-                    _ => {
-                        return Err(DatalogError::parse(
-                            span,
-                            "an aggregate takes one variable",
-                        ))
-                    }
+                    _ => return Err(DatalogError::parse(span, "an aggregate takes one variable")),
                 };
                 self.expect(&Tok::RParen, "`)` closing the aggregate")?;
                 let func = if distinct && func == AggFn::Count {
@@ -258,11 +258,9 @@ impl Parser {
             Some(Tok::Iri(i)) => Ok(self.iri(&i, span)?.into()),
             Some(Tok::Curie(p, l)) => Ok(self.curie(&p, &l, span)?.into()),
             Some(Tok::Int(v)) => Ok(Literal::new_typed_literal(v.to_string(), xsd::INTEGER).into()),
-            Some(Tok::Num(v)) => Ok(Literal::new_typed_literal(
-                format_double(v),
-                xsd::DOUBLE,
-            )
-            .into()),
+            Some(Tok::Num(v)) => {
+                Ok(Literal::new_typed_literal(format_double(v), xsd::DOUBLE).into())
+            }
             Some(Tok::Minus) => {
                 // A negative numeric literal.
                 match self.bump() {
@@ -314,7 +312,8 @@ impl Parser {
             .prefixes
             .get(prefix)
             .ok_or_else(|| DatalogError::UnknownPrefix(prefix.to_owned()))?;
-        NamedNode::new(format!("{base}{local}")).map_err(|e| DatalogError::parse(span, e.to_string()))
+        NamedNode::new(format!("{base}{local}"))
+            .map_err(|e| DatalogError::parse(span, e.to_string()))
     }
 
     fn body(&mut self) -> Result<Vec<BodyItem>> {
@@ -555,10 +554,41 @@ fn agg_fn(name: &str) -> Option<AggFn> {
 /// Names that are functions in a constraint, not predicates.
 pub(crate) fn is_function(name: &str) -> bool {
     const FUNCTIONS: &[&str] = &[
-        "REGEX", "STR", "STRLEN", "SUBSTR", "UCASE", "LCASE", "STRSTARTS", "STRENDS", "CONTAINS",
-        "STRBEFORE", "STRAFTER", "CONCAT", "ABS", "CEIL", "FLOOR", "ROUND", "YEAR", "MONTH", "DAY",
-        "HOURS", "MINUTES", "SECONDS", "DATATYPE", "LANG", "ISIRI", "ISURI", "ISLITERAL",
-        "ISNUMERIC", "ISBLANK", "BOUND", "IF", "COALESCE", "SAMETERM", "STRDT", "STRLANG",
+        "REGEX",
+        "STR",
+        "STRLEN",
+        "SUBSTR",
+        "UCASE",
+        "LCASE",
+        "STRSTARTS",
+        "STRENDS",
+        "CONTAINS",
+        "STRBEFORE",
+        "STRAFTER",
+        "CONCAT",
+        "ABS",
+        "CEIL",
+        "FLOOR",
+        "ROUND",
+        "YEAR",
+        "MONTH",
+        "DAY",
+        "HOURS",
+        "MINUTES",
+        "SECONDS",
+        "DATATYPE",
+        "LANG",
+        "ISIRI",
+        "ISURI",
+        "ISLITERAL",
+        "ISNUMERIC",
+        "ISBLANK",
+        "BOUND",
+        "IF",
+        "COALESCE",
+        "SAMETERM",
+        "STRDT",
+        "STRLANG",
     ];
     FUNCTIONS.iter().any(|f| f.eq_ignore_ascii_case(name))
 }

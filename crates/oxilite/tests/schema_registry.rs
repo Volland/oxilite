@@ -64,10 +64,7 @@ fn rdfs() -> QueryOptions {
 #[test]
 fn registers_lists_and_unregisters() {
     let store = store();
-    load(
-        &store,
-        "GRAPH ex:onto { ex:Dog rdfs:subClassOf ex:Animal }",
-    );
+    load(&store, "GRAPH ex:onto { ex:Dog rdfs:subClassOf ex:Animal }");
     let g = graph("http://example.com/onto");
     store
         .register_schema_graph(
@@ -263,7 +260,10 @@ fn shape_index_is_compiled_on_write() {
     assert!(!age.relationship);
 
     let status = index
-        .get(&person, &NamedNode::new("http://example.com/status").unwrap())
+        .get(
+            &person,
+            &NamedNode::new("http://example.com/status").unwrap(),
+        )
         .expect("status shape");
     let mut got: Vec<String> = status.values_in.iter().map(Term::to_string).collect();
     got.sort();
@@ -275,7 +275,10 @@ fn shape_index_is_compiled_on_write() {
     assert_eq!(name.pattern.as_deref(), Some("^[A-Z]"));
 
     let employer = index
-        .get(&person, &NamedNode::new("http://example.com/employer").unwrap())
+        .get(
+            &person,
+            &NamedNode::new("http://example.com/employer").unwrap(),
+        )
         .expect("employer shape");
     assert!(employer.relationship);
 }

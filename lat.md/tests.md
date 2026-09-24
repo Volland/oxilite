@@ -712,6 +712,10 @@ Materializing leaves the asserted quad count unchanged, and clearing the inferen
 
 Materializing a second, smaller program replaces the previous conclusions instead of adding to them.
 
+### Producers keep their own conclusions
+
+OWL 2 RL and a named rule program materialize side by side: each conclusion is attributed to its producer, re-running one keeps the other's, and clearing one producer removes only its own.
+
 ### Non-triple head is rejected
 
 A rule head with no RDF form cannot be materialized: the call fails and nothing is written.
@@ -779,3 +783,141 @@ Measured on an Apple Silicon laptop (M1 milestone):
 | rare-badge-star | 75 µs | 7.2 ms |
 | friends-of-badged | 96 µs | 87 µs |
 | city-age-filter | 478 µs | 7.8 ms |
+
+## Studio server
+
+The language server behind oxilite studio, driven over an in-memory LSP connection against a temporary workspace, see [[architecture#Studio server]].
+
+### Files load on initialize
+
+Initialize loads the RDF files under the root, including subdirectories, and skips hidden directories, `node_modules` and non-RDF files.
+
+### Query joins across files
+
+A SPARQL query joins triples from two different files, because the default graph is the union of the per-file graphs.
+
+### Row limit truncates
+
+A query with `limit` returns at most that many rows and sets `truncated`.
+
+### Syntax error is a diagnostic
+
+A Turtle file with a syntax error loads no triples and publishes one diagnostic starting on the error's line.
+
+### Reload picks up changes
+
+After files are fixed and added on disk, `oxilite/reload` loads them and clears the earlier diagnostic.
+
+### Query errors are request failures
+
+A query that does not parse answers with a `RequestFailed` error instead of crashing the server.
+
+### Scanner roles and prefixes
+
+The lenient scanner assigns subject, predicate and object roles through `;`, `,` and nested blank nodes, resolves prefixes and relative IRIs, skips expressions, and scans unfinished text with UTF-16 columns.
+
+### Index finds definitions
+
+Definitions are subject occurrences across files, references count every occurrence, a subject's statement with a given predicate is located, and removing a file forgets its occurrences.
+
+### Completion follows the triple role
+
+Predicate position offers predicates in store frequency order, after `a` only classes, an empty position prefixes, `a` and keywords, and a variable the other variables.
+
+### Completion declares missing prefixes
+
+A prefix known only from a workspace file completes with an edit adding its declaration to the query.
+
+### Syntax diagnostics as you type
+
+SPARQL errors land on the reported line, updates are accepted, Turtle reports every broken statement, and an unused predicate gets a warning.
+
+### Hover and definition across files
+
+Hovering an IRI in a query shows its label and where it is defined; definition jumps to the subject line in another file, and references find every mention.
+
+### Completion over LSP uses the store
+
+An opened query document gets store-driven completion and its own diagnostics.
+
+### Attached stores and confirmed updates
+
+Attaching a store makes it active; an update fails with the confirmation code until confirmed, Project store updates are ephemeral, and detaching returns to the Project store.
+
+### Explain returns the SQL
+
+`oxilite/explain` returns the compiled SQL for a query on the active connection.
+
+### Manifest assigns graphs and roles
+
+Globs assign files to graphs and roles, the profile is read, an unmatched file is not loaded, and a malformed manifest is rejected.
+
+### Conventions sniff roles
+
+Without a manifest, SHACL shape classes make a shapes file, `owl:Ontology` an ontology, `.dl` rules, other RDF data, and unknown extensions are ignored.
+
+### SHACL results land on the data line
+
+Without reasoning the data conforms; with RDFS an employee without a name violates the person shape, the diagnostic sits on its statement's line with the shape linked, and shapes are not queryable data.
+
+### Manifest graphs and per-graph reload
+
+Manifest graphs load under their IRIs, OWL 2 RL and a rule file materialize side by side, editing one file reloads its graph and reasoning follows, and the resource view names each inference's producer.
+
+### Datalog runs and reports errors
+
+A program's goal returns its solutions, explain describes it, an unsafe rule is a diagnostic on its line, and rule bodies complete the store's predicates.
+
+### Cypher runs over the data's own names
+
+`:Person` and `:knows` resolve to the data's namespace, paths come back as path values, labels and relationship types complete by name, and a syntax error is a diagnostic.
+
+### Import and export round-trip
+
+Importing a file into an attached store needs confirmation and can target a graph; exporting writes N-Quads with that graph, and a dataset refuses a single-graph format.
+
+### Why explains inferences down to asserted lines
+
+A type inferred through two subclass steps is explained by the subclass template with an inferred premise; a rule conclusion names its rule, producer and located premises.
+
+Asserted triples are leaves, and triples that do not hold are reported absent.
+
+### Manifest tests run and snapshot
+
+Tests are listed with their lines; a query test fails without an expected file until a snapshot is written, and a stale expectation reports what is missing.
+
+A fixture violates exactly the named shape, the project conforms, and entailments hold.
+
+### Check reports everything and fails
+
+`oxilite check` fails on failing tests, renders them for a terminal, and reports a SHACL violation with the data file and line.
+
+### D1 over HTTP with billing
+
+Against a stand-in for D1's `/raw` endpoint: attaching makes D1 active, and an update asks first with its billed-row estimate.
+
+64-bit ids survive the JSON round trip, and each payload and the connection report their cost.
+
+### MCP tools answer agents
+
+The MCP server initializes, lists its tools, answers a query as a table, summarizes the schema with prefixes, validates, explains a rule conclusion, and reports a bad query as a tool error.
+
+### ShEx results are diagnostics
+
+A ShEx schema and its shape map validate the data: the nonconforming node is a result located on its statement, with the shape located in the `.shex` file.
+
+### Full-text search with the manifest index
+
+With `text_index = true`, `oxl:textMatch` finds the literal and the plan uses the full-text index.
+
+### Ontology diagram data
+
+The ontology request returns declared and used classes, the subclass link, an object property with its range, and a datatype property flagged as such.
+
+### Datalog debugger counts per rule
+
+Each rule reports its body matches and its head's facts, and a rule over a predicate nobody uses matches nothing, at its line.
+
+### Explorer shows the class hierarchy
+
+The explorer lists its folders, roots the class tree at the superclass with its inferred instances counted, lists subclasses with asserted counts, and gives files their roles.

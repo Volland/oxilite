@@ -34,6 +34,9 @@ fn int_hi() -> i64 {
 /// iteration may be.
 pub const MAX_FIXPOINT_ARITY: usize = 6;
 
+/// The default producer name of materialized rule conclusions.
+pub const DATALOG_PRODUCER: &str = "datalog";
+
 /// Options for compiling a program. The defaults match SPARQL's: the default graph only, and
 /// asserted triples only.
 #[derive(Debug, Clone)]
@@ -45,6 +48,9 @@ pub struct Options {
     /// How many rounds a component evaluated by iteration may take before it is called
     /// divergent. Each round is one request, so this also bounds the round trips.
     pub max_iterations: usize,
+    /// The name materialized conclusions are attributed to: materializing replaces only this
+    /// producer's earlier conclusions (default `datalog`).
+    pub producer: String,
 }
 
 impl Default for Options {
@@ -53,6 +59,7 @@ impl Default for Options {
             union_default_graph: false,
             include_inferred: false,
             max_iterations: 100,
+            producer: DATALOG_PRODUCER.to_owned(),
         }
     }
 }
@@ -184,8 +191,8 @@ pub fn new_run() -> i64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos() as u64)
         .unwrap_or(0);
-    ((pid.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ clock.rotate_left(17) ^ n.wrapping_mul(0x51))
-        >> 1) as i64
+    ((pid.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ clock.rotate_left(17) ^ n.wrapping_mul(0x51)) >> 1)
+        as i64
 }
 
 /// `WITH RECURSIVE …` for the members a statement needs, or nothing when it needs none.
@@ -279,8 +286,9 @@ impl<'a> Compiler<'a> {
             }
             Shape::Linear => {
                 let pred = &stratum.preds[0];
-                self.notes
-                    .push(format!("{pred}: linear recursion, one WITH RECURSIVE member"));
+                self.notes.push(format!(
+                    "{pred}: linear recursion, one WITH RECURSIVE member"
+                ));
                 let body = self.union_of_rules(pred, None)?;
                 members.push(self.member(pred, &body));
                 Ok(())
@@ -374,7 +382,11 @@ impl<'a> Compiler<'a> {
                 "mutual recursion between {:?} needs a recursive CTE with several recursive \
                  terms, which this backend's SQLite does not support (3.34.0 or later is \
                  required)",
-                stratum.preds.iter().map(Pred::to_string).collect::<Vec<_>>()
+                stratum
+                    .preds
+                    .iter()
+                    .map(Pred::to_string)
+                    .collect::<Vec<_>>()
             )));
         }
         let scc = format!("scc{index}");
@@ -386,7 +398,11 @@ impl<'a> Compiler<'a> {
             .unwrap_or(0);
         self.notes.push(format!(
             "{:?}: mutual recursion, one tagged WITH RECURSIVE member",
-            stratum.preds.iter().map(Pred::to_string).collect::<Vec<_>>()
+            stratum
+                .preds
+                .iter()
+                .map(Pred::to_string)
+                .collect::<Vec<_>>()
         ));
 
         let mut arms: Vec<String> = Vec::new();
@@ -697,13 +713,7 @@ impl<'a> Compiler<'a> {
     /// Aggregates produce term ids, so they are restricted to what the encoding can represent
     /// without a `terms` row: counts and sums become inline integers, and `MIN`/`MAX`/`SAMPLE`
     /// pick an existing id under the store's total order.
-    fn aggregate(
-        &mut self,
-        func: AggFn,
-        var: &str,
-        frame: &Frame,
-        head: &Head,
-    ) -> Result<String> {
+    fn aggregate(&mut self, func: AggFn, var: &str, frame: &Frame, head: &Head) -> Result<String> {
         let zero = int_zero();
         if var == "*" {
             return Ok(match func {
@@ -747,16 +757,18 @@ impl<'a> Compiler<'a> {
 
     fn expr(&mut self, e: &Expr, frame: &Frame) -> Result<Val> {
         Ok(match e {
-            Expr::Var(v) => Val::Id(
-                frame
-                    .binding
-                    .get(v)
-                    .cloned()
-                    .ok_or_else(|| DatalogError::Unsafe {
-                        predicate: "constraint".to_owned(),
-                        variable: format!("?{v}"),
-                    })?,
-            ),
+            Expr::Var(v) => {
+                Val::Id(
+                    frame
+                        .binding
+                        .get(v)
+                        .cloned()
+                        .ok_or_else(|| DatalogError::Unsafe {
+                            predicate: "constraint".to_owned(),
+                            variable: format!("?{v}"),
+                        })?,
+                )
+            }
             Expr::Const(t) => match numeric_literal(t) {
                 // A number in the program text is a value, so it compares numerically with
                 // whatever the store holds, whatever datatype that value was written with.
@@ -1140,4 +1152,3 @@ fn split_projection(s: &str) -> (&str, &str) {
     }
     (s, "")
 }
-

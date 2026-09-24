@@ -90,6 +90,12 @@ pub fn create_schema(options: &StoreOptions) -> Request {
             PRIMARY KEY (s, p, o, g)) WITHOUT ROWID, STRICT",
         "CREATE INDEX IF NOT EXISTS quads_inf_posg ON quads_inf(p, o, s, g)",
         "CREATE INDEX IF NOT EXISTS quads_inf_ospg ON quads_inf(o, s, p, g)",
+        // Which producer (OWL 2 RL, a named rule set) derived each inference, so one producer
+        // can be recomputed without discarding the others' conclusions (see `reason`).
+        "CREATE TABLE IF NOT EXISTS quads_inf_src (\
+            src INTEGER NOT NULL, s INTEGER NOT NULL, p INTEGER NOT NULL, o INTEGER NOT NULL, g INTEGER NOT NULL DEFAULT 0, \
+            PRIMARY KEY (s, p, o, g, src)) WITHOUT ROWID, STRICT",
+        "CREATE TABLE IF NOT EXISTS inf_producers (id INTEGER PRIMARY KEY, name TEXT NOT NULL) STRICT",
         // Schema registry: which named graphs hold an ontology, SHACL shapes or a ShEx schema
         // (see `registry`). The RDF itself stays in `quads`; this only labels a graph.
         "CREATE TABLE IF NOT EXISTS schema_graphs (\
