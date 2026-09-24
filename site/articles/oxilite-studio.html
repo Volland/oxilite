@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>oxilite studio – oxilite</title>
+  <meta name="description" content="oxilite studio is a VS Code extension for knowledge graphs: completion from your own data, reasoning that explains itself, SHACL violations on the line that caused them, tests in CI, Cloudflare D1 and MCP tools for agents.">
+  <meta property="og:title" content="oxilite studio: a workbench for knowledge graphs">
+  <meta property="og:description" content="Install the VS Code extension and tour it: completion from your data, why? for every inference, live SHACL, tests in CI, D1 and MCP.">
+  <meta property="og:image" content="../assets/studio.png">
+  <meta name="theme-color" content="#0a0a0a">
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg">
+  <link rel="icon" type="image/png" href="../assets/logo.png">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt=""><span>oxi<b>lite</b></span></a>
+      <nav class="nav" aria-label="Main">
+        <a href="../">Home</a>
+        <a href="./">Articles</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="article">
+    <article class="wrap">
+      <span class="kicker">VS Code · Tooling · Reasoning · SHACL</span>
+      <h1>oxilite studio: a workbench for knowledge graphs</h1>
+      <p class="standfirst">Knowledge graphs are usually edited in one tool, queried in a second, validated in a third and reasoned over by a fourth, and none of them knows where a triple came from. oxilite studio puts the whole loop in the editor you already use: write Turtle, and the store, the reasoner and the validator follow you as you type.</p>
+      <p class="meta">A guide · Version 0.1 · The behaviour on this page is asserted by the studio server's tests (<a href="https://github.com/Volland/oxilite/tree/main/crates/oxilite-cli/src/studio"><code>crates/oxilite-cli/src/studio</code></a>) · Extension source: <a href="https://github.com/Volland/oxilite-studio">Volland/oxilite-studio</a></p>
+
+      <h2><span class="step">1</span>Install</h2>
+      <p>oxilite studio is a VS Code extension. Search for <strong>oxilite studio</strong> in the Extensions view, or:</p>
+<pre><code>code --install-extension pavlyshyn.oxilite-studio</code></pre>
+      <p>The engine is not JavaScript: it is <code>oxilite studio-server</code>, a Rust language server built from the same crates as oxilite itself, and the extension bundles it for your platform. Version 0.1 ships builds for <strong>macOS</strong> (Apple silicon and Intel). On Linux and Windows, build the server yourself and tell the extension where it is:</p>
+<pre><code>git clone https://github.com/Volland/oxilite &amp;&amp; cd oxilite
+cargo build --release -p oxilite-cli
+<span class="c"># VS Code setting:  "oxilite.server.path": "/path/to/oxilite/target/release/oxilite"</span></code></pre>
+      <p>The same binary gives you <code>oxilite check</code> for CI and <code>oxilite mcp</code> for agents, both covered below.</p>
+
+      <h2><span class="step">2</span>Open a folder</h2>
+      <p>Open any folder with RDF in it. The studio loads every <code>.ttl</code>, <code>.nt</code>, <code>.nq</code>, <code>.trig</code>, <code>.n3</code>, <code>.rdf</code> and <code>.owl</code> file into a <strong>Project store</strong>, a scratch SQLite database in <code>.oxilite/studio.sqlite</code> that it keeps out of git for you. Each file gets its own named graph, and queries see their union.</p>
+      <p>Nothing needs configuring at first. A file with SHACL shapes in it is treated as shapes, not data. A file declaring an <code>owl:Ontology</code> is treated as an ontology, and a <code>.dl</code> file as Datalog rules. Save a file and only its graph is reloaded; a syntax error loads nothing from that file and appears in the Problems panel at the parser's position.</p>
+      <p>The oxilite sidebar shows what was loaded. <strong>Connections</strong> lists the Project store and any stores you attach. The <strong>Store Explorer</strong> has the graphs, the class hierarchy with instance counts, properties by use, files with their roles, and prefixes. <strong>Query History</strong> keeps what you ran.</p>
+
+      <h2><span class="step">3</span>Query with your own vocabulary</h2>
+      <p>Open a <code>.rq</code> file and start typing. Completion knows where you are in a triple: in predicate position it offers the store's predicates in the order the data uses them, after <code>a</code> only classes, and a prefix you have not declared yet completes with the <code>PREFIX</code> line added to the top of the query, using the prefix your Turtle files already use.</p>
+<pre><code>PREFIX ex: &lt;http://ex.org/&gt;
+SELECT * { ?x ex:<span class="c">▌   → ex:name  (10 uses)   ex:knows  (3 uses)</span></code></pre>
+      <p>Hover an IRI to see its label, comment, types and where it is defined; <em>Go to Definition</em> jumps to the Turtle line where it is described, even from a query file. A predicate the store never uses gets a warning, because it is almost always a typo.</p>
+      <p><kbd>Cmd/Ctrl+Enter</kbd> runs the file or the selection; results appear beside the editor in a table that renders only the rows on screen, and CONSTRUCT results can switch to a graph view. <kbd>Cmd/Ctrl+Shift+E</kbd> shows the SQL the query compiles to and the planner's join order. The same keys run a Datalog program's goal in a <code>.dl</code> file and a Cypher statement in a <code>.cypher</code> file. Cypher names resolve against your data's own namespace, so <code>MATCH (a:Person)-[:knows]-&gt;(b)</code> means <code>ex:Person</code> and <code>ex:knows</code>.</p>
+
+      <h2><span class="step">4</span>Reasoning that explains itself</h2>
+      <p>Pick a reasoning profile from the status bar: <code>rdfs</code> and <code>owlql</code> rewrite queries, and <code>owl2rl</code> materializes the closure. Your rule files are materialized too. Each producer, OWL 2 RL or a rule file, keeps its own conclusions, so editing one rule file does not wipe the others: oxilite now attributes every inferred triple to the producer that derived it.</p>
+      <p>Take an ontology, some data and one rule:</p>
+<pre><code><span class="c"># onto.ttl</span>
+@prefix ex: &lt;http://ex.org/&gt; .
+@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+ex:Manager  rdfs:subClassOf ex:Employee .
+ex:Employee rdfs:subClassOf ex:Person .
+
+<span class="c"># data.ttl</span>
+@prefix ex: &lt;http://ex.org/&gt; .
+ex:ann a ex:Manager .
+ex:ann ex:manages ex:bo .
+
+<span class="c"># rules/boss.dl</span>
+ex:boss(?y, ?x) :- ex:manages(?x, ?y), ex:Person(?x).</code></pre>
+      <p>Open <code>ex:bo</code> in the resource view (right-click an IRI, <em>Open Resource View</em>) and the statement <code>ex:bo ex:boss ex:ann</code> carries a badge: <em>inferred: rules/boss.dl</em>. Click <strong>why?</strong>:</p>
+<pre><code>inferred  ex:bo ex:boss ex:ann
+  by rules/boss.dl: &lt;…boss&gt;(?y, ?x) :- &lt;…manages&gt;(?x, ?y), &lt;…Person&gt;(?x).
+  ├─ asserted  ex:ann ex:manages ex:bo          data.ttl:3
+  └─ inferred  ex:ann rdf:type ex:Person
+       by owl2rl: cax-sco (subclass)
+       └─ …  down to  ex:ann a ex:Manager  (data.ttl:2)  and the subclass axioms in onto.ttl</code></pre>
+      <p>A rule's conclusion is explained by running that rule's body again in the Datalog engine with its head bound to the triple. An OWL or RDFS conclusion is explained by rule templates run as SPARQL. Either way the tree ends at statements you wrote, and each one opens at its line.</p>
+
+      <h2><span class="step">5</span>SHACL on the line that broke it</h2>
+      <p>Shapes validate in the background after every change, and each result is a diagnostic <em>on the data line</em>, linked to the shape that failed. With a reasoning profile on, validation sees inferred triples, which is what SHACL means but most tools skip:</p>
+<pre><code><span class="c"># shapes.ttl</span>
+ex:PersonShape a sh:NodeShape ;
+  sh:targetClass ex:Person ;
+  sh:property [ sh:path ex:name ; sh:minCount 1 ] .
+
+<span class="c"># staff.ttl</span>
+ex:carol a ex:Employee ; ex:name "Carol" .
+ex:dan a ex:Employee .                     <span class="c">⚠ sh:minCount violated on ex:name</span></code></pre>
+      <p>Without reasoning nobody is an <code>ex:Person</code>, so the data conforms. Switch to <code>rdfs</code> and employees become persons, so <code>ex:dan</code> gets a squiggle on line 3 of <code>staff.ttl</code>. The shapes file itself is never loaded as data, so your queries do not see it. ShEx works the same way: pair a <code>.shex</code> schema with a shape map of the same name. The SHACL report view groups results by shape or by focus node.</p>
+
+      <h2><span class="step">6</span>A manifest, tests, and CI</h2>
+      <p>When conventions are not enough, an <code>oxilite.toml</code> at the root takes over completely. It names graphs, roles, the reasoning profile, and tests:</p>
+<pre><code>reasoning = <span class="s">"owl2rl"</span>
+
+[[graph]]
+iri   = <span class="s">"https://ex.org/g/people"</span>
+files = [<span class="s">"data/*.ttl"</span>]
+
+[shapes]
+files = [<span class="s">"shapes/*.ttl"</span>]
+
+[rules]
+files = [<span class="s">"rules/*.dl"</span>]
+
+[[test]]
+name   = <span class="s">"people have names"</span>
+query  = <span class="s">"tests/names.rq"</span>
+expect = <span class="s">"tests/names.srj"</span>          <span class="c"># SPARQL results; "Update Snapshot" writes it</span>
+
+[[test]]
+name = <span class="s">"bad person rejected"</span>
+data = <span class="s">"tests/bad.ttl"</span>                 <span class="c"># a fixture, validated with the project's ontologies</span>
+expect_violations = [<span class="s">"ex:PersonShape"</span>]
+
+[[test]]
+name        = <span class="s">"ancestry is transitive"</span>
+entails     = <span class="s">"tests/yes.ttl"</span>
+not_entails = <span class="s">"tests/no.ttl"</span></code></pre>
+      <p>The tests appear in VS Code's Test Explorer at their line in the manifest. A failing query test shows expected and actual results as a diff, and <em>Update Snapshot</em> rewrites the expected file. The same checks run without an editor:</p>
+<pre><code>$ oxilite check
+oxilite check: 3 files, 6 triples, reasoning owl2rl
+pass    people have names: results match
+pass    bad person rejected: http://ex.org/PersonShape (1 results)
+pass    ancestry is transitive: entailments hold
+ok</code></pre>
+      <p>When a result changes, the failing test says what is missing and what is unexpected, row by row, and the run ends with <code>FAILED</code>.</p>
+      <p>It exits with status 1 on any load error, rule error, SHACL violation or failing test, and <code>--json</code> prints the report for CI annotations. It runs exactly the code the editor runs, so CI and your editor agree.</p>
+
+      <h2><span class="step">7</span>Real stores: SQLite and Cloudflare D1</h2>
+      <p>The Project store is derived from your files and is thrown away on reload. To work on a real database, attach it from the Connections view:</p>
+      <ul>
+        <li><strong>A SQLite file.</strong> Any oxilite store, read-only or read-write.</li>
+        <li><strong>A local D1 database.</strong> The file <code>wrangler dev</code> keeps under <code>.wrangler/state</code>.</li>
+        <li><strong>A remote D1 database.</strong> Over Cloudflare's HTTP API, with the token in VS Code's secret storage. It opens read-only unless you ask otherwise.</li>
+      </ul>
+      <p>Every query, completion and explain works on an attached store. Writes are guarded: an update, a writing Cypher statement or an import asks first, and on D1 the question says what it will cost (<em>about 10 billed rows written (2 quads)</em> for a two-triple <code>INSERT DATA</code>), since D1 bills every written index entry. Each result on D1 reports the requests it took and the rows it read and wrote. OWL 2 RL materialization on D1 is a separate, confirmed command, because it runs over several requests and is not atomic across them.</p>
+
+      <h2><span class="step">8</span>Notebooks, diagrams and a rules debugger</h2>
+      <ul>
+        <li><strong>Notebooks</strong> (<code>.oxnb</code>) mix Markdown with SPARQL, Datalog and Cypher cells. Their outputs are saved in the file and drawn with the same table and graph views.</li>
+        <li><strong>The ontology diagram</strong> draws classes with their datatype properties and instance counts, subclass links, and object properties from domain to range.</li>
+        <li><strong>Debug Rules</strong> on a <code>.dl</code> file lists each rule with how many ways its body matches and how many facts its head holds. A rule that matches nothing, or explodes, stands out next to its line.</li>
+        <li><strong>Full-text search</strong> runs <code>oxl:textMatch</code> over string literals. Set <code>text_index = true</code> in the manifest and it uses the FTS5 index.</li>
+      </ul>
+
+      <h2><span class="step">9</span>Give your agent the graph</h2>
+      <p><code>oxilite mcp</code> serves the studio's operations as Model Context Protocol tools: <code>sparql_query</code>, <code>datalog_query</code>, <code>schema</code>, <code>validate</code>, <code>why</code> and <code>reload</code>. It loads the project the way the studio does. The extension registers it for your workspace, and <em>Copy MCP Server Config</em> gives the same entry for other agents:</p>
+<pre><code>{ <span class="s">"mcpServers"</span>: { <span class="s">"oxilite"</span>: { <span class="s">"command"</span>: <span class="s">"oxilite"</span>, <span class="s">"args"</span>: [<span class="s">"mcp"</span>, <span class="s">"--root"</span>, <span class="s">"/path/to/project"</span>] } } }</code></pre>
+      <p>Answers are compact text an agent reads well: tab-separated tables, N-Triples, validation results with file and line, and proof trees. An agent that calls <code>schema</code> first writes queries in your vocabulary instead of guessing it.</p>
+
+      <h2>How it is built</h2>
+      <p>The extension is a thin TypeScript client. Everything else runs in <code>oxilite studio-server</code>, one Rust process speaking the Language Server Protocol, for three reasons:</p>
+      <ul>
+        <li><strong>Isolation.</strong> A long materialization or a crash cannot take the editor down, and reads and validation run on worker threads.</li>
+        <li><strong>One engine.</strong> SHACL and ShEx come from <a href="https://rudof-project.github.io/">rudof</a>, OWL 2 RL, Datalog and Cypher from oxilite, all linked directly.</li>
+        <li><strong>One code path.</strong> <code>oxilite check</code> and <code>oxilite mcp</code> reuse the same code, so the editor, CI and agents agree.</li>
+      </ul>
+      <p>A lenient scanner tokenizes half-typed text and guesses each term's role in its triple, which drives completion. A source-position index remembers where every IRI occurs, which drives go-to-definition and puts SHACL results on the right line. Views render plain JSON payloads, which is why a notebook can save its outputs.</p>
+
+      <h2>Limits to know</h2>
+      <ul>
+        <li><strong>macOS builds only in 0.1.</strong> Linux and Windows need the server built from source for now, as above.</li>
+        <li><strong>Results are capped, not paged.</strong> The table shows the first 10 000 rows (the <code>oxilite.query.rowLimit</code> setting).</li>
+        <li><strong>Justifications use rule templates for OWL 2 RL.</strong> Class expressions and property chains are reported as inferred without their premises.</li>
+        <li><strong>Materialization runs in the foreground.</strong> Validation and queries are backgrounded and cancelled by newer changes, but re-materializing a large OWL 2 RL closure blocks the server while it runs.</li>
+        <li><strong>D1 is tested against a stand-in.</strong> The D1 backend's tests use a local double of the <code>/raw</code> endpoint, not Cloudflare itself.</li>
+      </ul>
+
+      <div class="callout">
+        <p><strong>The takeaway.</strong> A knowledge graph deserves the loop code gets: completion that knows your names, errors on the line that caused them, tests in CI. oxilite studio gives RDF that loop, and adds what only a knowledge graph needs: every inference can tell you why it is there. <a href="https://marketplace.visualstudio.com/items?itemName=pavlyshyn.oxilite-studio">Install it from the Marketplace</a>.</p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt="" width="28" height="28"><span>oxilite</span></a>
+      <span>MIT or Apache-2.0</span>
+      <nav aria-label="Rechtliches">
+        <a href="../impressum.html">Impressum</a>
+        <a href="../datenschutz.html">Datenschutz</a>
+        <a href="../agb.html">AGB</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-labelledby="t">
+  <title id="t">oxilite studio</title>
+  <!-- Database tile, as in the oxilite logo -->
+  <rect x="8" y="8" width="216" height="216" rx="44" fill="#0A0A0A"/>
+
+  <!-- The oxilite quill: an RDF graph of nodes and edges -->
+  <g transform="translate(-18 -4)" stroke-linecap="round" stroke-linejoin="round">
+    <g fill="none" stroke="#FFFFFF" stroke-width="5">
+      <path d="M64 192 L88 116 L118 74 L162 54 L204 50 L202 94 L182 138 L140 168 Z" stroke-opacity="0.35"/>
+      <path d="M52 204 L64 192 L100 156 L136 120 L172 84 L204 50"/>
+      <path d="M100 156 L88 116 M136 120 L118 74 M172 84 L162 54 M100 156 L140 168 M136 120 L182 138 M172 84 L202 94"/>
+    </g>
+    <!-- Studio: one inferred edge, dashed, as the graph view draws inferences -->
+    <path d="M88 116 L140 168" fill="none" stroke="#FF6B1A" stroke-width="4" stroke-dasharray="7 7"/>
+    <g fill="#FFFFFF">
+      <circle cx="64" cy="192" r="7"/>
+      <circle cx="100" cy="156" r="8"/>
+      <circle cx="136" cy="120" r="8"/>
+      <circle cx="172" cy="84" r="8"/>
+    </g>
+    <g fill="#FF6B1A">
+      <circle cx="88" cy="116" r="10"/>
+      <circle cx="118" cy="74" r="10"/>
+      <circle cx="162" cy="54" r="9"/>
+      <circle cx="140" cy="168" r="10"/>
+      <circle cx="182" cy="138" r="10"/>
+      <circle cx="202" cy="94" r="9"/>
+      <circle cx="204" cy="50" r="12"/>
+    </g>
+  </g>
+
+  <!-- Studio badge: an editor window with a run prompt, breaking out of the corner -->
+  <rect x="152" y="160" width="96" height="84" rx="18" fill="#FFFFFF"/>
+  <rect x="159" y="167" width="82" height="70" rx="12" fill="#FF6B1A"/>
+  <g fill="#FFFFFF">
+    <circle cx="172" cy="180" r="3.5"/>
+    <circle cx="183" cy="180" r="3.5"/>
+    <circle cx="194" cy="180" r="3.5"/>
+  </g>
+  <g fill="none" stroke="#FFFFFF" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M172 199 L184 209 L172 219"/>
+    <path d="M194 222 L224 222"/>
+  </g>
+</svg>

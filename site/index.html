@@ -24,6 +24,7 @@
         <a href="#d1" class="hide-sm">Cloudflare D1</a>
         <a href="#datalog" class="hide-sm">Datalog</a>
         <a href="#credentials" class="hide-sm">Credentials</a>
+        <a href="#studio" class="hide-sm">Studio</a>
         <a href="articles/">Articles</a>
         <a href="https://github.com/Volland/oxilite">GitHub</a>
       </nav>
@@ -221,11 +222,50 @@ store.datalog(<span class="s">r#"
       </div>
     </section>
 
+    <section id="studio" class="studio">
+      <div class="wrap">
+        <div class="studio-head">
+          <div>
+            <span class="eyebrow">VS Code · Language server · MCP</span>
+            <h2>oxilite studio<span class="dot">.</span></h2>
+            <p class="sub">A development studio for knowledge graphs, in VS Code. Open a folder of Turtle, ontologies, SHACL shapes and Datalog rules, and oxilite loads it into a store as you work: queries complete from your own data, inferences explain themselves, and shape violations land on the line that caused them.</p>
+            <div class="actions">
+              <a class="btn btn-primary" href="https://marketplace.visualstudio.com/items?itemName=pavlyshyn.oxilite-studio">Install from the Marketplace</a>
+              <a class="btn btn-ghost" href="articles/oxilite-studio.html">Read the tour</a>
+            </div>
+          </div>
+          <img class="studio-logo" src="assets/studio.svg" alt="oxilite studio logo: the oxilite quill graph with a dashed inferred edge and an editor window badge">
+        </div>
+        <div class="grid">
+          <div class="card"><h3>Completion from your data</h3><p>SPARQL, Turtle, Datalog and Cypher. Predicates by how often the store uses them, classes after <code>a</code>, and a missing <code>PREFIX</code> added for you.</p></div>
+          <div class="card"><h3>Why is this inferred?</h3><p>RDFS, OWL QL or OWL 2 RL, plus your rule files. Every inferred statement names its producer, and <em>why?</em> shows the proof down to the lines you wrote.</p></div>
+          <div class="card"><h3>SHACL as you type</h3><p>Shapes and ShEx validate in the background against asserted and inferred triples. Violations appear in the Problems panel on the data line, linked to the shape.</p></div>
+          <div class="card"><h3>Tests and CI</h3><p>Declare query, SHACL and entailment tests in <code>oxilite.toml</code>. Run them in Test Explorer, and in CI with <code>oxilite check</code>.</p></div>
+          <div class="card"><h3>SQLite and D1</h3><p>Attach a store file, a <code>wrangler dev</code> database or a remote D1 database, read-only by default, with the rows each request bills.</p></div>
+          <div class="card"><h3>For agents too</h3><p><code>oxilite mcp</code> serves query, schema, validate and why as MCP tools; the extension registers it for your workspace.</p></div>
+        </div>
+<pre style="margin-top:28px"><code><span class="c"># In VS Code: Extensions → search "oxilite studio", or</span>
+code --install-extension pavlyshyn.oxilite-studio
+
+<span class="c"># Open a folder with .ttl, .rq, .dl or oxilite.toml files. Then:</span>
+<span class="c">#   Cmd/Ctrl+Enter        run the query, rules or Cypher in the editor</span>
+<span class="c">#   Cmd/Ctrl+Shift+E      show the SQL it compiles to</span>
+<span class="c">#   the oxilite sidebar   connections, Store Explorer, query history</span></code></pre>
+        <p style="margin-top:20px">Version 0.1 ships for macOS (Apple silicon and Intel), with the server bundled. On Linux and Windows, build the server with <code>cargo build --release -p oxilite-cli</code> and point the <code>oxilite.server.path</code> setting at it. <a href="articles/oxilite-studio.html">Take the tour →</a></p>
+      </div>
+    </section>
+
     <section id="articles" class="band-soft">
       <div class="wrap">
         <h2>Articles<span class="dot">.</span></h2>
         <p class="sub">Guides and design notes: what you can build with oxilite and how it works inside. <a href="articles/">All articles →</a></p>
         <div class="articles">
+          <a class="article-card" href="articles/oxilite-studio.html">
+            <span class="kicker">VS Code · Tooling · New</span>
+            <h3>oxilite studio: a workbench for knowledge graphs</h3>
+            <p>Install the VS Code extension and tour it: completion from your own data, reasoning that explains itself, SHACL on the line that broke it, tests in CI, D1 and MCP.</p>
+            <span class="more">Take the tour →</span>
+          </a>
           <a class="article-card" href="articles/introducing-oxilite.html">
             <span class="kicker">Overview · RDF · SPARQL · SQLite</span>
             <h3>Introducing oxilite: a knowledge graph in plain SQLite</h3>
