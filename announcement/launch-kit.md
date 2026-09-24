@@ -205,28 +205,46 @@ Do not announce until every line is ticked.
 
 ## LinkedIn
 
-> **A knowledge graph that runs where your code runs.**
+Angle: the edge constraint, with Cloudflare as the concrete case. The first two lines are what shows before "see more", so they carry the hook on their own.
+
+**Mentions.** Type `@Cloudflare` in the LinkedIn composer and pick the company page from the dropdown — pasted plain text does not link. Do it on the first "Cloudflare D1" only; repeated mentions of one page read as spam.
+
+**Hashtags.** Six is the working set below. Swap `#VerifiableCredentials` for `#DurableObjects` or `#WebAssembly` depending on which crowd you want. Do not go past eight — reach drops.
+
+> Most graph databases assume they own the machine.
 >
-> I have spent a long time on RDF systems, and the same wall kept coming up: the good engines need a native storage engine and a local filesystem, and a growing share of software no longer has either. Serverless edge runtimes, mobile apps, sandboxed hosts that ship their own SQLite with extensions disabled.
+> Cloudflare D1 assumes the opposite: a managed SQLite you send SQL to over the network, billed per row, with no extensions, no native libraries and no interactive transactions. Every RDF engine I wanted to use was disqualified on the first line.
 >
-> So I built oxilite. It keeps Oxigraph's data model, SPARQL semantics and Rust API, and implements them with nothing but portable SQL on a standard SQLite. The same graph runs on a laptop, inside an application file, and on Cloudflare D1 at the edge.
+> So I built oxilite — an Oxigraph-compatible RDF database and SPARQL 1.1 engine whose only storage engine is plain SQLite. Same data model, same semantics, same Rust API. It runs on a laptop, inside your application's existing database file, and at the edge.
 >
-> What that took, in short:
+> Designing for D1 specifically is what shaped the architecture:
 >
-> • Terms are 64-bit hashes computed in Rust, so writes never read anything back and query constants are compile-time integers.
-> • A whole SPARQL query compiles into a single SELECT — the difference between one network round-trip and one per triple pattern when your database is remote.
-> • Every write is one atomic batch, because on D1 a batch is the only atomic unit there is.
-> • Reasoning happens by rewriting queries against a small schema closure instead of materializing inferences, so entailment costs no writes and answers are never stale.
+> → batch() is the only atomic unit D1 offers, so every write is exactly one batch — including DELETE/INSERT … WHERE, which stages its own read results inside that same batch to preserve SPARQL's evaluate-then-apply semantics.
 >
-> On top of that: SHACL and ShEx validation through rudof's engines unchanged, openCypher over the same data, and a JSON-LD layer that stores a Verifiable Credential exactly as it was issued while making its claims queryable as a named graph — the two things a wallet genuinely needs.
+> → Round trips dominate, so a whole query (joins, OPTIONAL, UNION, aggregates, property paths) compiles into a single SELECT. One or two round trips, not one per triple pattern per row.
 >
-> Compatibility with Oxigraph is tested rather than asserted: Oxigraph's own W3C test suites and API tests run against oxilite, and every deliberate divergence is documented.
+> → D1 bills every row written, index entries included. Three covering indexes instead of nine: 4.81 rows written per triple, 3.81 without the graph index.
 >
-> Full write-up, including where it is slower than Oxigraph and what it deliberately does not do: https://oxilitedb.com/articles/introducing-oxilite
+> → Term ids are 64-bit hashes computed in Rust, so a write never reads anything back.
 >
-> MIT or Apache-2.0. github.com/Volland/oxilite
+> → Reasoning happens by rewriting queries against a small schema closure rather than materializing inferences. RDFS and OWL entailment that costs zero writes and is never stale.
 >
-> #RDF #SPARQL #SQLite #KnowledgeGraph #VerifiableCredentials #Rust #Cloudflare
+> Use it from a Rust Worker, or from TypeScript with the core compiled to WebAssembly — no Rust toolchain in your Workers project. The same package runs on a Durable Object's SQLite through a small ctx.storage.sql adapter, which gives every agent or user a private knowledge graph.
+>
+> And because the W3C contexts are bundled, a Worker can store a Verifiable Credential — the exact issued bytes, plus its claims as a queryable named graph — without touching the network. Which is the whole point of holding credentials at the edge.
+>
+> Full write-up, including where it is slower than Oxigraph and what it deliberately does not do:
+> https://oxilitedb.com/articles/introducing-oxilite
+>
+> MIT or Apache-2.0 · github.com/Volland/oxilite
+>
+> #Cloudflare #EdgeComputing #Serverless #KnowledgeGraph #RDF #VerifiableCredentials
+
+**First comment** (post it yourself right after; LinkedIn suppresses reach on posts with outbound links, and a comment recovers some of it):
+
+> Numbers, for anyone who wants them before clicking: on BSBM against Oxigraph 0.5.11 on RocksDB, Oxigraph loads 16× faster and its file is half the size, and it wins the lookup-heavy mix. oxilite wins the aggregate-heavy business-intelligence mix, because those queries become one SQL statement SQLite executes well. The trade is load speed and disk for running anywhere SQLite runs.
+>
+> On D1 the limits are in the compiler's capability record rather than in your way: SQL under 90 KB per statement, at most 50 statements per batch, at most 5 terms per compound SELECT, ids selected as TEXT because JavaScript numbers lose precision above 2^53. Queries that cannot compile fully report "unsupported" instead of silently getting slow — explain() tells you which, in development.
 
 ---
 
