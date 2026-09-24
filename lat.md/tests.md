@@ -196,6 +196,46 @@ A reasoned BGP compiles fully to one SQL statement that reads `tbox_closure`.
 
 On five sample ontologies (RDFS, property axioms, equality, class expressions with lists and chains, schema cycles) the SQL rules and the `reasonable` crate produce exactly the same closure.
 
+## Schema registry
+
+Ontology and shapes graphs declared as such, the scoping that follows, and the compiled shape index, see [[architecture#Schema registry]].
+
+### Registration round-trip
+
+A graph is registered with role, IRI, version and imports, listed back with its graph name resolved, and unregistered; registering and unregistering leave its triples untouched and queryable.
+
+### Reasoning scoped to registered ontologies
+
+With nothing registered every graph contributes axioms; once two ontology graphs are registered, deactivating one withdraws exactly its entailments and reactivating restores them, with no reload of data.
+
+### Axioms outside registered ontologies
+
+A subClassOf axiom in a graph that is not registered as an ontology entails nothing once another ontology graph has been registered.
+
+### Hiding schema graphs
+
+`include_schema_graphs: false` removes the registered graphs' triples from pattern matching and changes nothing while no graph is registered; hiding applies to an inactive registration too.
+
+### Dropping a schema graph
+
+Dropping a registered graph removes its registration and its quads in one request, leaves the rest of the dataset intact, and withdraws its entailments.
+
+### Compiled shape index
+
+Shapes written into the store are compiled immediately, with no `optimize()` in between: datatype, `sh:minCount`, `sh:maxCount`, `sh:pattern`, `sh:in` values and relationship-valued shapes all come back from the index.
+
+### Shape index follows deletions
+
+Registering a shapes graph narrows the index to it, and deleting the shape triples empties the index.
+
+### Shapes merged across shapes
+
+Two shapes targeting the same class and path, one declaring a cardinality and the other a datatype, merge into one entry carrying both.
+
+### Registry survives reopening
+
+A store reopened from disk still lists its registrations and still reasons under them.
+
 ## Text search
 
 FTS5 full-text search and `oxl:textMatch`, see [[architecture#Text search]].
@@ -235,6 +275,14 @@ A node with the required properties conforms to its ShEx shape through a shape m
 ### ShEx suite matches rudof in memory
 
 The 1161 shexTest validation tests that rudof can parse give the same statuses over an oxilite store as in memory.
+
+### Shapes read from the store
+
+Validating against a registered shapes graph gives the same report as passing the same shapes as text, and naming the graph explicitly gives that report too.
+
+### Stored shapes need an unambiguous graph
+
+With no shapes graph registered, and with more than one registered and none named, validation fails with an error naming the problem instead of guessing.
 
 ### Bounded prefetch matches full validation
 
@@ -537,6 +585,188 @@ The openCypher TCK (`testsuite/openCypher`, 3880 scenarios) runs through a Gherk
 The test fails when an unlisted scenario fails or a listed one passes, so the list only shrinks. `OXILITE_TCK_REPORT=1` prints each failure with its query.
 
 The runner uses its own 16 MiB thread: path-heavy scenarios (Match6/7/9, Pattern2) compile to algebra about a hundred joins deep, which overflows the 2 MiB default test stack in debug builds.
+
+### Shape index agrees with the shapes query
+
+The compiled shape index and the shapes SPARQL query describe the same constraints over one dataset.
+
+The shapes use datatypes, cardinalities, patterns, `sh:in` lists (with inline integer and boolean values), relationship-valued shapes, and two shapes targeting the same class and path.
+
+## Datalog
+
+The Datalog dialect: parsing, compilation and evaluation against a real store, see [[architecture#Datalog frontend]].
+
+### Derived relation from a triple pattern
+
+A rule whose body is one IRI predicate defines a relation over that triple pattern, and the goal returns its variables in the order the goal names them.
+
+### Join of two atoms
+
+Two body atoms sharing a variable join, so a grandparent rule returns exactly the pairs two `ex:parent` steps apart.
+
+### Transitive closure agrees with a property path
+
+A linear recursive rule returns exactly what the SPARQL property path `ex:parent+` returns over the same data, which is the oracle for the recursion.
+
+### Numeric comparison
+
+A constraint comparing a variable with a number filters the rule, so an age threshold selects only the people above it.
+
+### Arithmetic in a constraint
+
+Arithmetic on a bound variable is evaluated inside the constraint, so `?a * 2 < 40` selects on the computed value.
+
+### Negation over a derived relation
+
+`not` over a recursively derived relation is stratified: a rule for people with no ancestor returns only the root of the parent chain.
+
+### Negation compiles to NOT EXISTS
+
+A negated body atom becomes `NOT EXISTS` in the generated SQL rather than an anti-join built in Rust.
+
+### Count grouped by key
+
+`COUNT(?y)` in a rule head groups by the head's other arguments, so each subject gets the number of its derived matches as an `xsd:integer`.
+
+### Unstratified negation is rejected
+
+A rule whose body negates the predicate it defines is rejected before compilation, with an error saying the program is not stratified and naming the cycle.
+
+### Unbound head variable
+
+A head variable that no positive body atom binds is unsafe: the program is rejected with that variable named.
+
+### Unbound negated variable
+
+A variable occurring only inside a negated atom is unsafe and is rejected with that variable named.
+
+### Quantifying over the predicate
+
+The built-in `triple/3` atom binds the predicate position, so a rule can range over the predicates a subject uses.
+
+### Cycle terminates
+
+Recursion over cyclic data reaches a fixpoint instead of looping: on a three-node cycle every node reaches every node, including itself.
+
+### Goal with a constant
+
+A goal that fixes one argument to a constant projects only the remaining variable.
+
+### Request count
+
+A non-recursive program compiles to a single SQL statement, with no statement separator in the generated SQL.
+
+### Options scope graphs
+
+A rule matches the default graph by default; `union_default_graph` widens it to every graph, which makes a triple in a named graph visible.
+
+### Even and odd
+
+Two predicates defined in terms of each other over a successor chain return the even and the odd positions respectively, which is the smallest real mutual recursion.
+
+### Mutual recursion uses one tagged member
+
+A mutually recursive component compiles to a single `WITH RECURSIVE` member carrying a discriminant column, and `explain()` says so.
+
+### Non-linear recursion agrees with the linear form
+
+A rule with two recursive body atoms is iterated in the work table, and returns exactly what the linear formulation of the same closure returns.
+
+### Doubling reaches the fixpoint faster
+
+A non-linear rule composes the relation with itself, so a four-hop chain closes in a handful of rounds rather than one per hop.
+
+### Iterated component is reported
+
+`explain()` names the iteration strategy and says it costs one request per round, so the price is never a surprise.
+
+### Iteration bound
+
+A component that has not converged within `max_iterations` fails naming the bound instead of running unbounded.
+
+### Iteration leaves no rows behind
+
+Running the same iterated program twice gives the same answer, so an evaluation's work rows do not outlive it.
+
+### Linear rewrite of a non-linear closure
+
+Written in linear form, the same closure compiles to one statement and returns every pair along the chain.
+
+### Materializing an iterated component
+
+A program whose recursion is non-linear can still be materialized: the iteration runs first, then the conclusions are written in one atomic request.
+
+### Iterated materialization cleans up
+
+Materializing an iterated program twice gives the same count, so neither the work rows nor the previous inferences leak into the second run.
+
+### Derived facts become queryable
+
+Materializing a program stores its conclusions as inferences: the derived predicate is absent from a plain query and present with `include_inferred`.
+
+### Asserted data is untouched
+
+Materializing leaves the asserted quad count unchanged, and clearing the inferences leaves it unchanged again.
+
+### Re-running replaces
+
+Materializing a second, smaller program replaces the previous conclusions instead of adding to them.
+
+### Non-triple head is rejected
+
+A rule head with no RDF form cannot be materialized: the call fails and nothing is written.
+
+### Unary head materializes as rdf:type
+
+A one-argument head is stored as an `rdf:type` triple, so the derived class answers `?p a ex:Adult` with inferences included.
+
+### A unary atom is a class
+
+A one-argument IRI atom reads as `rdf:type`, so `ex:Person(?x)` returns every subject typed with that class.
+
+### An aggregate with no inline form is rejected
+
+`AVG` and `GROUP_CONCAT` produce values that the encoding cannot turn into a term id inside SQL, so a head using them is refused with that reason.
+
+### Sum and min over a group
+
+`SUM` aggregates the numeric values behind the ids and returns the total as an `xsd:integer` term.
+
+### String constraint
+
+A string function compares the lexical form behind an id against a constant written in the program, which the store need never have seen.
+
+### Backend without compound recursive CTEs
+
+On a backend that lacks compound recursive common table expressions, a mutually recursive program is refused with an error naming the SQLite version that would support it.
+
+### The documented program runs
+
+The program printed in the README and on the website is executed end to end, so the documentation cannot drift away from what the dialect accepts.
+
+### D1 statement length
+
+No statement a program compiles to — goal, seed or step — exceeds D1's 90 KB limit, checked without a D1 binding.
+
+### D1 compound limit
+
+No compound SELECT exceeds the five terms D1 allows, so a predicate with five rules still compiles.
+
+### D1 never gets a compound recursive term
+
+Mutual recursion is refused on a backend that has not declared compound recursive terms, rather than emitting SQL that would fail there.
+
+### D1 never needs user-defined functions
+
+`REGEX` is refused on a backend without the oxilite functions, rather than emitted and failing at execution.
+
+### D1 materialization stays within the statement budget
+
+A materialization plan fits D1's limit on statements per request, and each of its statements fits the length limit.
+
+### Bound parameters are never needed
+
+Generated statements carry their own constants: no placeholder appears in any of them.
 
 ## Planner benchmark
 

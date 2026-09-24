@@ -125,3 +125,45 @@ JSON-LD processing uses the `json-ld` crate; the credentials profile uses `ssi-v
 Blank nodes of a document are labelled from a hash of its key and their position in `json-ld`'s relabelling, never from a global counter.
 
 Documents therefore never share blank nodes (two credentials' anonymous nodes stay distinct), and re-storing a document produces the same ids, so a repeated put is idempotent. A different relabelling order in a future `json-ld` release would only change labels on the next put of each document; a test pins the labels of a reference credential.
+
+## D22 Schema graphs registered, not separated
+
+A graph that holds an ontology or SHACL shapes is registered by role in `schema_graphs`; its triples stay in `quads`, and derived caches are scoped by that registration.
+
+Moving schema into its own tables would force a `UNION` into every pattern scan and would stop SPARQL reading shapes, which are RDF people query; `GRAPH ?g` already separates them. Registering instead makes drop and replace one `DELETE FROM quads WHERE g = ?` with no read, as `jsonld_graphs` does for documents ([[decisions#D18 The raw document is the source of truth]]). An empty registry means "every graph", so the feature is purely additive. See [[architecture#Schema registry]].
+
+## D23 Datalog as a third frontend, sharing the store
+
+A Datalog program is parsed, checked and compiled to SQL over the same quads and the same term encoding as SPARQL and Cypher, rather than evaluated by an engine of its own.
+
+This is [[decisions#D13 Cypher as a second frontend over the RDF store]] applied a third time, and it is what makes rules affordable: the storage schema, the encoding, the backends and the sans-IO protocol are all reused. A native engine — the shape Soufflé, Nemo and Cozo take — would duplicate four backends and, decisively, would have to read the graph out of the store to evaluate it, which on D1 is the network. Rules must run where the data is. See [[architecture#Datalog frontend]].
+
+## D24 SQLite's recursive-CTE restrictions are the safety conditions
+
+Stratification and linearity are enforced because SQLite enforces them, so the compiler reports them as Datalog diagnostics instead of working around them.
+
+`WITH RECURSIVE` allows exactly one reference to the CTE in the recursive term's `FROM` and nowhere else — not in a subquery, not under `NOT EXISTS` — and no aggregate in the recursive term. Read as a Datalog specification those are the classical safety conditions: one self-reference means rules must be linear, no self-reference under `NOT EXISTS` means negation must be stratified, no aggregate means aggregation must be stratified. A violating program is rejected by [[crates/oxilite-datalog/src/program.rs#analyse]] with the cycle named, before any SQL exists. Rejected: emitting the SQL and letting SQLite fail at execution, which would surface an implementation detail as a user error.
+
+## D25 One statement where SQLite allows it, iteration where it does not
+
+A recursive component becomes a `WITH RECURSIVE` member of the same statement; a component whose rules are non-linear, which SQLite cannot express, is iterated to a fixpoint in a work table instead, one request per round.
+
+`compiler/ops.rs` already inlines property-path CTEs this way, so the in-statement shape is proven on every backend. The recursive term uses `UNION`, not `UNION ALL`: deduplication is both Datalog's set semantics and what makes cyclic data terminate, which [[architecture#Reasoning]]'s transitive closure already relies on. Iteration is the fallback rather than the default because each round is a network hop on D1, the cost this project exists to avoid ([[decisions#D1 SQL executor trait instead of the SQLite C API]]); everything expressible stays in one statement and `explain()` says when it could not. The rounds are naive rather than semi-naive: the work table's primary key covers every column, so `INSERT OR IGNORE` deduplicates and the row count is monotone, making the fixpoint detectable with a count instead of a delta relation. A delta would cut re-derivation but not round trips, which dominate here. See [[architecture#Datalog frontend#Iteration]].
+
+## D25a The work table is scoped by run, not by connection
+
+Iteration stages its rows in the persistent `datalog_work` table, keyed by a run id, rather than in a `TEMP` table.
+
+A fixpoint spans several requests, and on D1 those are not one connection, so a temporary table would be gone by the second round. A persistent table with a `run` column survives, keeps concurrent evaluations apart, and makes cleanup exact: an evaluation deletes its own rows and nobody else's. The cost is that a program with a non-linear component needs write access, which is stated rather than discovered at runtime. This is the same staging pattern `update_buffer` uses for SPARQL UPDATE ([[architecture#Updates and atomicity]]).
+
+## D26 Mutual recursion is one CTE with a discriminant
+
+A component defining several predicates compiles to a single recursive member carrying a `tag` column, with one recursive term per rule, each referencing the member exactly once.
+
+SQLite has no mutually recursive CTEs, but since 3.34.0 the recursive term may be a compound, and each arm may hold its own single self-reference — so tagging keeps mutual recursion on the one-round-trip path instead of demoting it. Because that version is not universal and D1's is not ours to assume, backends declare `compound_recursive_cte` ([[architecture#Backends]]); when it is false the program is refused rather than given SQL that would fail.
+
+## D27 Derived facts live in `quads_inf`
+
+Materializing a rule program writes into the inference table OWL 2 RL materialization already uses, instead of a table of its own.
+
+SPARQL and Cypher already read that table through `include_inferred`, so a user rule becomes visible to every dialect the moment it is materialized, with no new schema, no new option and no new cache to invalidate — rules extend the reasoner rather than forming a second inference universe ([[architecture#Reasoning]]). The trade-off is a shared lifecycle: running either materialization replaces the whole inferred set. That is stated rather than hidden, and a later change can namespace the table by producer if it proves painful.

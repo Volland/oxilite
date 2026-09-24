@@ -7,6 +7,10 @@
 import {
   type CypherOptions,
   type CypherOutput,
+  type DatalogMaterializeResult,
+  type DatalogOptions,
+  type DatalogOutput,
+  type DatalogResult,
   type CypherResult,
   type CypherValue,
   type CredentialOptions,
@@ -19,6 +23,7 @@ import {
   type Term,
   type TermJson,
   cypherResult,
+  datalogResult,
   documentText,
   filterJson,
   fromJson,
@@ -63,6 +68,10 @@ export interface WasmEngine {
   queryJson(sparql: string): WasmJob;
   explain(sparql: string): string;
   cypher(query: string, params?: string | null, options?: string | null): WasmJob;
+  // Present only when the WebAssembly core was built with the `datalog` feature.
+  datalog?(program: string, options?: string | null): WasmJob;
+  datalog_materialize?(program: string, options?: string | null): WasmJob;
+  explain_datalog?(program: string, options?: string | null): string;
   explainCypher(query: string, params?: string | null, options?: string | null): string;
   update(sparql: string, baseIri?: string | null): WasmJob;
   explainUpdate(sparql: string): string;
@@ -207,6 +216,51 @@ export class D1Store {
   async cypher(query: string, params: Record<string, CypherValue> = {}, options: CypherOptions = {}): Promise<CypherResult> {
     const out = (await this.run(this.engine.cypher(query, JSON.stringify(params), JSON.stringify(options)))) as unknown as CypherOutput;
     return cypherResult(out);
+  }
+
+  /**
+   * A Datalog program over the same quads: recursive rules with stratified negation,
+   * constraints and aggregation. A program whose recursion is linear is one SQL statement, so
+   * it costs one round trip here as it does anywhere; a component that has to be iterated
+   * costs one per round, which `rounds` reports.
+   */
+  async datalog(program: string, options: DatalogOptions = {}): Promise<DatalogResult> {
+    const datalog = this.requireDatalog(this.engine.datalog);
+    const out = (await this.run(datalog(program, JSON.stringify(options)))) as unknown as DatalogOutput;
+    return datalogResult(out);
+  }
+
+  /**
+   * Stores what a Datalog program derives as inferences, in the table OWL 2 RL
+   * materialization uses, so SPARQL and Cypher see them with `includeInferred`. The writes
+   * are one D1 batch.
+   */
+  async datalogMaterialize(
+    program: string,
+    options: DatalogOptions = {},
+  ): Promise<DatalogMaterializeResult> {
+    const materialize = this.requireDatalog(this.engine.datalog_materialize);
+    return (await this.run(
+      materialize(program, JSON.stringify(options)),
+    )) as unknown as DatalogMaterializeResult;
+  }
+
+  /** How a Datalog program runs: its strata, the strategy per recursive component, the SQL. */
+  explainDatalog(program: string, options: DatalogOptions = {}): string {
+    return this.requireDatalog(this.engine.explain_datalog)(program, JSON.stringify(options));
+  }
+
+  /**
+   * The Datalog frontend is an opt-in feature of the WebAssembly core, so say which build is
+   * needed rather than failing with "not a function".
+   */
+  private requireDatalog<T>(method: T | undefined): T {
+    if (method === undefined) {
+      throw new Error(
+        "this build of the oxilite WebAssembly core has no Datalog frontend; rebuild it with the `datalog` feature",
+      );
+    }
+    return (method as unknown as { bind(t: unknown): T }).bind(this.engine);
   }
 
   /** How a Cypher statement runs: its SPARQL, the SQL, and what runs in Rust. */

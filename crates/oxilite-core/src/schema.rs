@@ -90,6 +90,32 @@ pub fn create_schema(options: &StoreOptions) -> Request {
             PRIMARY KEY (s, p, o, g)) WITHOUT ROWID, STRICT",
         "CREATE INDEX IF NOT EXISTS quads_inf_posg ON quads_inf(p, o, s, g)",
         "CREATE INDEX IF NOT EXISTS quads_inf_ospg ON quads_inf(o, s, p, g)",
+        // Schema registry: which named graphs hold an ontology, SHACL shapes or a ShEx schema
+        // (see `registry`). The RDF itself stays in `quads`; this only labels a graph.
+        "CREATE TABLE IF NOT EXISTS schema_graphs (\
+            g INTEGER PRIMARY KEY, role INTEGER NOT NULL, iri TEXT, version TEXT, sha256 TEXT, \
+            imports TEXT, active INTEGER NOT NULL DEFAULT 1, loaded_at REAL NOT NULL) STRICT",
+        "CREATE INDEX IF NOT EXISTS schema_graphs_role ON schema_graphs(role, active)",
+        // The compiled SHACL property shapes of the registered shapes graphs, and the values of
+        // their `sh:in` lists (see `shapes`). Both are caches, rebuilt from `quads`.
+        "CREATE TABLE IF NOT EXISTS shapes_index (\
+            target TEXT NOT NULL, path TEXT NOT NULL, datatype TEXT, min_count INTEGER, \
+            max_count INTEGER, pattern TEXT, relationship INTEGER NOT NULL DEFAULT 0, \
+            PRIMARY KEY (target, path)) WITHOUT ROWID, STRICT",
+        "CREATE TABLE IF NOT EXISTS shapes_in (\
+            target TEXT NOT NULL, path TEXT NOT NULL, id INTEGER NOT NULL, \
+            lex TEXT, dt TEXT, lang TEXT, dir INTEGER, \
+            PRIMARY KEY (target, path, id)) WITHOUT ROWID, STRICT",
+        // Work table for Datalog components that need iteration (non-linear recursion).
+        // Rows are term ids, padded to a fixed width so one table serves every arity; `run`
+        // scopes an evaluation, so concurrent programs do not see each other and cleanup is
+        // exact. Unused columns default to 0 because a WITHOUT ROWID primary key is NOT NULL.
+        "CREATE TABLE IF NOT EXISTS datalog_work (\
+            run INTEGER NOT NULL, rel INTEGER NOT NULL, \
+            c0 INTEGER NOT NULL DEFAULT 0, c1 INTEGER NOT NULL DEFAULT 0, \
+            c2 INTEGER NOT NULL DEFAULT 0, c3 INTEGER NOT NULL DEFAULT 0, \
+            c4 INTEGER NOT NULL DEFAULT 0, c5 INTEGER NOT NULL DEFAULT 0, \
+            PRIMARY KEY (run, rel, c0, c1, c2, c3, c4, c5)) WITHOUT ROWID, STRICT",
         // Staging table for SPARQL UPDATE (DELETE/INSERT … WHERE) inside one atomic batch.
         "CREATE TABLE IF NOT EXISTS update_buffer (\
             op INTEGER NOT NULL, s INTEGER NOT NULL, p INTEGER NOT NULL, o INTEGER NOT NULL, g INTEGER NOT NULL) STRICT",

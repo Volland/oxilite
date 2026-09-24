@@ -23,6 +23,9 @@ vc = ["jsonld", "dep:oxilite-vc"]
 cypher = ["cypher-lite", "oxilite-cypher/tzdb-bundle"]
 # The Cypher frontend without the time zone database (named zones are errors; ~0.3 MB smaller).
 cypher-lite = ["dep:oxilite-cypher"]
+# Datalog over the same data: recursive rules with stratified negation; ~0.2 MB. Off by
+# default, so a Worker that does not use rules does not pay for them.
+datalog = ["dep:oxilite-datalog"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -30,6 +33,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 oxilite-core = { workspace = true, features = ["serde"] }
 oxilite-cypher = { workspace = true, optional = true }
+oxilite-datalog = { workspace = true, optional = true, features = ["json"] }
 oxilite-jsonld = { workspace = true, optional = true, features = ["json"] }
 oxilite-vc = { workspace = true, optional = true }
 oxrdf.workspace = true

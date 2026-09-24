@@ -580,15 +580,16 @@ impl CypherJob {
                 crate::temporal::reset_clock();
                 if self.plan.writes && self.opts.shapes && self.shapes.is_none() {
                     self.state = State::Shapes;
-                    return Ok(CypherStep::Query(
-                        crate::schema::schema_query(),
-                        oxilite_core::QueryOptions::default(),
-                    ));
+                    // One indexed read, not a SPARQL evaluation: on D1 that is the difference
+                    // between one round trip and a compiled query per writing statement.
+                    return Ok(CypherStep::Sql(crate::schema::schema_request(&self.caps)));
                 }
                 self.start_part()
             }
-            (State::Shapes, Some(StepInput::Output(out))) => {
-                self.shapes = Some(std::sync::Arc::new(Shapes::from_output(out)?));
+            (State::Shapes, Some(StepInput::Response(r))) => {
+                let index = oxilite_core::shapes::ShapeIndex::from_response(&r)
+                    .map_err(CypherError::Store)?;
+                self.shapes = Some(std::sync::Arc::new(Shapes::from_index(index)));
                 self.start_part()
             }
             (State::Main, Some(StepInput::Output(out))) => {
@@ -2678,9 +2679,9 @@ impl CypherJob {
         stmts.extend(
             EncodedQuads::new(inserts.iter().map(Quad::as_ref)).insert_statements(&self.caps),
         );
-        if schema {
-            stmts.extend(oxilite_core::reason::closure_statements());
-        }
+        stmts.extend(oxilite_core::ops::schema_refresh_for(
+            deletes.iter().chain(&inserts).map(Quad::as_ref),
+        ));
         self.schema_changed = schema;
         self.state = State::Write;
         Ok(CypherStep::Write(Request::atomic(stmts)))

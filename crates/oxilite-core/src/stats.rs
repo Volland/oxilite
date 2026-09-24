@@ -126,10 +126,12 @@ impl Stats {
         Ok(stats)
     }
 
-    /// Statements recomputing statistics and the schema closure (run by `optimize()`).
+    /// Statements recomputing statistics, the schema closure and the shape index (run by
+    /// `optimize()`).
     pub fn refresh_request() -> Request {
         let mut r = Self::refresh_statements();
         r.extend(crate::reason::closure_statements());
+        r.extend(crate::shapes::refresh_statements());
         Request::atomic(r)
     }
 

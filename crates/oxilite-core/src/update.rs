@@ -458,6 +458,9 @@ pub fn plan_update_with(
     if crate::reason::update_touches_schema(update) {
         out.push(PlannedOp::Sql(crate::reason::closure_statements()));
     }
+    if crate::shapes::update_touches_shapes(update) {
+        out.push(PlannedOp::Sql(crate::shapes::refresh_statements()));
+    }
     Ok(out)
 }
 

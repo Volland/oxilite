@@ -22,6 +22,7 @@ The workspace splits a pure, I/O-free core from thin backends and bindings, so t
 | `oxilite-reason` (M4) | TBox closure, query rewriting, OWL 2 RL materialization |
 | `oxilite-validate` (M5) | rudof `srdf` trait implementation and D1 prefetch adapter |
 | `oxilite-cypher` (M7) | openCypher parser, validation, planning and lowering to SPARQL algebra, the Rust tail (writes, lists, temporal values), see [[architecture#Property graph frontend]] |
+| `oxilite-datalog` (M8) | Datalog parser, stratification and SQL generation, see [[architecture#Datalog frontend]] |
 
 Upstream reuse: `oxrdf`, `oxrdfio`/`oxttl`, `spargebra`, `spareval`, `sparesults`, `oxsdatatypes` (Oxigraph 0.5 family, `rdf-12`/`sparql-12` on), rudof's `srdf`/`shacl_*`/`shex_*` (same Oxigraph family), and `reasonable` for OWL 2 RL.
 
@@ -190,11 +191,31 @@ The Berlin SPARQL Benchmark runs oxilite (bundled SQLite, system SQLite, D1 thro
 
 The script generates a dataset, loads it into each engine, serves it, runs the explore and business-intelligence mixes with the BSBM test driver, and records load time, database size and the driver's XML results in `bench/results`. `bsbm-report` turns them into `summary.json` and the README table. `write-cost` measures D1 rows written per triple (index entries included) for each schema option on a local D1: about 4.8 by default, 3.8 without the graph index, 5.0 with the text index.
 
+## Schema registry
+
+Which named graphs hold schema rather than data — ontologies, SHACL shapes, ShEx schemas — recorded in `schema_graphs`. See [[crates/oxilite-core/src/registry.rs]] and [[decisions#D22 Schema graphs registered, not separated]].
+
+Registering a graph lets reasoning be scoped to chosen ontologies, gives shapes one compiled source of truth, and lets axioms be kept out of queries over the data.
+
+`schema_graphs(g, role, iri, version, sha256, imports, active, loaded_at)` labels a graph; its triples stay in `quads` and stay queryable. Registering a named graph creates it, so the registry never names a graph the term dictionary has not heard of. Every scoping predicate reads "the active graphs of this role, or every graph while none is registered", which is one SQL subquery, so a store that registers nothing behaves exactly as it did before the registry existed and no operation gains a round trip.
+
+The registry is reached through `Store::register_schema_graph` / `schema_graphs` / `set_schema_graph_active` / `unregister_schema_graph` / `drop_schema_graph` and their async twins ([[crates/oxilite/src/schema_store.rs]]). Because a registration changes the *scope* of the derived caches and not just their content, it rebuilds both of them in the same atomic request. `drop_schema_graph` removes the registration and every quad of the graph in one request.
+
+`QueryOptions::include_schema_graphs` (default true) decides whether registered schema graphs are matched at all. Set to false, [[crates/oxilite-core/src/reason.rs#Entailment]] returns a quad source with those graphs removed, which covers patterns, paths, `OPTIONAL` and `GRAPH ?g` at once; hiding ignores the active flag, since an inactive ontology graph is still schema. `named_graphs()` and the dumps are unaffected: the dataset is still the dataset.
+
+### Compiled shape index
+
+`shapes_index` and `shapes_in` hold the SHACL property shapes of the registered shapes graphs, pre-resolved per target class and path. See [[crates/oxilite-core/src/shapes.rs]].
+
+Each entry carries `sh:datatype`, `sh:minCount`, `sh:maxCount`, `sh:pattern`, the `sh:in` values and whether the shape is relationship-valued (`sh:class` / `sh:node`).
+
+They are caches with the discipline `tbox_closure` follows: rebuilt by pure `INSERT … SELECT` statements over `quads` and `terms` (an `rdf:rest*`/`rdf:first` recursive CTE walks `sh:in`), by `optimize()` and, inside the same atomic request, by any write touching a SHACL predicate ([[crates/oxilite-core/src/shapes.rs#is_shape_quad]]). `rdf:first`/`rdf:rest` are deliberately not triggers — they would refresh the index on every write touching any RDF list — so appending to an existing `sh:in` list without touching a `sh:` predicate leaves the index stale until the next `optimize()`. Shapes that target the same class and path merge field by field, by `GROUP BY` with `MAX`, which ignores NULLs. Target, path, datatype and pattern are stored as text; `sh:in` values keep their id plus the `terms` columns, so Rust rebuilds any term without a second request. `Store::shape_index()` reads both tables in one request.
+
 ## Reasoning
 
 RDFS/OWL-QL reasoning by query rewriting against a small materialized TBox closure; full OWL 2 RL materialization is explicit and opt-in. Delivered in M4, see [[crates/oxilite-core/src/reason.rs]].
 
-`tbox_closure(kind, sub, sup)` holds the class closure (subClassOf and equivalentClass), the RDFS and OWL property closures (OWL composes subPropertyOf, equivalentProperty, inverseOf and symmetric properties with a direction bit), transitive properties, and the classes a property's subjects and objects belong to (domains and ranges through sub-properties, super-classes and inverses). It is computed from asserted quads of every graph by recursive CTEs, recomputed by `optimize()` and inside the same atomic request as any write that touches schema triples; stores then reload the transitive properties, which live in memory with the statistics.
+`tbox_closure(kind, sub, sup)` holds the class closure (subClassOf and equivalentClass), the RDFS and OWL property closures (OWL composes subPropertyOf, equivalentProperty, inverseOf and symmetric properties with a direction bit), transitive properties, and the classes a property's subjects and objects belong to (domains and ranges through sub-properties, super-classes and inverses). It is computed by recursive CTEs from the asserted quads of the active registered ontology graphs — of every graph while none is registered ([[architecture#Schema registry]]) — recomputed by `optimize()`, by any change to a registration, and inside the same atomic request as any write that touches schema triples; stores then reload the transitive properties, which live in memory with the statistics.
 
 Reasoning is chosen per query (`QueryOptions::reasoning`: `None | Rdfs | OwlQl`, default `None` like Oxigraph). The compiler swaps each pattern's `quads` table for a derived table of entailed triples (a `SELECT DISTINCT` over UNION ALL arms: asserted, sub/inverse properties, types through the class closure, domains and ranges), so queries stay single statements and paths, OPTIONAL and the fallback all see the same entailments. A transitive property becomes a recursive CTE, walked from a constant endpoint when there is one. With a merged default graph the derived table merges graphs itself, so each entailed triple appears once. Literals never become subjects.
 
@@ -205,6 +226,8 @@ Reasoning is chosen per query (`QueryOptions::reasoning`: `None | Rdfs | OwlQl`,
 SHACL and ShEx validation by running rudof's engines unchanged over oxilite through rudof's RDF traits (`rudof_rdf`, formerly `srdf`). Delivered in M5 as the crate `oxilite-validate`, see [[crates/oxilite-validate/src/lib.rs]].
 
 It depends on the umbrella crate, so it is added next to it rather than behind a feature.
+
+Shapes come from a string or from the store: `shacl_schema_from_store` serializes a shapes graph — named explicitly, or the single graph registered as SHACL shapes ([[architecture#Schema registry]]) — and hands it to rudof's own parser, so stored shapes and a shapes file compile identically. More than one registered shapes graph and no explicit name is an error rather than a guess.
 
 `StoreGraph` implements `Rdf + NeighsRDF + QueryRDF` over a blocking `Store` (default graph, or all graphs merged): neighbourhood lookups are SQL pattern scans and rudof's SPARQL-mode validation runs through the oxilite compiler. SHACL uses rudof's `shacl` crate (native and SPARQL engines), ShEx `shex_validation` with compact shape maps. On the W3C SHACL core suite and the shexTest validation suite, reports over a store equal rudof's over its in-memory graph, on bundled SQLite and the system `libsqlite3`.
 
@@ -244,7 +267,49 @@ The tail evaluates `CREATE`, `MERGE`, `SET`, `REMOVE` and `DELETE` row by row ag
 
 Reasoning options apply to Cypher as to SPARQL: labels match subclasses, relationship types subproperties and inverses ([[architecture#Reasoning]]). SHACL shapes stored in the dataset act as the property-graph schema ([[decisions#D17 SHACL shapes as the property-graph schema]]).
 
-Shapes loaded with `Store::cypher_schema` (and passed in `CypherOptions::schema`) make `sh:minCount 1` properties join without `OPTIONAL`, `sh:maxCount 1` properties scalar, and `sh:datatype` a value type the compiler uses (`QueryOptions::var_types`: one typed comparison instead of one per possible type). A writing statement checks every node it creates or changes against `sh:datatype`, `sh:minCount`, `sh:maxCount`, `sh:in` and `sh:pattern` of the shapes targeting its labels before sending the batch ([[crates/oxilite-cypher/src/schema.rs#Shapes]]). `CALL db.labels()`, `db.relationshipTypes()`, `db.propertyKeys()` and `db.schema.nodeTypeProperties()` read shapes and data. Complete validation stays with rudof ([[architecture#Validation]]).
+Shapes are read from the compiled shape index ([[architecture#Schema registry#Compiled shape index]]) — one indexed request per writing statement instead of a SPARQL evaluation, which on D1 is one round trip instead of a compiled query. `schema_query()` remains as the reference the index is checked against. Shapes loaded with `Store::cypher_schema` (and passed in `CypherOptions::schema`) make `sh:minCount 1` properties join without `OPTIONAL`, `sh:maxCount 1` properties scalar, and `sh:datatype` a value type the compiler uses (`QueryOptions::var_types`: one typed comparison instead of one per possible type). A writing statement checks every node it creates or changes against `sh:datatype`, `sh:minCount`, `sh:maxCount`, `sh:in` and `sh:pattern` of the shapes targeting its labels before sending the batch ([[crates/oxilite-cypher/src/schema.rs#Shapes]]). `CALL db.labels()`, `db.relationshipTypes()`, `db.propertyKeys()` and `db.schema.nodeTypeProperties()` read shapes and data. Complete validation stays with rudof ([[architecture#Validation]]).
+
+## Datalog frontend
+
+Datalog over the same quads as SPARQL: RDF-native rules with stratified negation, checked before compilation and lowered to a single SQL statement. Crate `oxilite-datalog`, behind the `datalog` feature.
+
+The dialect is spelled like Turtle and SPARQL: variables are `?x`, IRIs are `<...>` or CURIEs declared with `@prefix`, and literals carry `^^` datatypes and `@` language tags ([[crates/oxilite-datalog/src/lexer.rs]]). An atom names its relation in one of three ways ([[crates/oxilite-datalog/src/ast.rs#Pred]]): an IRI, applied to two arguments as a predicate, so `ex:parent(?x, ?y)` *is* the triple pattern `?x ex:parent ?y`, or to one as a class, so `ex:Person(?x)` is `?x rdf:type ex:Person`; a predicate defined by rules; or the built-in `triple/3` and `triple/4` forms, which reach the quad table directly. A predicate that any rule defines is derived, and is never also read from the store, so a name means one thing throughout a program. A program is a list of rules, with aggregates allowed in a head, and a goal.
+
+### Stratification
+
+The dependency graph, its strongly connected components, stratification, safety and the recursion shape of each component, all checked before any SQL exists. See [[crates/oxilite-datalog/src/program.rs#analyse]].
+
+Edges are positive, negative or aggregating ([[crates/oxilite-datalog/src/program.rs#Dep]]). Tarjan's algorithm finds the components; a negative or aggregating edge inside a component makes the program unstratifiable and is rejected by naming the offending cycle, and the components are ordered topologically into strata. Each stratum carries the shape that decides how it is evaluated ([[crates/oxilite-datalog/src/program.rs#Shape]]): non-recursive, linear (one recursive body atom, one predicate in the component), linear-mutual (several predicates, one tagged common table expression) or non-linear (two or more recursive body atoms). Rules whose head or negated variables are not bound positively in the body are unsafe and rejected with the variable named. Because these checks run first, a bad program is reported as a Datalog error rather than as a SQLite one.
+
+### SQL generation
+
+A checked program compiles to one SQL statement over the term-id encoding, so a derived predicate composes with a triple pattern without any conversion. See [[crates/oxilite-datalog/src/sql.rs#compile]].
+
+Every relation, stored or derived, is a set of rows of tagged 64-bit ids ([[architecture#Term encoding]]). A non-recursive predicate becomes a plain common table expression, a linear component becomes one `WITH RECURSIVE` member, and a mutually recursive component becomes one member carrying a discriminant column, one recursive term per rule ([[decisions#D26 Mutual recursion is one CTE with a discriminant]]). A non-linear component has no single-statement form, so it is iterated instead ([[architecture#Datalog frontend#Iteration]]). Constraints compile over the encoding: a comparison decodes an id through the typed side columns of `terms`, while term equality stays id equality, and a constant carries its own lexical form because the store need never have seen it. `union_default_graph` and `include_inferred` mean what they mean for SPARQL ([[architecture#SPARQL to SQL compiler]]). The result carries the output variables in column order, the constants the program mentions — so the term resolver needs no lookup for them — and notes for `explain()` ([[crates/oxilite-datalog/src/sql.rs#Compiled]]).
+
+### Iteration
+
+A component whose rules are non-linear is evaluated by rounds in `datalog_work`, because SQLite allows only one self-reference per recursive term. See [[crates/oxilite-datalog/src/sql.rs#Fixpoint]].
+
+The compiler emits seed statements (the component's non-recursive rules) and step statements (its recursive ones), each carrying the common table expressions of the earlier strata it reads, since they run in their own requests. The job applies the seed, then repeats the step until the row count stops growing, then runs the goal. Rounds are naive rather than semi-naive: the work table's primary key covers every column, so `INSERT OR IGNORE` deduplicates and the count is monotone, which makes the fixpoint detectable without a delta relation — and a delta would cut re-derivation, not round trips, which are what dominate ([[decisions#D25 One statement where SQLite allows it, iteration where it does not]]). Rows are scoped by a run id and deleted when the evaluation ends, so concurrent programs do not see each other and nothing is left behind ([[decisions#D25a The work table is scoped by run, not by connection]]). `Options::max_iterations` bounds the rounds, and the result reports how many each component took.
+
+### Execution
+
+A compiled program runs as a sans-IO job: the statement, then one term lookup — two requests for any program that compiled to one statement, on every backend including D1. See [[crates/oxilite-datalog/src/exec.rs#DatalogJob]].
+
+The job issues the compiled SQL, then asks the shared term resolver for the terms behind the ids it got back ([[architecture#Sans-IO core]]). A component that has to be iterated is driven first, adding one request per round and one to clean up. Results carry the goal's variables in column order, one row per solution with `None` for an unbound column, and the rounds each iterated component took ([[crates/oxilite-datalog/src/exec.rs#DatalogResult]]).
+
+### Materialization
+
+What a program derives can be stored instead of queried, in `quads_inf` — the table OWL 2 RL materialization already writes. See [[crates/oxilite-datalog/src/materialize.rs#MaterializeJob]].
+
+A user rule is then visible to SPARQL and Cypher through the `include_inferred` option that already exists ([[architecture#Reasoning]]), and the two share one lifecycle: running either replaces what the other stored. Only rule heads with an RDF form are storable — an IRI with two arguments is a predicate, with one a class — so a head that is not a triple is rejected before anything is written rather than half-applied. A component needing iteration is evaluated once and read by every head, since they share a run.
+
+### Reach
+
+The dialect is available from Rust, the command line, WebAssembly and both JavaScript packages, everywhere behind an off-by-default feature.
+
+`oxilite datalog` runs a program, `--explain` prints the strata and strategies, `--materialize` stores the conclusions, and the program comes from `--program`, `--file` or standard input ([[architecture#Command line and HTTP endpoint]]). The WebAssembly core exports `datalog`, `datalog_materialize` and `explain_datalog` under a `datalog` feature that is off by default, so a Worker that does not use rules does not carry the ~0.2 MB ([[architecture#Bindings]]). `@oxilite/common` holds the shared types and the term conversion, so `@oxilite/node` and `@oxilite/d1` return the same shapes; the option names match the Cypher ones for the settings they share.
 
 ## JSON-LD documents
 

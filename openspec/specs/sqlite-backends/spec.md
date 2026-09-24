@@ -19,8 +19,11 @@ The system SHALL let each backend declare these capabilities:
 - availability of oxilite user-defined functions
 - availability of interactive transactions
 - whether 64-bit integers must be returned as text
+- whether a recursive common table expression may have a compound recursive term
+  (SQLite 3.34.0 and later)
 
-Generated SQL MUST respect the declared limits.
+Generated SQL MUST respect the declared limits. A backend whose SQLite version cannot be
+established MUST declare the compound recursive term unavailable.
 
 #### Scenario: Statement length limit
 - **WHEN** a backend declares a maximum statement length and a large insert is performed
@@ -29,6 +32,10 @@ Generated SQL MUST respect the declared limits.
 #### Scenario: No bound parameters needed
 - **WHEN** any operation is compiled
 - **THEN** its statements are self-contained and don't depend on bound parameters
+
+#### Scenario: Compound recursive term is not assumed
+- **WHEN** a backend does not declare support for a compound recursive term
+- **THEN** no generated statement contains a recursive CTE with more than one recursive term
 
 ### Requirement: Bundled native backend
 The system SHALL provide a native backend on an in-process SQLite that supports in-memory and file databases. It SHALL register the oxilite user-defined functions (regular expressions, replace, hashes, Unicode case mapping).

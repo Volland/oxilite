@@ -10,6 +10,10 @@ import {
   type CypherOutput,
   type CypherResult,
   type CypherValue,
+  type DatalogMaterializeResult,
+  type DatalogOptions,
+  type DatalogOutput,
+  type DatalogResult,
   type CredentialOptions,
   type DocumentFilter,
   type Drift,
@@ -18,6 +22,7 @@ import {
   type StoredDocument,
   type Term,
   cypherResult,
+  datalogResult,
   documentText,
   filterJson,
   fromJson,
@@ -44,6 +49,9 @@ interface NativeStoreInstance {
   explain(sparql: string): string;
   cypher(query: string, params?: string | null, options?: string | null): string;
   explainCypher(query: string, params?: string | null, options?: string | null): string;
+  datalog(program: string, options?: string | null): string;
+  datalogMaterialize(program: string, options?: string | null): string;
+  explainDatalog(program: string): string;
   update(sparql: string, baseIri?: string | null): void;
   explainUpdate(sparql: string): string;
   load(data: string, format: string, baseIri: string | null, toGraph: string | null, bulk: boolean): void;
@@ -153,6 +161,31 @@ export class Store {
   /** How a Cypher statement runs: its SPARQL, the SQL it compiles to, and what runs in Rust. */
   explainCypher(query: string, params: Record<string, CypherValue> = {}, options: CypherOptions = {}): string {
     return this.native.explainCypher(query, JSON.stringify(params), JSON.stringify(options));
+  }
+
+  /**
+   * A Datalog program over the same quads: recursive rules with stratified negation,
+   * constraints and aggregation. A program whose recursion is linear is one SQL statement.
+   */
+  datalog(program: string, options: DatalogOptions = {}): DatalogResult {
+    const out = JSON.parse(this.native.datalog(program, JSON.stringify(options))) as DatalogOutput;
+    return datalogResult(out);
+  }
+
+  /**
+   * Stores what a Datalog program derives as inferences, in the same place OWL 2 RL
+   * materialization writes — so SPARQL and Cypher see them with `includeInferred`. The two
+   * share one inference set: running either replaces it.
+   */
+  datalogMaterialize(program: string, options: DatalogOptions = {}): DatalogMaterializeResult {
+    return JSON.parse(
+      this.native.datalogMaterialize(program, JSON.stringify(options)),
+    ) as DatalogMaterializeResult;
+  }
+
+  /** How a Datalog program runs: its strata, the strategy per recursive component, the SQL. */
+  explainDatalog(program: string): string {
+    return this.native.explainDatalog(program);
   }
 
   /** SPARQL update, applied atomically. */

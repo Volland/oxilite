@@ -11,7 +11,7 @@
 
 **[oxilitedb.com](https://oxilitedb.com)** · [crates.io](https://crates.io/crates/oxilite) · [docs.rs](https://docs.rs/oxilite) · [npm](https://www.npmjs.com/package/@oxilite/node)
 
-> **Status: milestones M1–M7 implemented** — M1 (storage core), M2 (full SPARQL 1.1 query compiled to SQL), M3 (atomic SPARQL Update, Cloudflare D1), the TypeScript packages, M4 (RDFS / OWL reasoning), M5 (SHACL / ShEx validation with rudof), M6 (BSBM benchmarks, planner tuning, full-text search) M7 (openCypher over the same data) and JSON-LD / Verifiable Credentials storage. See [Roadmap](#roadmap).
+> **Status: milestones M1–M8 implemented** — M1 (storage core), M2 (full SPARQL 1.1 query compiled to SQL), M3 (atomic SPARQL Update, Cloudflare D1), the TypeScript packages, M4 (RDFS / OWL reasoning), M5 (SHACL / ShEx validation with rudof), M6 (BSBM benchmarks, planner tuning, full-text search), M7 (openCypher over the same data), JSON-LD / Verifiable Credentials storage, and M8 ([Datalog rules](#datalog-your-own-recursive-rules)). See [Roadmap](#roadmap).
 
 ---
 
@@ -387,6 +387,7 @@ Every query returned the same results on all engines; explore Q9 (a DESCRIBE) di
 ## Reasoning and validation
 
 - **Reasoning (M4).** Per-query `Rdfs` / `OwlQl` entailment by rewriting against a small materialized TBox closure. Queries stay single statements and there are no extra writes. OWL 2 RL materialization is available on request via `materialize()`, using SQL fixpoint rules everywhere (D1 included) and, natively, `reasonable` (feature `reasonable`), with identical results.
+- **Schema registry.** A named graph can be declared to hold an ontology or a SHACL shapes graph. Its triples stay ordinary RDF, but reasoning then reads only the active registered ontologies, SHACL shapes are compiled into an index that Cypher and rudof both read, and `QueryOptions::include_schema_graphs = false` keeps axioms out of queries over the data. A store that registers nothing is unchanged.
 
 ```rust
 use oxilite::sparql::{QueryOptions, Reasoning};
@@ -441,6 +442,45 @@ await d1store.cypher("UNWIND $rows AS row MERGE (p:Person {id: row.id}) SET p.na
 - **OWL and SHACL aware.** With `reasoning: "rdfs"` / `"owl-ql"`, labels match subclasses and relationship types their subproperties and inverses. SHACL shapes stored in the dataset are the graph's schema: writes that break `sh:datatype`, cardinality, `sh:in` or `sh:pattern` are rejected before anything is written, `sh:minCount 1` properties join without `OPTIONAL`, `sh:datatype` types comparisons for the compiler, and `CALL db.labels()` / `db.schema.nodeTypeProperties()` read shapes and data.
 - **Coverage.** 3733 of the 3880 [openCypher TCK](https://github.com/opencypher/openCypher/tree/main/tck) scenarios pass (read-only 96.4%, temporal functions 100%), on the bundled SQLite; the failures (user-defined procedures, reading after a write in one statement, errors on deleted entities…) are listed in [`crates/oxilite-cypher/tck-allowlist.txt`](crates/oxilite-cypher/tck-allowlist.txt).
 
+## Datalog: your own recursive rules
+
+SPARQL's only recursion is a property path: one predicate, a fixed regular expression, no way to join another relation or filter part-way through. Datalog removes that ceiling (feature `datalog`, crate `oxilite-datalog`). A program is a list of rules over the same quads, checked and then compiled to **one SQL statement** — so linear recursion is still one round trip, on D1 too.
+
+```rust
+let r = store.datalog(r#"
+  @prefix ex: <http://example.org/> .
+
+  ancestor(?x, ?y) :- ex:parent(?x, ?y).
+  ancestor(?x, ?z) :- ex:parent(?x, ?y), ancestor(?y, ?z).   // recursion with a body
+
+  adult(?x, ?y)    :- ancestor(?x, ?y), ex:age(?y, ?a), ?a >= 18.
+  orphan(?x)       :- ex:Person(?x), not ancestor(_, ?x).    // stratified negation
+  lines(?x, COUNT(?y)) :- ancestor(?x, ?y).                  // aggregation
+
+  ?- adult(?x, ?y).
+"#)?;
+```
+
+- **Atoms are RDF.** An IRI with two arguments is a predicate, so `ex:parent(?x, ?y)` *is* the triple pattern `?x ex:parent ?y`; with one it is a class, so `ex:Person(?x)` is `?x rdf:type ex:Person`. `triple(?s, ?p, ?o)` and `triple(?s, ?p, ?o, ?g)` reach the quad table directly, predicate variable and all. A predicate any rule defines is derived, never also read from the store.
+- **Constraints are SPARQL's.** Comparison, arithmetic, string and regex functions, typed literals and dates, pushed into the join rather than applied to its rows. Term equality stays id equality, which is the cheapest comparison the encoding has.
+- **SQLite's limits are Datalog's safety conditions.** `WITH RECURSIVE` allows one self-reference per recursive term and none under `NOT EXISTS`, which is exactly "rules must be linear" and "negation must be stratified". The compiler reports them as rule diagnostics before any SQL exists: an unstratified program names its cycle, an unsafe rule names its variable. Mutual recursion compiles to one member with a discriminant column (SQLite 3.34+, declared per backend).
+- **Non-linear rules still run.** `path(?x,?z) :- path(?x,?y), path(?y,?z).` has no single-statement form, so it is iterated to a fixpoint in a work table — one request per round, driven by the same step machine as everything else, so it works on D1 too. The result reports the rounds each component took, `max_iterations` bounds them, and the rows are scoped to the run and deleted afterwards. `explain_datalog()` says when a component had to be iterated and what that costs.
+- **Rules can be stored.** `datalog_materialize()` writes what a program derives into `quads_inf`, the table OWL 2 RL materialization already uses, in one atomic request. SPARQL and Cypher then see those facts under `include_inferred` — user rules extend the reasoner instead of running beside it. The two share one inference set: running either replaces it.
+- **Everywhere else too.** `oxilite datalog -l db.sqlite -f rules.dl` runs a program from the CLI (`--explain`, `--materialize`, or piped in on stdin). `@oxilite/node` and `@oxilite/d1` expose `datalog()`, `datalogMaterialize()` and `explainDatalog()`, returning RDF/JS terms; in the WebAssembly core the dialect is an off-by-default feature (~0.2 MB), so a Worker that does not use rules does not carry it.
+
+Recursion is tested against two oracles: linear recursion must return exactly what the equivalent SPARQL property path returns (`ancestor` above equals `?x ex:parent+ ?y`), and non-linear recursion must agree with its linear formulation.
+
+```ts
+const r = store.datalog(`
+  @prefix ex: <http://example.org/> .
+  reaches(?x, ?y) :- ex:link(?x, ?y).
+  reaches(?x, ?z) :- reaches(?x, ?y), reaches(?y, ?z).   // non-linear: iterated
+  ?- reaches(ex:a, ?y).
+`);
+r.records.map((row) => row.y?.value);   // RDF/JS terms
+r.rounds;                               // rounds the iterated component took
+```
+
 ## JSON-LD and Verifiable Credentials
 
 oxilite stores JSON-LD documents and W3C Verifiable Credentials as they are, and makes their RDF queryable (features `jsonld` and `vc`, crates [`oxilite-jsonld`](crates/oxilite-jsonld/README.md) and [`oxilite-vc`](crates/oxilite-vc/README.md)). Each document is kept **byte for byte** in a keyed table, and its RDF goes into a **named graph of its own**. By default the key and the graph are both the document's `id`, so a credential is found under its own IRI in both.
@@ -481,6 +521,7 @@ await vcs.find({ issuer: "did:example:issuer", validAt: new Date() });
 | **M6** Performance | BSBM vs Oxigraph, tuning, FTS5 | published comparison | ✅ done: BSBM results in [Performance](#performance), D1 write-cost report, FTS5 text search |
 | **M7** Cypher | openCypher over the RDF store, OWL- and SHACL-aware | ≥ 80% of read-only TCK scenarios | ✅ done: 96.2% of the TCK (read-only 96.4%), on bundled SQLite, system SQLite and D1 |
 | JSON-LD / VC | verbatim JSON-LD documents and Verifiable Credentials, a named graph each | W3C `toRdf` suite + VC scenarios on every backend | ✅ done: 450 `toRdf` tests pass, scenarios pass on bundled SQLite, system SQLite and Miniflare D1 |
+| **M8** Datalog | recursive rules, stratified negation, constraints, aggregation, materialization | recursion agrees with the equivalent property path | ✅ done: language and checks, linear and mutual recursion in one statement, non-linear recursion iterated, negation, constraints, aggregation, materialization into `quads_inf`, CLI subcommand, wasm and JS bindings, D1 limits checked |
 
 ---
 

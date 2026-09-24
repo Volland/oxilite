@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/oxilite-core", "crates/oxilite-rusqlite", "crates/oxilite-dylib", "crates/oxilite", "testsuite", "crates/oxilite-wasm", "crates/oxilite-d1", "bindings/node", "crates/oxilite-reason", "crates/oxilite-validate", "crates/oxilite-cypher", "crates/oxilite-cli", "bench", "crates/oxilite-jsonld", "crates/oxilite-vc"]
+members = ["crates/oxilite-core", "crates/oxilite-rusqlite", "crates/oxilite-dylib", "crates/oxilite", "testsuite", "crates/oxilite-wasm", "crates/oxilite-d1", "bindings/node", "crates/oxilite-reason", "crates/oxilite-validate", "crates/oxilite-cypher", "crates/oxilite-datalog", "crates/oxilite-cli", "bench", "crates/oxilite-jsonld", "crates/oxilite-vc"]
 
 [workspace.package]
 version = "0.2.2"
@@ -36,6 +36,7 @@ oxilite = { path = "crates/oxilite", version = "0.2.2" }
 oxilite-d1 = { path = "crates/oxilite-d1", version = "0.2.2" }
 oxilite-reason = { path = "crates/oxilite-reason", version = "0.2.2" }
 oxilite-cypher = { path = "crates/oxilite-cypher", version = "0.2.2", default-features = false }
+oxilite-datalog = { path = "crates/oxilite-datalog", version = "0.2.2" }
 oxilite-jsonld = { path = "crates/oxilite-jsonld", version = "0.2.2" }
 oxilite-vc = { path = "crates/oxilite-vc", version = "0.2.2" }
 # JSON-LD 1.1 processing; pinned to the version ssi-json-ld resolves to (one copy in the tree).

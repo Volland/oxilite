@@ -39,6 +39,14 @@ fn graph(json: Option<String>) -> Result<Option<GraphName>> {
         .transpose()
 }
 
+fn datalog_args(options: Option<String>) -> Result<oxilite::datalog::Options> {
+    let value = match options {
+        Some(o) => serde_json::from_str::<serde_json::Value>(&o).map_err(err)?,
+        None => serde_json::Value::Null,
+    };
+    oxilite::datalog::json::options_from_json(&value).map_err(err)
+}
+
 fn cypher_args(
     params: Option<String>,
     options: Option<String>,
@@ -273,6 +281,34 @@ impl NativeStore {
     ) -> Result<String> {
         let (params, opts) = cypher_args(params, options)?;
         with_store!(self, s => s.explain_cypher(&query, &params, &opts)).map_err(err)
+    }
+
+    /// A Datalog program: recursive rules with stratified negation, constraints and
+    /// aggregation. `options` is JSON (`oxilite_datalog::json`); the result is
+    /// `{"kind": "datalog", "columns", "rows", "rounds"}`.
+    #[napi]
+    pub fn datalog(&self, program: String, options: Option<String>) -> Result<String> {
+        let opts = datalog_args(options)?;
+        let r = with_store!(self, s => s.datalog_with(&program, &opts)).map_err(err)?;
+        Ok(oxilite::datalog::json::result_to_json(&r).to_string())
+    }
+
+    /// Stores what a Datalog program derives as inferences, beside the OWL ones.
+    #[napi]
+    pub fn datalog_materialize(
+        &self,
+        program: String,
+        options: Option<String>,
+    ) -> Result<String> {
+        let opts = datalog_args(options)?;
+        let s = with_store!(self, s => s.datalog_materialize_with(&program, &opts)).map_err(err)?;
+        Ok(oxilite::datalog::json::stats_to_json(&s).to_string())
+    }
+
+    /// How a Datalog program runs: its strata, the strategy per recursive component, the SQL.
+    #[napi]
+    pub fn explain_datalog(&self, program: String) -> Result<String> {
+        with_store!(self, s => s.explain_datalog(&program)).map_err(err)
     }
 
     /// The SQL a query compiles to, with the planner's notes.

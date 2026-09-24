@@ -124,6 +124,48 @@ impl Db {
         })
     }
 
+    /// Runs a Datalog program and returns its solutions.
+    pub fn datalog(&self, program: &str) -> Result<oxilite::datalog::DatalogResult> {
+        Ok(match self {
+            Db::Native(s) => s.datalog(program)?,
+            Db::Library(s) => s.datalog(program)?,
+            Db::D1(m) => futures::executor::block_on(
+                m.lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .datalog(program),
+            )?,
+        })
+    }
+
+    /// Describes how a Datalog program runs: strata, strategies and SQL.
+    pub fn explain_datalog(&self, program: &str) -> Result<String> {
+        Ok(match self {
+            Db::Native(s) => s.explain_datalog(program)?,
+            Db::Library(s) => s.explain_datalog(program)?,
+            Db::D1(m) => futures::executor::block_on(
+                m.lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .explain_datalog(program),
+            )?,
+        })
+    }
+
+    /// Stores what a Datalog program derives, as inferences.
+    pub fn datalog_materialize(
+        &self,
+        program: &str,
+    ) -> Result<oxilite::datalog::MaterializeStats> {
+        Ok(match self {
+            Db::Native(s) => s.datalog_materialize(program)?,
+            Db::Library(s) => s.datalog_materialize(program)?,
+            Db::D1(m) => futures::executor::block_on(
+                m.lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .datalog_materialize(program),
+            )?,
+        })
+    }
+
     pub fn update(&self, update: &str, _using: &[String]) -> Result<()> {
         let u = SparqlParser::new().parse_update(update)?;
         Ok(sync_store!(self, s => s.update(u), s => s.update(u))?)

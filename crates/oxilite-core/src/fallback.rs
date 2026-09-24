@@ -25,6 +25,7 @@ pub struct SqlDataset<'a, B: SyncBackend> {
     /// Query-time reasoning (quads are read from the entailed-triple source).
     reasoning: crate::reason::Reasoning,
     inferred: bool,
+    hide_schema: bool,
     transitive: BTreeSet<i64>,
 }
 
@@ -35,6 +36,7 @@ impl<'a, B: SyncBackend> SqlDataset<'a, B> {
             cache: RefCell::new(HashMap::new()),
             reasoning: crate::reason::Reasoning::None,
             inferred: false,
+            hide_schema: false,
             transitive: BTreeSet::new(),
         }
     }
@@ -43,6 +45,7 @@ impl<'a, B: SyncBackend> SqlDataset<'a, B> {
     pub fn with_options(mut self, options: &crate::QueryOptions) -> Result<Self> {
         self.reasoning = options.reasoning;
         self.inferred = options.include_inferred;
+        self.hide_schema = !options.include_schema_graphs;
         if self.reasoning == crate::reason::Reasoning::OwlQl {
             let stmt = crate::reason::transitive_statement(|c| self.id_col(c));
             for row in self.rows(stmt.sql)? {
@@ -148,6 +151,7 @@ impl<'a, B: SyncBackend> QueryableDataset<'a> for SqlDataset<'a, B> {
         let ent = crate::reason::Entailment {
             reasoning: self.reasoning,
             inferred: self.inferred,
+            hide_schema: self.hide_schema,
             transitive: &self.transitive,
             max_compound: self.backend.capabilities().max_compound_select,
         };
@@ -162,7 +166,7 @@ impl<'a, B: SyncBackend> QueryableDataset<'a> for SqlDataset<'a, B> {
                 )
             )
         } else {
-            "quads".into()
+            format!("{} AS quads", ent.base())
         };
         let sql = format!(
             "SELECT {}, {}, {}, {} FROM {source} WHERE {}",

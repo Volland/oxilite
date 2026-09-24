@@ -1040,3 +1040,39 @@ fn order_by_aggregate() {
         assert_eq!(r.rows, vec![vec![s("Ada"), i(2)]], "{}", e.name());
     }
 }
+
+/// Shapes exercising every constraint the index carries, including two shapes targeting the
+/// same class and path.
+const AGREEMENT_SHAPES: &str = "@prefix ex: <http://example.com/> . @prefix sh: <http://www.w3.org/ns/shacl#> . @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+ex:PersonShape a sh:NodeShape ; sh:targetClass ex:Person ;
+  sh:property [ sh:path ex:name ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:pattern \"^[A-Z]\" ] ;
+  sh:property [ sh:path ex:age ; sh:datatype xsd:integer ] ;
+  sh:property [ sh:path ex:status ; sh:in ( \"active\" \"retired\" 1 true ) ] ;
+  sh:property [ sh:path ex:employer ; sh:class ex:Company ] ;
+  sh:property [ sh:path ex:address ; sh:node ex:AddressShape ] .
+ex:PersonAgeShape a sh:NodeShape ; sh:targetClass ex:Person ;
+  sh:property [ sh:path ex:age ; sh:minCount 0 ; sh:maxCount 1 ] .
+ex:CompanyShape a sh:NodeShape ; sh:targetClass ex:Company ;
+  sh:property [ sh:path ex:name ; sh:minCount 1 ] .";
+
+// @lat: [[tests#Cypher#Shape index agrees with the shapes query]]
+#[test]
+fn shape_index_agrees_with_shapes_query() {
+    let store = Store::new().unwrap();
+    store
+        .load_from_slice(RdfFormat::Turtle, AGREEMENT_SHAPES.as_bytes())
+        .unwrap();
+
+    let from_index = oxilite::cypher::Schema::from_index(store.shape_index().unwrap());
+    let from_query = oxilite::cypher::Schema::from_output(
+        store
+            .query_output(
+                oxilite_cypher::schema_query(),
+                &oxilite_core::QueryOptions::default(),
+            )
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(!from_index.is_empty());
+    assert_eq!(from_index, from_query);
+}

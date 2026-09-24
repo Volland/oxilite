@@ -68,6 +68,15 @@ fn wrap<J: CoreJob + 'static>(
     }
 }
 
+#[cfg(feature = "datalog")]
+fn datalog_options(options: Option<String>) -> Result<oxilite_datalog::Options, JsError> {
+    let value = match options {
+        Some(o) => serde_json::from_str::<Value>(&o).map_err(js)?,
+        None => Value::Null,
+    };
+    oxilite_datalog::json::options_from_json(&value).map_err(js)
+}
+
 fn ok() -> oxilite_core::Result<Value> {
     Ok(json!({"kind": "ok"}))
 }
@@ -374,6 +383,50 @@ impl Engine {
         })
     }
 
+    #[cfg(feature = "datalog")]
+    /// A Datalog program over the same quads (see `oxilite-datalog`). `options` is JSON
+    /// (`oxilite_datalog::json`). The result is `{"kind": "datalog", "columns", "rows",
+    /// "rounds"}`.
+    ///
+    /// A program whose recursion is linear is two requests; a component that has to be
+    /// iterated adds one request per round, which `rounds` reports.
+    pub fn datalog(&self, program: &str, options: Option<String>) -> Result<Job, JsError> {
+        let options = datalog_options(options)?;
+        let job = oxilite_datalog::prepare(program, &self.caps, &options).map_err(js)?;
+        Ok(wrap(job, |r| {
+            Ok(oxilite_datalog::json::result_to_json(&r))
+        }))
+    }
+
+    #[cfg(feature = "datalog")]
+    /// Stores what a Datalog program derives as inferences, in the table OWL 2 RL
+    /// materialization uses. The result is `{"kind": "datalogMaterialize", "inferred",
+    /// "relations"}`.
+    pub fn datalog_materialize(
+        &self,
+        program: &str,
+        options: Option<String>,
+    ) -> Result<Job, JsError> {
+        let options = datalog_options(options)?;
+        let job =
+            oxilite_datalog::MaterializeJob::new(program, &self.caps, &options).map_err(js)?;
+        Ok(wrap(job, |s| {
+            Ok(oxilite_datalog::json::stats_to_json(&s))
+        }))
+    }
+
+    #[cfg(feature = "datalog")]
+    /// Describes how a Datalog program runs: its strata, the strategy chosen for each
+    /// recursive component, and the SQL.
+    pub fn explain_datalog(
+        &self,
+        program: &str,
+        options: Option<String>,
+    ) -> Result<String, JsError> {
+        let options = datalog_options(options)?;
+        oxilite_datalog::explain(program, &self.caps, &options).map_err(js)
+    }
+
     #[cfg(feature = "cypher-lite")]
     fn cypher_job(
         &self,
@@ -464,10 +517,8 @@ impl Engine {
         let schema = quads
             .iter()
             .any(|q| oxilite_core::reason::is_schema_quad(q.as_ref()));
-        if schema {
-            req.statements
-                .extend(oxilite_core::reason::closure_statements());
-        }
+        req.statements
+            .extend(ops::schema_refresh_for(quads.iter().map(Quad::as_ref)));
         if req.statements.len() > self.caps.max_statements {
             return Err(js(format!(
                 "the document needs {} statements, more than one D1 batch allows ({}); use bulkLoad",

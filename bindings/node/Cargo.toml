@@ -10,7 +10,7 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-oxilite = { workspace = true, features = ["rusqlite", "dylib", "reasonable", "cypher", "vc", "jsonld-json", "jsonld-network"] }
+oxilite = { workspace = true, features = ["rusqlite", "dylib", "reasonable", "cypher", "datalog", "datalog-json", "vc", "jsonld-json", "jsonld-network"] }
 oxilite-core = { workspace = true, features = ["serde"] }
 oxrdf.workspace = true
 oxrdfio.workspace = true

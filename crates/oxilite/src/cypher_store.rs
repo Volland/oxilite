@@ -7,7 +7,7 @@ use crate::AsyncStore;
 use oxilite_core::job::Job;
 use oxilite_core::{AsyncBackend, Step, SyncBackend};
 use oxilite_cypher::{
-    prepare_for, schema_query, CypherError, CypherOptions, CypherResult, CypherStep, Params,
+    prepare_for, CypherError, CypherOptions, CypherResult, CypherStep, Params,
     Schema, SqlCypherJob, StepInput,
 };
 
@@ -73,8 +73,8 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
 
     /// Reads the SHACL shapes of the dataset once, for [`CypherOptions::schema`].
     pub fn cypher_schema(&self) -> Result<std::sync::Arc<Schema>, CypherError> {
-        let out = self.evaluate(&schema_query(), &Default::default())?;
-        Ok(std::sync::Arc::new(Schema::from_output(out)?))
+        let index = self.shape_index().map_err(CypherError::Store)?;
+        Ok(std::sync::Arc::new(Schema::from_index(index)))
     }
 
     /// Describes how a Cypher statement runs: its SPARQL, the SQL it compiles to, and the
@@ -105,10 +105,8 @@ impl<B: AsyncBackend> AsyncStore<B> {
 
     /// Reads the SHACL shapes of the dataset once, for [`CypherOptions::schema`].
     pub async fn cypher_schema(&self) -> Result<std::sync::Arc<Schema>, CypherError> {
-        let out = self
-            .query_output(schema_query(), &Default::default())
-            .await?;
-        Ok(std::sync::Arc::new(Schema::from_output(out)?))
+        let index = self.shape_index().await.map_err(CypherError::Store)?;
+        Ok(std::sync::Arc::new(Schema::from_index(index)))
     }
 
     /// Runs a Cypher statement with parameters and options. A writing statement reads, then

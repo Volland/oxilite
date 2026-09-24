@@ -232,10 +232,8 @@ impl<B: AsyncBackend> AsyncStore<B> {
         let schema = quads
             .iter()
             .any(|q| oxilite_core::reason::is_schema_quad(q.as_ref()));
-        if schema {
-            req.statements
-                .extend(oxilite_core::reason::closure_statements());
-        }
+        req.statements
+            .extend(ops::schema_refresh_for(quads.iter().map(Quad::as_ref)));
         if req.statements.len() > self.caps().max_statements {
             return Err(Error::Other(format!(
                 "document needs {} statements, more than one atomic request allows ({}); use bulk_load",

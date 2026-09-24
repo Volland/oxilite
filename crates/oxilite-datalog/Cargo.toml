@@ -1,0 +1,29 @@
+[package]
+name = "oxilite-datalog"
+description = "Datalog over oxilite: recursive rules with stratified negation, compiled to SQL (native and Cloudflare D1)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/oxilite-datalog"
+readme = "README.md"
+authors.workspace = true
+keywords = ["datalog", "rules", "reasoning", "rdf", "sqlite"]
+categories = ["database-implementations", "parser-implementations"]
+rust-version.workspace = true
+
+[dependencies]
+oxilite-core.workspace = true
+oxrdf.workspace = true
+thiserror.workspace = true
+serde_json = { version = "1", optional = true }
+
+[features]
+default = []
+# JSON forms of options and results, for the JavaScript bindings.
+json = ["dep:serde_json", "oxilite-core/serde"]
+
+[dev-dependencies]
+oxrdf.workspace = true
+oxilite = { path = "../oxilite", features = ["rusqlite", "datalog"] }

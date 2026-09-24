@@ -66,6 +66,8 @@ Store JSON-LD documents verbatim in a keyed table and their RDF in a named graph
 
 Two opt-in crates: `oxilite-jsonld` (generic, on the `json-ld` crate) and `oxilite-vc` (credentials profile, on `ssi-vc` and `ssi-json-ld`). Done when the offline W3C `toRdf` tests and the VC fixtures pass on rusqlite, dylib and D1.
 
+Status: done. The `toRdf` suite and the VC fixtures pass on bundled SQLite, the system `libsqlite3` and the D1 sidecar. Change archived as `2026-09-24-jsonld-vc-storage`.
+
 Status: done. 450 W3C `toRdf` tests pass (4 allow-listed `json-ld` 0.21 limitations, 13 out of scope); the specification scenarios pass on bundled SQLite, the system `libsqlite3`, the D1 code path and Miniflare D1; `@oxilite/node` and `@oxilite/d1` expose `jsonld()` and `credentials()`.
 
 ## M7 Cypher and property graphs
@@ -75,3 +77,21 @@ openCypher reads and writes over the RDF store, with OWL-aware matching and SHAC
 Scope: [[architecture#Property graph frontend]] and decisions D13–D17. Done when at least 80% of the read-only openCypher TCK scenarios pass (the rest allow-listed), and the specification scenarios pass on rusqlite, dylib and D1.
 
 Status: done. 3733 of 3880 TCK scenarios pass (96.2%; read-only 96.4%, temporal 100%), with the rest in `crates/oxilite-cypher/tck-allowlist.txt`. The specification scenarios pass on bundled SQLite, the system `libsqlite3`, the D1 code path and Miniflare D1; `@oxilite/node` and `@oxilite/d1` expose `cypher()`.
+
+## Schema registry
+
+Ontologies and SHACL shapes graphs registered by role, scoped reasoning, schema-graph hiding and a compiled shape index. Change: `ontology-shape-registry`.
+
+`schema_graphs` labels a graph without moving its triples; the TBox closure reads the active ontology graphs, `shapes_index` / `shapes_in` compile the registered shapes graphs, and `QueryOptions::include_schema_graphs` keeps axioms out of queries over the data. Cypher reads its schema from the index instead of a SPARQL query per writing statement, and rudof can be driven by shapes held in the store. `owl:imports` resolution, shape derivation, validate-on-write for SPARQL UPDATE, the CLI and the bindings are out of scope.
+
+Done when a store that registers nothing behaves exactly as before, the index agrees with the shapes query, and validation from stored shapes equals validation from text.
+
+Status: done. The registry, the scoped closure, schema-graph hiding and the compiled shape index are in the core; Cypher reads `shapes_index` and `oxilite-validate` exposes `shacl_schema_from_store` / `validate_shacl_stored`. Change archived as `2026-09-24-ontology-shape-registry`.
+
+Status: done. The registry, scoped reasoning, hiding and the shape index pass on bundled SQLite, the system `libsqlite3` and the D1 code path; the Cypher suite (including the SHACL write guards on every engine) and the SHACL / ShEx suites are unchanged.
+
+## M8 Datalog
+
+Rules as a first-class artefact: an RDF-native Datalog dialect with stratified negation, constraints and aggregation, compiled to one SQL statement, plus materialization into the inference store. See [[architecture#Datalog frontend]].
+
+Status: done. Delivered: the language and its checks; non-recursive and linear-recursive compilation; mutual recursion as a tagged member; non-linear recursion iterated in `datalog_work`; stratified negation as `NOT EXISTS`; the SPARQL constraint sublanguage over the term encoding; aggregation restricted to results with an inline term id; `datalog_materialize` into `quads_inf`; an `oxilite datalog` subcommand; and the dialect in the WebAssembly core and both JavaScript packages behind an off-by-default feature. Recursion agrees with the equivalent SPARQL property path, and non-linear recursion with its linear formulation — the two oracles the tests use. D1 limits are checked against `Capabilities::d1()` without a binding. Change archived as `2026-09-24-datalog-dialect`.

@@ -228,6 +228,10 @@ pub struct Capabilities {
     pub int64_as_text: bool,
     /// Maximum number of terms in one compound SELECT (`UNION ALL` chain); D1 allows 5.
     pub max_compound_select: usize,
+    /// A recursive CTE may have a compound recursive term (SQLite 3.34.0, 2020-12-01). A
+    /// backend whose version cannot be established MUST leave this false: mutual recursion
+    /// then takes a strategy that does not need it, instead of emitting SQL that would fail.
+    pub compound_recursive_cte: bool,
     /// Name of the backend, for `explain()`.
     pub name: String,
 }
@@ -248,6 +252,8 @@ impl Capabilities {
             interactive_transactions: true,
             int64_as_text: false,
             max_compound_select: 500,
+            // rusqlite bundles a current SQLite, and a dlopen'ed library is probed on open.
+            compound_recursive_cte: true,
             name: "sqlite".into(),
         }
     }
@@ -261,6 +267,8 @@ impl Capabilities {
             interactive_transactions: false,
             int64_as_text: true,
             max_compound_select: 5,
+            // D1's SQLite version is not ours to assume.
+            compound_recursive_cte: false,
             name: "d1".into(),
         }
     }

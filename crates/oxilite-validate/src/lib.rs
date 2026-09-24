@@ -17,6 +17,8 @@ pub use shacl::validator::report::ValidationReport;
 pub use shacl::validator::ShaclValidationMode;
 pub use shex_ast::shapemap::result_shape_map::ResultShapeMap;
 
+use oxilite::model::{GraphName, GraphNameRef};
+use oxilite::schema::SchemaRole;
 use oxilite::store::Store;
 use oxilite_core::SyncBackend;
 use rudof_iri::IriS;
@@ -48,6 +50,10 @@ pub enum Error {
         "the subgraph needed for validation has more than {limit} triples ({found} found so far); raise the limit or validate natively"
     )]
     TooLarge { limit: usize, found: usize },
+    #[error("no SHACL shapes graph is registered; name one explicitly or register it")]
+    NoShapesGraph,
+    #[error("{0} SHACL shapes graphs are registered ({1}); name the one to use")]
+    AmbiguousShapesGraph(usize, String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -60,6 +66,55 @@ pub fn shacl_schema(shapes: &str, format: &RDFFormat, base: Option<&str>) -> Res
         .parse()
         .map_err(|e| Error::Shapes(e.to_string()))?;
     IRSchema::try_from(ast).map_err(|e| Error::Shapes(e.to_string()))
+}
+
+/// Compiles the SHACL shapes held in the store itself.
+///
+/// With `graph`, that graph's triples are the shapes graph. Without one, the registry decides:
+/// exactly one graph registered as SHACL shapes is used, and anything else is an error rather
+/// than a guess. The shapes are serialized and handed to rudof's own parser, so a stored
+/// shapes graph and a shapes file compile identically.
+pub fn shacl_schema_from_store<B: SyncBackend + Send + Sync + 'static>(
+    store: &Store<B>,
+    graph: Option<GraphNameRef<'_>>,
+) -> Result<IRSchema> {
+    let graph = match graph {
+        Some(g) => g.into_owned(),
+        None => {
+            let registered: Vec<GraphName> = store
+                .schema_graphs()?
+                .into_iter()
+                .filter(|g| g.role == SchemaRole::Shacl)
+                .map(|g| g.graph)
+                .collect();
+            match registered.len() {
+                0 => return Err(Error::NoShapesGraph),
+                1 => registered.into_iter().next().expect("one graph"),
+                n => {
+                    let names: Vec<String> = registered.iter().map(ToString::to_string).collect();
+                    return Err(Error::AmbiguousShapesGraph(n, names.join(", ")));
+                }
+            }
+        }
+    };
+    let turtle = store.dump_graph_to_writer(
+        graph.as_ref(),
+        oxilite::io::RdfFormat::NTriples,
+        Vec::new(),
+    )?;
+    let turtle = String::from_utf8(turtle)
+        .map_err(|e| Error::Shapes(format!("shapes graph is not valid UTF-8: {e}")))?;
+    shacl_schema(&turtle, &RDFFormat::NTriples, None)
+}
+
+/// Validates a store against the shapes it holds (see [`shacl_schema_from_store`]).
+pub fn validate_shacl_stored<B: SyncBackend + Send + Sync + 'static>(
+    store: &Store<B>,
+    shapes_graph: Option<GraphNameRef<'_>>,
+    mode: &ShaclValidationMode,
+) -> Result<ValidationReport> {
+    let schema = shacl_schema_from_store(store, shapes_graph)?;
+    validate_shacl_graph(StoreGraph::new(store.clone()), &schema, mode)
 }
 
 /// A SHACL processor over any rudof graph (a store, or a prefetched in-memory graph).

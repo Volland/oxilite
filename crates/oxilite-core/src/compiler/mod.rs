@@ -25,7 +25,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Write;
 
 /// Per-query options.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(default, rename_all = "camelCase"))]
 pub struct QueryOptions {
@@ -42,10 +42,30 @@ pub struct QueryOptions {
     pub reasoning: crate::reason::Reasoning,
     /// Also match materialized inferences (`quads_inf`, see `materialize()`).
     pub include_inferred: bool,
+    /// Match triples of the registered schema graphs (ontologies, shapes; see
+    /// `oxilite_core::registry`). Default `true`: the dataset is the dataset. Set to `false`
+    /// to query the data without the axioms and shapes that describe it.
+    pub include_schema_graphs: bool,
     /// Value types known for variables (e.g. from a schema): comparisons on them compile to
     /// one typed comparison instead of a comparison per possible type. A value of another
     /// type then compares as unknown (false in a filter).
     pub var_types: BTreeMap<String, ValueType>,
+}
+
+impl Default for QueryOptions {
+    fn default() -> Self {
+        Self {
+            union_default_graph: false,
+            sqlite_planner: false,
+            default_graph: None,
+            named_graphs: None,
+            reasoning: crate::reason::Reasoning::default(),
+            include_inferred: false,
+            // The dataset is the dataset: schema graphs are matched unless asked otherwise.
+            include_schema_graphs: true,
+            var_types: BTreeMap::new(),
+        }
+    }
 }
 
 /// A static value type for [`QueryOptions::var_types`].
@@ -1066,6 +1086,7 @@ impl<'a> Compiler<'a> {
         Entailment {
             reasoning: self.options.reasoning,
             inferred: self.options.include_inferred,
+            hide_schema: !self.options.include_schema_graphs,
             transitive: &self.stats.transitive,
             max_compound: self.caps.max_compound_select,
         }
@@ -1110,7 +1131,7 @@ impl<'a> Compiler<'a> {
                 merge.as_ref().unwrap_or(&GraphFilter::Keep),
             )
         } else {
-            "quads".into()
+            ent.base()
         };
         b.from.push(FromItem {
             join: if b.from.is_empty() { Join::First } else { join },

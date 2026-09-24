@@ -1,7 +1,8 @@
 //! SHACL shapes as the property-graph schema, and the schema procedures.
 //!
-//! When enabled, the shapes stored in the dataset (any graph) are read once per writing
-//! statement. Property shapes with `sh:maxCount 1` make a property scalar when read; every
+//! When enabled, the shapes stored in the dataset are read once per writing statement from
+//! the compiled shape index (`oxilite_core::shapes`), which costs one request and no SPARQL
+//! evaluation; the registered shapes graphs decide which graphs it covers. Property shapes with `sh:maxCount 1` make a property scalar when read; every
 //! node a statement creates or changes is checked against the datatype, cardinality, `sh:in`
 //! and `sh:pattern` constraints of the shapes targeting its labels, before the write batch is
 //! sent — a violation aborts the statement. Complete SHACL and ShEx validation stays with
@@ -14,6 +15,8 @@ use crate::error::{CypherError, Result};
 use crate::lower::Lowerer;
 use crate::vocab::Vocabulary;
 use oxilite_core::query::QueryOutput;
+use oxilite_core::shapes::ShapeIndex;
+use oxilite_core::{Capabilities, Request};
 use oxrdf::{NamedNode, NamedOrBlankNode, Term};
 use spargebra::algebra::GraphPattern;
 use spargebra::SparqlParser;
@@ -21,7 +24,7 @@ use std::collections::BTreeMap;
 
 const SH: &str = "http://www.w3.org/ns/shacl#";
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 struct PropertyShape {
     datatype: Option<NamedNode>,
     min: Option<i64>,
@@ -33,12 +36,18 @@ struct PropertyShape {
 }
 
 /// Property shapes by target class and path.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Shapes {
     by_class: BTreeMap<NamedNode, BTreeMap<NamedNode, PropertyShape>>,
 }
 
-/// The SPARQL query reading the SHACL shapes of the dataset (see [`Shapes::from_output`]).
+/// The request reading the compiled shape index (see [`Shapes::from_index`]).
+pub fn schema_request(caps: &Capabilities) -> Request {
+    ShapeIndex::load_request(caps)
+}
+
+/// The SPARQL query that reads the same shapes by evaluation instead of from the index. Kept
+/// as the reference the index is checked against (see the agreement test).
 pub fn schema_query() -> spargebra::Query {
     let body = format!(
         "?shape <{SH}targetClass> ?target ; <{SH}property> ?ps . ?ps <{SH}path> ?path . \
@@ -55,6 +64,39 @@ pub fn schema_query() -> spargebra::Query {
 }
 
 impl Shapes {
+    /// Builds the summary from the compiled shape index.
+    pub fn from_index(index: ShapeIndex) -> Self {
+        let mut me = Self::default();
+        for (target, paths) in index.by_class {
+            let entry = me.by_class.entry(target).or_default();
+            for (path, shape) in paths {
+                entry.insert(
+                    path,
+                    PropertyShape {
+                        datatype: shape.datatype,
+                        min: shape.min,
+                        max: shape.max,
+                        values_in: shape.values_in,
+                        pattern: shape.pattern,
+                        relationship: shape.relationship,
+                    },
+                );
+            }
+        }
+        me.sort_values();
+        me
+    }
+
+    /// `sh:in` is a set: its order carries no meaning and must not depend on where the shapes
+    /// were read from (the index or the query).
+    fn sort_values(&mut self) {
+        for paths in self.by_class.values_mut() {
+            for shape in paths.values_mut() {
+                shape.values_in.sort_by_key(ToString::to_string);
+            }
+        }
+    }
+
     /// Builds the summary from the output of [`schema_query`].
     pub fn from_output(out: QueryOutput) -> Result<Self> {
         let QueryOutput::Solutions { variables, rows } = out else {
@@ -100,6 +142,7 @@ impl Shapes {
                 }
             }
         }
+        me.sort_values();
         Ok(me)
     }
 

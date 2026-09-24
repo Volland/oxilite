@@ -364,6 +364,53 @@ export interface CypherResult {
   stats: CypherStats;
 }
 
+/** Options of the Datalog frontend (see `oxilite_datalog::json`). */
+export interface DatalogOptions {
+  /** Match every graph rather than only the default graph. */
+  useDefaultGraphAsUnion?: boolean;
+  /** Also match materialized inferences. */
+  includeInferred?: boolean;
+  /** Rounds a component evaluated by iteration may take (default 100). */
+  maxIterations?: number;
+}
+
+/** What the native side returns for a Datalog program. */
+export interface DatalogOutput {
+  kind: "datalog";
+  columns: string[];
+  rows: (TermJson | null)[][];
+  /** Rounds each iterated component took; empty when nothing had to be iterated. */
+  rounds: number[];
+}
+
+/** The solutions of a Datalog program, as RDF/JS terms. */
+export interface DatalogResult {
+  columns: string[];
+  rows: (Term | null)[][];
+  /** Rows as objects keyed by the goal's variables. */
+  records: Record<string, Term | null>[];
+  rounds: number[];
+}
+
+/** What a materialization did. */
+export interface DatalogMaterializeResult {
+  kind: "datalogMaterialize";
+  /** Triples in the inference table afterwards. */
+  inferred: number;
+  /** Relations whose conclusions were stored. */
+  relations: number;
+}
+
+export function datalogResult(out: DatalogOutput): DatalogResult {
+  const rows = out.rows.map((row) => row.map((c) => (c === null ? null : fromJson(c))));
+  return {
+    columns: out.columns,
+    rows,
+    records: rows.map((row) => Object.fromEntries(out.columns.map((c, i) => [c, row[i] ?? null]))),
+    rounds: out.rounds,
+  };
+}
+
 /** Options of the Cypher frontend (see `oxilite_cypher::json`). */
 export interface CypherOptions {
   /** Namespace of labels, relationship types and keys without a prefix (default `urn:oxilite:pg:`). */

@@ -135,7 +135,7 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
         self.inner.backend.capabilities()
     }
 
-    fn run<J: oxilite_core::Job>(&self, job: J) -> Result<J::Output> {
+    pub(crate) fn run<J: oxilite_core::Job>(&self, job: J) -> Result<J::Output> {
         run_sync(&*self.inner.backend, job)
     }
 

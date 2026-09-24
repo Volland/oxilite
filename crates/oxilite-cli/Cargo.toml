@@ -19,7 +19,7 @@ name = "oxilite"
 path = "src/main.rs"
 
 [dependencies]
-oxilite = { workspace = true, features = ["rusqlite", "dylib"] }
+oxilite = { workspace = true, features = ["rusqlite", "dylib", "datalog"] }
 oxilite-core = { workspace = true, features = ["serde"] }
 oxrdf.workspace = true
 oxrdfio.workspace = true

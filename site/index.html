@@ -22,6 +22,7 @@
         <a href="#features" class="hide-sm">Features</a>
         <a href="#start" class="hide-sm">Get started</a>
         <a href="#d1" class="hide-sm">Cloudflare D1</a>
+        <a href="#datalog" class="hide-sm">Datalog</a>
         <a href="#credentials" class="hide-sm">Credentials</a>
         <a href="articles/">Articles</a>
         <a href="https://github.com/Volland/oxilite">GitHub</a>
@@ -161,11 +162,45 @@ oxilite serve   -l data.sqlite -b 127.0.0.1:7879     <span class="c"># /query, /
               <tr><td>RDFS / OWL QL</td><td>Per-query entailment by rewriting against a materialized TBox closure. Queries stay single statements.</td></tr>
               <tr><td>OWL 2 RL</td><td><code>materialize()</code> with SQL fixpoint rules on every backend, or natively with <em>reasonable</em>.</td></tr>
               <tr><td>SHACL / ShEx</td><td>rudof validators, unchanged, in <code>oxilite-validate</code>. Results match rudof's in-memory graph.</td></tr>
+              <tr><td>Your own rules</td><td>Datalog with stratified negation, compiled to one SQL statement. <code>datalog_materialize()</code> stores what it derives beside the OWL inferences. <a href="#datalog">See below</a>.</td></tr>
               <tr><td>Full-text search</td><td>FTS5 behind <code>oxl:textMatch</code>, on D1 too.</td></tr>
               <tr><td>JSON-LD / Verifiable Credentials</td><td>Documents kept byte for byte, RDF in a named graph each, via <em>json-ld</em> and <em>ssi-vc</em> in <code>oxilite-jsonld</code> and <code>oxilite-vc</code>.</td></tr>
             </tbody>
           </table>
         </div>
+      </div>
+    </section>
+    <section id="datalog">
+      <div class="wrap">
+        <h2>Rules that recurse<span class="dot">.</span></h2>
+        <p class="sub">SPARQL stops at property paths: one predicate, a fixed pattern, no way to filter part-way through. Datalog gives you recursion with a body &mdash; joins, constraints, negation &mdash; and it compiles to a single <code>WITH RECURSIVE</code> statement, so it is still one round trip on D1.</p>
+<pre><code><span class="c">// Cargo.toml: oxilite = { version = "0.2", features = ["datalog"] }</span>
+store.datalog(<span class="s">r#"
+  @prefix ex: &lt;http://example.org/&gt; .
+
+  ancestor(?x, ?y) :- ex:parent(?x, ?y).
+  ancestor(?x, ?z) :- ex:parent(?x, ?y), ancestor(?y, ?z).   <span class="c">// recursion</span>
+
+  adult(?x, ?y) :- ancestor(?x, ?y), ex:age(?y, ?a), ?a &gt;= 18.
+  orphan(?x)    :- ex:Person(?x), not ancestor(_, ?x).       <span class="c">// stratified negation</span>
+  lines(?x, COUNT(?y)) :- ancestor(?x, ?y).                  <span class="c">// aggregation</span>
+
+  ?- adult(?x, ?y).
+"#</span>)?;</code></pre>
+        <p style="margin-top:20px">An IRI with two arguments is a predicate, so <code>ex:parent(?x, ?y)</code> <em>is</em> the triple pattern <code>?x ex:parent ?y</code>; with one it is a class, so <code>ex:Person(?x)</code> is <code>?x rdf:type ex:Person</code>. Constraints are the SPARQL expression language, pushed into the join rather than applied to its rows.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>What SQLite allows</th><th>What that means for a rule</th></tr></thead>
+            <tbody>
+              <tr><td>One self-reference per recursive term</td><td>Rules must be linear to fit one statement. A non-linear rule still runs: it is iterated to a fixpoint in a work table, one request per round, and the result says how many it took.</td></tr>
+              <tr><td>No self-reference under <code>NOT EXISTS</code></td><td>Negation must be stratified. An unstratified program is rejected before any SQL exists, with the cycle named.</td></tr>
+              <tr><td>No aggregate in a recursive term</td><td>Aggregation must be stratified too.</td></tr>
+              <tr><td>Compound recursive terms (SQLite 3.34+)</td><td>Mutual recursion becomes one member with a discriminant column &mdash; still one statement.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="margin-top:20px">SQLite&rsquo;s restrictions <em>are</em> Datalog&rsquo;s classical safety conditions, so the compiler reports them as rule diagnostics instead of working around them. <code>explain_datalog()</code> shows the strata, the strategy picked for each recursive component, and the SQL.</p>
+        <p>Available from Rust, from the CLI (<code>oxilite datalog -l db.sqlite -f rules.dl</code>), and from JavaScript &mdash; <code>@oxilite/node</code> and <code>@oxilite/d1</code> both return RDF/JS terms. In the WebAssembly core it is an opt-in feature (~0.2&nbsp;MB), so a Worker that does not use rules does not carry it.</p>
       </div>
     </section>
     <section id="credentials" class="band-black">

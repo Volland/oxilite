@@ -2905,6 +2905,7 @@ dependencies = [
  "oxilite-core",
  "oxilite-cypher",
  "oxilite-d1",
+ "oxilite-datalog",
  "oxilite-dylib",
  "oxilite-jsonld",
  "oxilite-reason",
@@ -3017,6 +3018,17 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "worker",
+]
+
+[[package]]
+name = "oxilite-datalog"
+version = "0.2.2"
+dependencies = [
+ "oxilite",
+ "oxilite-core",
+ "oxrdf",
+ "serde_json",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -3133,6 +3145,7 @@ version = "0.2.2"
 dependencies = [
  "oxilite-core",
  "oxilite-cypher",
+ "oxilite-datalog",
  "oxilite-jsonld",
  "oxilite-vc",
  "oxrdf",

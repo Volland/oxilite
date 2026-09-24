@@ -23,6 +23,10 @@ d1 = ["dep:oxilite-d1"]
 reasonable = ["dep:oxilite-reason"]
 # openCypher over the property-graph view of the dataset.
 cypher = ["dep:oxilite-cypher"]
+# Datalog over the same data: recursive rules with stratified negation.
+datalog = ["dep:oxilite-datalog"]
+# JSON forms of Datalog options and results (JavaScript bindings).
+datalog-json = ["datalog", "oxilite-datalog/json"]
 # JSON-LD documents: verbatim storage, one named graph per document.
 jsonld = ["dep:oxilite-jsonld"]
 # Verifiable Credentials on top of `jsonld` (pulls in the `ssi` crates).
@@ -39,6 +43,7 @@ oxilite-dylib = { workspace = true, optional = true }
 oxilite-d1 = { workspace = true, optional = true }
 oxilite-reason = { workspace = true, optional = true }
 oxilite-cypher = { workspace = true, optional = true }
+oxilite-datalog = { workspace = true, optional = true }
 oxilite-jsonld = { workspace = true, optional = true }
 oxilite-vc = { workspace = true, optional = true }
 oxrdf.workspace = true

@@ -82,6 +82,36 @@ pub fn optimize_job(caps: &Capabilities) -> impl Job<Output = Stats> {
     }
 }
 
+/// The statements that rebuild the derived schema caches inside a write's own request:
+/// `tbox_closure` when a schema axiom changed, the shape index when a SHACL triple did.
+///
+/// Every driver that assembles a write request itself (the async store, the JavaScript
+/// bindings, the Cypher writer) appends this, so the caches cannot be refreshed on one backend
+/// and forgotten on another.
+pub fn schema_refresh_for<'a>(quads: impl IntoIterator<Item = QuadRef<'a>>) -> Vec<Statement> {
+    let mut closure = false;
+    let mut shapes = false;
+    for q in quads {
+        closure |= crate::reason::is_schema_quad(q);
+        shapes |= crate::shapes::is_shape_quad(q);
+        if closure && shapes {
+            break;
+        }
+    }
+    schema_refresh(closure, shapes)
+}
+
+fn schema_refresh(closure: bool, shapes: bool) -> Vec<Statement> {
+    let mut s = Vec::new();
+    if closure {
+        s.extend(crate::reason::closure_statements());
+    }
+    if shapes {
+        s.extend(crate::shapes::refresh_statements());
+    }
+    s
+}
+
 fn count_tail(r: &Response, n: usize) -> u64 {
     r.iter().rev().take(n).map(|rs| rs.changes).sum()
 }
@@ -92,14 +122,12 @@ pub fn insert_job<'a>(
     caps: &Capabilities,
 ) -> OneShot<u64> {
     let quads: Vec<QuadRef<'a>> = quads.into_iter().collect();
-    let schema = quads.iter().any(|q| crate::reason::is_schema_quad(*q));
+    let refresh = schema_refresh_for(quads.iter().copied());
     let enc = EncodedQuads::new(quads);
     let quad_stmts = crate::writer::quad_insert_statements(&enc.quads, caps).len();
     let mut stmts = enc.insert_statements(caps);
     let end = stmts.len();
-    if schema {
-        stmts.extend(crate::reason::closure_statements());
-    }
+    stmts.extend(refresh);
     OneShot::new(Request::atomic(stmts), move |mut r| {
         r.truncate(end);
         Ok(count_tail(&r, quad_stmts))
@@ -120,13 +148,11 @@ pub fn remove_job<'a>(
     caps: &Capabilities,
 ) -> OneShot<u64> {
     let quads: Vec<QuadRef<'a>> = quads.into_iter().collect();
-    let schema = quads.iter().any(|q| crate::reason::is_schema_quad(*q));
+    let refresh = schema_refresh_for(quads.iter().copied());
     let enc = EncodedQuads::new(quads);
     let mut stmts = enc.delete_statements(caps);
     let end = stmts.len();
-    if schema {
-        stmts.extend(crate::reason::closure_statements());
-    }
+    stmts.extend(refresh);
     OneShot::new(Request::atomic(stmts), move |r| {
         Ok(r.iter().take(end).map(|rs| rs.changes).sum())
     })
@@ -389,7 +415,8 @@ pub fn remove_named_graph_job(g: NamedOrBlankNodeRef<'_>) -> OneShot<bool> {
         Statement::new(format!("DELETE FROM quads WHERE g = {id}")),
         Statement::new(format!("DELETE FROM graphs WHERE id = {id}")),
     ];
-    stmts.extend(crate::reason::closure_statements());
+    stmts.extend(crate::registry::unregister_statements(id));
+    stmts.extend(schema_refresh(true, true));
     OneShot::new(Request::atomic(stmts), |r| {
         Ok(r.iter().take(2).any(|rs| rs.changes > 0))
     })
@@ -399,7 +426,7 @@ pub fn remove_named_graph_job(g: NamedOrBlankNodeRef<'_>) -> OneShot<bool> {
 pub fn clear_graph_job(g: GraphNameRef<'_>) -> OneShot<()> {
     let id = graph_id(g);
     let mut stmts = vec![Statement::new(format!("DELETE FROM quads WHERE g = {id}"))];
-    stmts.extend(crate::reason::closure_statements());
+    stmts.extend(schema_refresh(true, true));
     OneShot::new(Request::atomic(stmts), |_| Ok(()))
 }
 
@@ -410,12 +437,138 @@ pub fn clear_job() -> OneShot<()> {
             "DELETE FROM quads".into(),
             "DELETE FROM quads_inf".into(),
             "DELETE FROM tbox_closure".into(),
+            "DELETE FROM shapes_index".into(),
+            "DELETE FROM shapes_in".into(),
+            "DELETE FROM schema_graphs".into(),
             "DELETE FROM graphs".into(),
             "DELETE FROM triple_terms".into(),
             "DELETE FROM terms".into(),
         ]),
         |_| Ok(()),
     )
+}
+
+/// Registers a schema graph, then rebuilds what its role feeds.
+///
+/// A registration changes the *scope* of the closure and the shape index — not just their
+/// content — so both are rebuilt in the same atomic request as the registration itself.
+///
+/// A named graph may be registered before it holds anything, so the registration creates it
+/// (as `insert_named_graph` would): otherwise the registry would name a graph the term
+/// dictionary has never heard of.
+pub fn register_schema_graph_job(
+    entry: &crate::registry::SchemaGraph,
+    graph: GraphNameRef<'_>,
+    caps: &Capabilities,
+) -> OneShot<()> {
+    let mut stmts = Vec::new();
+    let named: Option<NamedOrBlankNodeRef<'_>> = match graph {
+        GraphNameRef::NamedNode(n) => Some(n.into()),
+        GraphNameRef::BlankNode(b) => Some(b.into()),
+        GraphNameRef::DefaultGraph => None,
+    };
+    if let Some(g) = named {
+        let mut rows = EncodedRows::default();
+        let id = rows.subject(g);
+        stmts.extend(term_statements(&rows, caps));
+        stmts.push(Statement::new(format!(
+            "INSERT OR IGNORE INTO graphs(id) VALUES ({id})"
+        )));
+    }
+    stmts.extend(crate::registry::register_statements(entry));
+    stmts.extend(schema_refresh(true, true));
+    OneShot::new(Request::atomic(stmts), |_| Ok(()))
+}
+
+/// Removes a registration, keeping the graph's triples.
+pub fn unregister_schema_graph_job(graph: i64) -> OneShot<bool> {
+    let mut stmts = crate::registry::unregister_statements(graph);
+    stmts.extend(schema_refresh(true, true));
+    OneShot::new(Request::atomic(stmts), |r| Ok(scalar_changes(&r, 1) > 0))
+}
+
+/// Activates or deactivates a registration.
+pub fn set_schema_graph_active_job(graph: i64, active: bool) -> OneShot<bool> {
+    let mut stmts = crate::registry::set_active_statements(graph, active);
+    stmts.extend(schema_refresh(true, true));
+    OneShot::new(Request::atomic(stmts), |r| Ok(scalar_changes(&r, 1) > 0))
+}
+
+/// Removes a registration together with every quad of its graph.
+pub fn drop_schema_graph_job(graph: i64) -> OneShot<u64> {
+    let mut stmts = crate::registry::drop_statements(graph);
+    stmts.extend(schema_refresh(true, true));
+    OneShot::new(Request::atomic(stmts), |r| Ok(scalar_changes(&r, 1)))
+}
+
+/// Reads the registry, with each row's graph name resolved.
+pub fn schema_graphs_job(
+    caps: &Capabilities,
+) -> impl Job<Output = Vec<(crate::registry::SchemaGraph, GraphName)>> {
+    struct Registry {
+        request: Option<Request>,
+        caps: Capabilities,
+        resolver: TermResolver,
+        rows: Vec<crate::registry::SchemaGraph>,
+        started: bool,
+    }
+    impl Job for Registry {
+        type Output = Vec<(crate::registry::SchemaGraph, GraphName)>;
+        fn step(&mut self, response: Option<Response>) -> Result<Step<Self::Output>> {
+            if let Some(r) = self.request.take() {
+                return Ok(Step::Execute(r));
+            }
+            let response = response.unwrap_or_default();
+            if self.started {
+                self.resolver.absorb(response)?;
+            } else {
+                self.started = true;
+                self.rows = crate::registry::from_response(&response)?;
+                for row in &self.rows {
+                    if row.graph != DEFAULT_GRAPH_ID {
+                        self.resolver.want(row.graph);
+                    }
+                }
+            }
+            if let Some(r) = self.resolver.request(&self.caps) {
+                return Ok(Step::Execute(r));
+            }
+            std::mem::take(&mut self.rows)
+                .into_iter()
+                .map(|row| {
+                    let name = if row.graph == DEFAULT_GRAPH_ID {
+                        GraphName::DefaultGraph
+                    } else {
+                        crate::encoding::to_graph_name(
+                            row.graph,
+                            Some(self.resolver.get(row.graph)?),
+                        )?
+                    };
+                    Ok((row, name))
+                })
+                .collect::<Result<Vec<_>>>()
+                .map(Step::Done)
+        }
+    }
+    Registry {
+        request: Some(crate::registry::load_request(caps)),
+        caps: caps.clone(),
+        resolver: TermResolver::default(),
+        rows: Vec::new(),
+        started: false,
+    }
+}
+
+/// Reads the compiled shape index.
+pub fn shape_index_job(caps: &Capabilities) -> OneShot<crate::shapes::ShapeIndex> {
+    OneShot::new(crate::shapes::ShapeIndex::load_request(caps), |r| {
+        crate::shapes::ShapeIndex::from_response(&r)
+    })
+}
+
+/// Rows changed by the first `n` statements of a response.
+fn scalar_changes(r: &Response, n: usize) -> u64 {
+    r.iter().take(n).map(|rs| rs.changes).sum()
 }
 
 /// Helper used by drivers: encodes a term to its id without I/O.

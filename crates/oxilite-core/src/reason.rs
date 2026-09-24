@@ -193,6 +193,10 @@ pub(crate) fn non_literal(x: &str) -> String {
 /// Statements recomputing `tbox_closure` from the asserted quads (every graph).
 pub fn closure_statements() -> Vec<Statement> {
     let v = vocab();
+    // Only the active registered ontology graphs contribute axioms; while none is registered,
+    // this is every graph, which is what the closure did before the registry existed.
+    let ontology_quads = crate::registry::scoped_quads(crate::registry::SchemaRole::Ontology);
+    let quads = ontology_quads.as_str();
     let (c, p, s_, t) = (
         kind::CLASS,
         kind::PROPERTY,
@@ -200,12 +204,12 @@ pub fn closure_statements() -> Vec<Statement> {
         kind::TRANSITIVE,
     );
     let class_edges = format!(
-        "SELECT s AS a, o AS b FROM quads WHERE p = {sco} UNION SELECT s, o FROM quads WHERE p = {eqc} UNION SELECT o, s FROM quads WHERE p = {eqc}",
+        "SELECT s AS a, o AS b FROM {quads} WHERE p = {sco} UNION SELECT s, o FROM {quads} WHERE p = {eqc} UNION SELECT o, s FROM {quads} WHERE p = {eqc}",
         sco = v.sco,
         eqc = v.eqc
     );
     let prop_edges = format!(
-        "SELECT s AS a, o AS b FROM quads WHERE p = {spo} UNION SELECT s, o FROM quads WHERE p = {eqp} UNION SELECT o, s FROM quads WHERE p = {eqp}",
+        "SELECT s AS a, o AS b FROM {quads} WHERE p = {spo} UNION SELECT s, o FROM {quads} WHERE p = {eqp} UNION SELECT o, s FROM {quads} WHERE p = {eqp}",
         spo = v.spo,
         eqp = v.eqp
     );
@@ -218,8 +222,8 @@ pub fn closure_statements() -> Vec<Statement> {
     // OWL: property edges with a direction bit (1 = inverse), composed modulo 2.
     let owl = Statement::new(format!(
         "WITH RECURSIVE e(a, b, d) AS (SELECT a, b, 0 FROM ({prop_edges}) \
-           UNION SELECT s, o, 1 FROM quads WHERE p = {inv} UNION SELECT o, s, 1 FROM quads WHERE p = {inv} \
-           UNION SELECT s, s, 1 FROM quads WHERE p = {ty} AND o = {sym}), \
+           UNION SELECT s, o, 1 FROM {quads} WHERE p = {inv} UNION SELECT o, s, 1 FROM {quads} WHERE p = {inv} \
+           UNION SELECT s, s, 1 FROM {quads} WHERE p = {ty} AND o = {sym}), \
          c(a, b, d) AS (SELECT a, b, d FROM e UNION SELECT c.a, e.b, (c.d + e.d) % 2 FROM c JOIN e ON e.a = c.b) \
          INSERT OR IGNORE INTO tbox_closure(kind, sub, sup) SELECT {s_} + d, a, b FROM c WHERE d = 1 OR a <> b",
         inv = v.inv,
@@ -228,26 +232,26 @@ pub fn closure_statements() -> Vec<Statement> {
     ));
     // Classes a domain/range class is a subclass of (reflexive).
     let classes = format!(
-        "SELECT o AS a, o AS b FROM quads WHERE p IN ({dom}, {rng}) UNION SELECT sub, sup FROM tbox_closure WHERE kind = {c}",
+        "SELECT o AS a, o AS b FROM {quads} WHERE p IN ({dom}, {rng}) UNION SELECT sub, sup FROM tbox_closure WHERE kind = {c}",
         dom = v.dom,
         rng = v.rng
     );
     // Properties with (sub, sup) where sup is reflexive over properties having a domain/range.
     let subs = |k: i64| {
         format!(
-            "SELECT s AS a, s AS b FROM quads WHERE p IN ({dom}, {rng}) UNION SELECT sub, sup FROM tbox_closure WHERE kind = {k}",
+            "SELECT s AS a, s AS b FROM {quads} WHERE p IN ({dom}, {rng}) UNION SELECT sub, sup FROM tbox_closure WHERE kind = {k}",
             dom = v.dom,
             rng = v.rng
         )
     };
     let typed = |k: i64, props: &str, axiom: i64| {
         format!(
-            "SELECT {k}, pq.a, cd.b FROM ({props}) pq JOIN quads ax ON ax.p = {axiom} AND ax.s = pq.b JOIN ({classes}) cd ON cd.a = ax.o"
+            "SELECT {k}, pq.a, cd.b FROM ({props}) pq JOIN {quads} ax ON ax.p = {axiom} AND ax.s = pq.b JOIN ({classes}) cd ON cd.a = ax.o"
         )
     };
     let inverse_typed = |k: i64, axiom: i64| {
         format!(
-            "SELECT {k}, pq.sub, cd.b FROM tbox_closure pq JOIN quads ax ON ax.p = {axiom} AND ax.s = pq.sup JOIN ({classes}) cd ON cd.a = ax.o WHERE pq.kind = {inv}",
+            "SELECT {k}, pq.sub, cd.b FROM tbox_closure pq JOIN {quads} ax ON ax.p = {axiom} AND ax.s = pq.sup JOIN ({classes}) cd ON cd.a = ax.o WHERE pq.kind = {inv}",
             inv = kind::OWL_INVERSE
         )
     };
@@ -262,7 +266,7 @@ pub fn closure_statements() -> Vec<Statement> {
         closure(p, &prop_edges),
         owl,
         Statement::new(format!(
-            "INSERT OR IGNORE INTO tbox_closure(kind, sub, sup) SELECT {t}, s, s FROM quads WHERE p = {ty} AND o = {trans}",
+            "INSERT OR IGNORE INTO tbox_closure(kind, sub, sup) SELECT {t}, s, s FROM {quads} WHERE p = {ty} AND o = {trans}",
             ty = v.ty,
             trans = v.trans
         )),
@@ -305,6 +309,9 @@ pub struct Entailment<'a> {
     pub reasoning: Reasoning,
     /// Also read materialized inferences (`quads_inf`).
     pub inferred: bool,
+    /// Exclude every registered schema graph from the stored triples
+    /// (`QueryOptions::include_schema_graphs`).
+    pub hide_schema: bool,
     pub transitive: &'a BTreeSet<i64>,
     /// Maximum terms of a compound SELECT.
     pub max_compound: usize,
@@ -316,12 +323,24 @@ impl Entailment<'_> {
         self.reasoning != Reasoning::None || self.inferred
     }
 
-    /// The table of stored triples: asserted, plus materialized inferences on request.
-    pub fn base(&self) -> &'static str {
-        if self.inferred {
-            "(SELECT s, p, o, g FROM quads UNION ALL SELECT s, p, o, g FROM quads_inf)"
+    /// The table of stored triples: asserted, plus materialized inferences on request, minus
+    /// the registered schema graphs when they are hidden.
+    ///
+    /// Every quad source of the compiler goes through this or [`Self::source`], so hiding is
+    /// applied once and covers patterns, paths, `OPTIONAL` and `GRAPH ?g` alike. Inferences
+    /// are conclusions rather than schema, so they are never hidden.
+    pub fn base(&self) -> String {
+        let asserted = if self.hide_schema {
+            crate::registry::quads_without_schema_graphs()
         } else {
             "quads"
+        };
+        if self.inferred {
+            format!(
+                "(SELECT s, p, o, g FROM {asserted} UNION ALL SELECT s, p, o, g FROM quads_inf)"
+            )
+        } else {
+            asserted.to_string()
         }
     }
 

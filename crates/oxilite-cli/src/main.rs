@@ -92,6 +92,26 @@ enum Command {
         #[arg(long, short)]
         update: String,
     },
+    /// Runs a Datalog program: recursive rules with stratified negation.
+    ///
+    /// The program is read from `--program`, or from the file named by `--file`, or from
+    /// standard input when neither is given.
+    Datalog {
+        #[command(flatten)]
+        location: Location,
+        /// The program text.
+        #[arg(long, short, conflicts_with = "file")]
+        program: Option<String>,
+        /// A file holding the program.
+        #[arg(long, short)]
+        file: Option<String>,
+        /// Print the strata, the strategy per recursive component and the SQL, and run nothing.
+        #[arg(long)]
+        explain: bool,
+        /// Store what the program derives as inferences instead of returning its goal.
+        #[arg(long, conflicts_with = "explain")]
+        materialize: bool,
+    },
     /// Refreshes planner statistics and the reasoning closure.
     Optimize {
         #[command(flatten)]
@@ -168,8 +188,59 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             Ok(())
         }
         Command::Update { location, update } => Ok(Db::open(&location)?.update(&update, &[])?),
+        Command::Datalog {
+            location,
+            program,
+            file,
+            explain,
+            materialize,
+        } => {
+            let source = read_program(program, file)?;
+            let db = Db::open(&location)?;
+            if explain {
+                println!("{}", db.explain_datalog(&source)?);
+                return Ok(());
+            }
+            if materialize {
+                let stats = db.datalog_materialize(&source)?;
+                println!(
+                    "{} inferred triple(s) from {} relation(s)",
+                    stats.inferred, stats.relations
+                );
+                return Ok(());
+            }
+            let r = db.datalog(&source)?;
+            println!("{}", r.variables.join("\t"));
+            for row in &r.rows {
+                let line: Vec<String> = row
+                    .iter()
+                    .map(|c| c.as_ref().map(ToString::to_string).unwrap_or_default())
+                    .collect();
+                println!("{}", line.join("\t"));
+            }
+            Ok(())
+        }
         Command::Optimize { location } => Ok(Db::open(&location)?.optimize()?),
     }
+}
+
+/// A program given inline, in a file, or on standard input.
+fn read_program(
+    program: Option<String>,
+    file: Option<String>,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    if let Some(p) = program {
+        return Ok(p);
+    }
+    if let Some(f) = file {
+        return Ok(std::fs::read_to_string(f)?);
+    }
+    let mut buf = String::new();
+    std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf)?;
+    if buf.trim().is_empty() {
+        return Err("no program given: use --program, --file, or pipe one in".into());
+    }
+    Ok(buf)
 }
 
 fn parse_format(media: &str) -> Result<RdfFormat, String> {

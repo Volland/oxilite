@@ -183,3 +183,74 @@ fn bounded_prefetch_matches_full_validation() {
         }
     });
 }
+
+// ----- shapes held in the store -----
+
+/// Loads the shapes into `graph` of a store that already holds the data.
+fn store_with_shapes(graph: &str, register: bool) -> Store {
+    let s = store();
+    let body = SHAPES
+        .replace("@prefix sh: <http://www.w3.org/ns/shacl#> .", "")
+        .replace("@prefix ex: <http://example.com/> .", "");
+    s.load_from_slice(
+        RdfFormat::TriG,
+        format!(
+            "@prefix sh: <http://www.w3.org/ns/shacl#> . @prefix ex: <http://example.com/> . \
+             GRAPH <{graph}> {{ {body} }}"
+        )
+        .as_bytes(),
+    )
+    .unwrap();
+    if register {
+        register_shapes(&s, graph);
+    }
+    s
+}
+
+fn register_shapes(s: &Store, graph: &str) {
+    s.register_schema_graph(
+        oxilite::model::NamedNodeRef::new(graph).unwrap(),
+        oxilite::schema::SchemaRole::Shacl,
+        &oxilite::schema::Registration::new(),
+    )
+    .unwrap();
+}
+
+// @lat: [[tests#Validation#Shapes read from the store]]
+#[test]
+fn stored_shapes_give_the_same_report() {
+    let graph = "http://example.com/shapes";
+    let s = store_with_shapes(graph, true);
+    let from_text = validate_shacl(&s, SHAPES, &ShaclValidationMode::Native).unwrap();
+    let from_store =
+        oxilite_validate::validate_shacl_stored(&s, None, &ShaclValidationMode::Native).unwrap();
+    assert_eq!(focus_nodes(&from_store), focus_nodes(&from_text));
+    assert_eq!(from_store.conforms(), from_text.conforms());
+
+    // Naming the graph explicitly gives the same result.
+    let named = oxilite_validate::validate_shacl_stored(
+        &s,
+        Some(oxilite::model::NamedNodeRef::new(graph).unwrap().into()),
+        &ShaclValidationMode::Native,
+    )
+    .unwrap();
+    assert_eq!(focus_nodes(&named), focus_nodes(&from_text));
+}
+
+// @lat: [[tests#Validation#Stored shapes need an unambiguous graph]]
+#[test]
+fn stored_shapes_need_an_unambiguous_graph() {
+    // Nothing registered.
+    let s = store_with_shapes("http://example.com/shapes", false);
+    assert!(matches!(
+        oxilite_validate::validate_shacl_stored(&s, None, &ShaclValidationMode::Native),
+        Err(Error::NoShapesGraph)
+    ));
+
+    // Two registered shapes graphs: refuse to guess.
+    let s = store_with_shapes("http://example.com/shapes", true);
+    register_shapes(&s, "http://example.com/other");
+    let err = oxilite_validate::validate_shacl_stored(&s, None, &ShaclValidationMode::Native)
+        .expect_err("two shapes graphs must be ambiguous");
+    assert!(matches!(err, Error::AmbiguousShapesGraph(2, _)), "{err}");
+}

@@ -23,9 +23,12 @@ mod async_store;
 mod common;
 #[cfg(feature = "cypher")]
 mod cypher_store;
+#[cfg(feature = "datalog")]
+mod datalog_store;
 #[cfg(feature = "jsonld")]
 mod jsonld_store;
 mod partial;
+mod schema_store;
 pub mod store;
 #[cfg(feature = "vc")]
 mod vc_store;
@@ -35,6 +38,15 @@ pub use oxilite_core as core;
 pub use oxilite_core::{
     AsyncBackend, Capabilities, Error, QueryOptions, Result, StoreOptions, SyncBackend,
 };
+pub use schema_store::{RegisteredGraph, Registration};
+
+/// The schema registry: ontologies and shapes graphs declared as such, and the compiled shape
+/// index they feed.
+pub mod schema {
+    pub use crate::schema_store::{RegisteredGraph, Registration};
+    pub use oxilite_core::registry::{SchemaGraph, SchemaRole};
+    pub use oxilite_core::shapes::{PropertyShape, ShapeIndex};
+}
 
 /// The same `Store` as [`store::Store`] (blocking API).
 pub mod blocking {
@@ -69,6 +81,12 @@ pub mod sparql {
     pub mod results {
         pub use sparesults::*;
     }
+}
+
+/// Datalog over the dataset: recursive rules with stratified negation (`Store::datalog`).
+#[cfg(feature = "datalog")]
+pub mod datalog {
+    pub use oxilite_datalog::*;
 }
 
 /// openCypher over the property-graph view of the dataset (`Store::cypher`).
