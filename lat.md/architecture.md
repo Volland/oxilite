@@ -165,7 +165,7 @@ Loads a SQLite shared library from a path at runtime (`libloading`), binding onl
 
 Async backend over the D1 binding: `Atomic` requests become `db.batch()`, ids travel as TEXT because JavaScript numbers lose precision above 2^53, and statements stay under D1's size limits.
 
-`Capabilities::d1()` encodes the limits the compiler respects: SQL under 90 KB per statement, at most 50 statements per batch (bulk loads are chunked), at most 5 terms per compound SELECT (larger UNIONs nest), GLOB patterns under 50 bytes, no UDFs, and no interactive transactions (so no spareval fallback: queries that do not compile report `unsupported`). The Rust backend reads batch results through js-sys, because worker-rs types `meta.last_row_id` as `i64` and a 60-bit term id arrives as a JavaScript float. The schema ships as a migration from `oxilite_d1::migration_sql`.
+`Capabilities::d1()` encodes the limits the compiler respects: SQL under 90 KB per statement, at most 50 statements per batch (bulk loads are chunked), at most 5 terms per compound SELECT (larger UNIONs nest), GLOB patterns under 50 bytes, no UDFs, and no interactive transactions (so no spareval fallback: queries that do not compile report `unsupported`). The Rust backend reads batch results through js-sys, because worker-rs types `meta.last_row_id` as `i64` and a 60-bit term id arrives as a JavaScript float. The schema ships as a migration from `oxilite_d1::migration_sql`, and the store is opened with `open_existing` so no DDL runs per request. A release that adds a table therefore needs a new migration on D1, unlike the native backends where `create_schema` runs on every open: 0.3.0 added `schema_graphs`, `shapes_index`, `shapes_in` and `datalog_work`.
 
 ### JavaScript drivers
 
@@ -367,7 +367,7 @@ A Node.js package and a Cloudflare D1 package, both typed TypeScript, over the s
 
 `@oxilite/node` (napi-rs) wraps `blocking::Store` on rusqlite or a dlopen'ed library: `query`, `update`, `load`, `dump`, `add`/`delete`, `has`, `match`, `size`, `explain`, `optimize`, `backup`, returning RDF/JS-style term objects. `@oxilite/d1` runs the wasm core against a `D1Database` binding and exposes the same API asynchronously.
 
-`@oxilite/node` loads `oxilite.<platform>-<arch>.node` (then a local `oxilite.node` build) and fails with build instructions when no binary matches; Releases up to 0.2.2 are published with the darwin-arm64 binary only.
+`@oxilite/node` loads `oxilite.<platform>-<arch>.node` (then a local `oxilite.node` build) and fails with build instructions when no binary matches; Releases up to 0.3.0 are published with the darwin-arm64 binary only.
 
 Every published crate and npm package has its own README (absolute links and logo, so it renders on crates.io and npm) with install, examples, API and a shared table of the oxilite family; the website is https://oxilitedb.com, set as `homepage` everywhere, and each crate's `documentation` points to docs.rs.
 

@@ -23,6 +23,20 @@ npx oxilite-d1 schema > migrations/0001_oxilite.sql          # --no-graph-index 
 npx wrangler d1 migrations apply my-graph --remote
 ```
 
+> **Upgrading to 0.3.0 from 0.2.x:** 0.3.0 adds the `schema_graphs`, `shapes_index`,
+> `shapes_in` and `datalog_work` tables. A D1 store is opened with `open_existing`, so no
+> DDL runs per request and an existing database will report `no such table: schema_graphs`
+> until you apply a new migration. Regenerate and apply it:
+>
+> ```bash
+> npx wrangler d1 migrations create my-graph oxilite-0-3-0
+> npx oxilite-d1 schema > migrations/0002_oxilite-0-3-0.sql
+> npx wrangler d1 migrations apply my-graph --remote
+> ```
+>
+> Every statement is `CREATE TABLE IF NOT EXISTS`, so re-applying it is safe and your data
+> is untouched.
+
 ## 2. Query it from a Worker
 
 ```ts

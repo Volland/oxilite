@@ -3,6 +3,6 @@
   "private": true,
   "type": "module",
   "scripts": { "test": "node test.mjs" },
-  "dependencies": { "@oxilite/node": "0.2.2", "@oxilite/d1": "0.2.2" },
+  "dependencies": { "@oxilite/node": "0.3.0", "@oxilite/d1": "0.3.0" },
   "devDependencies": { "miniflare": "^4" }
 }
