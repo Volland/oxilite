@@ -30,7 +30,7 @@
       <span class="kicker">VS Code · Tooling · Reasoning · SHACL</span>
       <h1>oxilite studio: a workbench for knowledge graphs</h1>
       <p class="standfirst">Knowledge graphs are usually edited in one tool, queried in a second, validated in a third and reasoned over by a fourth, and none of them knows where a triple came from. oxilite studio puts the whole loop in the editor you already use: write Turtle, and the store, the reasoner and the validator follow you as you type.</p>
-      <p class="meta">A guide · Version 0.1 · The behaviour on this page is asserted by the studio server's tests (<a href="https://github.com/Volland/oxilite/tree/main/crates/oxilite-cli/src/studio"><code>crates/oxilite-cli/src/studio</code></a>) · Extension source: <a href="https://github.com/Volland/oxilite-studio">Volland/oxilite-studio</a></p>
+      <p class="meta">A guide · Version 0.1.1 · The behaviour on this page is asserted by the studio server's tests (<a href="https://github.com/Volland/oxilite/tree/main/crates/oxilite-cli/src/studio"><code>crates/oxilite-cli/src/studio</code></a>) · Extension source: <a href="https://github.com/Volland/oxilite-studio">Volland/oxilite-studio</a></p>
 
       <h2><span class="step">1</span>Install</h2>
       <p>oxilite studio is a VS Code extension. Search for <strong>oxilite studio</strong> in the Extensions view, or:</p>
@@ -41,54 +41,56 @@ cargo build --release -p oxilite-cli
 <span class="c"># VS Code setting:  "oxilite.server.path": "/path/to/oxilite/target/release/oxilite"</span></code></pre>
       <p>The same binary gives you <code>oxilite check</code> for CI and <code>oxilite mcp</code> for agents, both covered below.</p>
 
-      <h2><span class="step">2</span>Open a folder</h2>
-      <p>Open any folder with RDF in it. The studio loads every <code>.ttl</code>, <code>.nt</code>, <code>.nq</code>, <code>.trig</code>, <code>.n3</code>, <code>.rdf</code> and <code>.owl</code> file into a <strong>Project store</strong>, a scratch SQLite database in <code>.oxilite/studio.sqlite</code> that it keeps out of git for you. Each file gets its own named graph, and queries see their union.</p>
-      <p>Nothing needs configuring at first. A file with SHACL shapes in it is treated as shapes, not data. A file declaring an <code>owl:Ontology</code> is treated as an ontology, and a <code>.dl</code> file as Datalog rules. Save a file and only its graph is reloaded; a syntax error loads nothing from that file and appears in the Problems panel at the parser's position.</p>
-      <p>The oxilite sidebar shows what was loaded. <strong>Connections</strong> lists the Project store and any stores you attach. The <strong>Store Explorer</strong> has the graphs, the class hierarchy with instance counts, properties by use, files with their roles, and prefixes. <strong>Query History</strong> keeps what you ran.</p>
+      <h2><span class="step">2</span>Open the demo</h2>
+      <p>The screenshots on this page come from a small company knowledge graph that ships with the extension’s source, <a href="https://github.com/Volland/oxilite-studio/tree/main/examples/demo"><code>examples/demo</code></a>. Clone it and open the folder:</p>
+<pre><code>git clone https://github.com/Volland/oxilite-studio
+code oxilite-studio/examples/demo</code></pre>
+<pre><code>demo/
+├── oxilite.toml          <span class="c"># graphs, roles, reasoning = "owl2rl", two tests</span>
+├── ontology/company.ttl  <span class="c"># Manager ⊑ Employee ⊑ Person, worksFor, manages, name, salary</span>
+├── data/people.ttl       <span class="c"># Ada manages Bob and Cyd, Bob manages Eve, Eve has no name</span>
+├── shapes/person.ttl     <span class="c"># every Person needs an ex:name</span>
+├── rules/org.dl          <span class="c"># reportsTo, recursively; colleague</span>
+├── queries/people.rq     <span class="c"># who is a Person?</span>
+└── demo.oxnb             <span class="c"># the tour as a notebook</span></code></pre>
+      <p>The studio loads every <code>.ttl</code>, <code>.nt</code>, <code>.nq</code>, <code>.trig</code>, <code>.n3</code>, <code>.rdf</code> and <code>.owl</code> file into a <strong>Project store</strong>, a scratch SQLite database in <code>.oxilite/studio.sqlite</code> that it keeps out of git for you. Here <code>oxilite.toml</code> says which graph each file goes to and what it is. Without a manifest the studio still works: each file gets its own named graph, a file with SHACL shapes is treated as shapes, one declaring an <code>owl:Ontology</code> as an ontology, and a <code>.dl</code> file as rules. Save a file and only its graph reloads. The status bar shows the store (<em>Project store: 45</em>), the SHACL state and the reasoning profile.</p>
 
       <h2><span class="step">3</span>Query with your own vocabulary</h2>
-      <p>Open a <code>.rq</code> file and start typing. Completion knows where you are in a triple: in predicate position it offers the store's predicates in the order the data uses them, after <code>a</code> only classes, and a prefix you have not declared yet completes with the <code>PREFIX</code> line added to the top of the query, using the prefix your Turtle files already use.</p>
-<pre><code>PREFIX ex: &lt;http://ex.org/&gt;
-SELECT * { ?x ex:<span class="c">▌   → ex:name  (10 uses)   ex:knows  (3 uses)</span></code></pre>
-      <p>Hover an IRI to see its label, comment, types and where it is defined; <em>Go to Definition</em> jumps to the Turtle line where it is described, even from a query file. A predicate the store never uses gets a warning, because it is almost always a typo.</p>
-      <p><kbd>Cmd/Ctrl+Enter</kbd> runs the file or the selection; results appear beside the editor in a table that renders only the rows on screen, and CONSTRUCT results can switch to a graph view. <kbd>Cmd/Ctrl+Shift+E</kbd> shows the SQL the query compiles to and the planner's join order. The same keys run a Datalog program's goal in a <code>.dl</code> file and a Cypher statement in a <code>.cypher</code> file. Cypher names resolve against your data's own namespace, so <code>MATCH (a:Person)-[:knows]-&gt;(b)</code> means <code>ex:Person</code> and <code>ex:knows</code>.</p>
+      <p>No triple in the demo says <code>a ex:Person</code>. Open <code>queries/people.rq</code> and press <kbd>Cmd/Ctrl+Enter</kbd>:</p>
+      <figure class="shot">
+        <a href="../assets/studio/query.png"><img src="../assets/studio/query.png" alt="A SPARQL query beside its results: Ada, Bob, Cyd and Eve with names and salaries" loading="lazy" width="1600" height="1000"></a>
+        <figcaption><code>?person a ex:Person</code> finds four people. OWL 2 RL infers it from <code>ex:Manager ⊑ ex:Employee ⊑ ex:Person</code> and the domain of <code>ex:worksFor</code>.</figcaption>
+      </figure>
+      <p>Results appear beside the editor in a table that renders only the rows on screen; IRIs open the resource view. Completion knows where you are in a triple: in predicate position it offers the store’s predicates in the order the data uses them, after <code>a</code> only classes, and a prefix you have not declared completes with its <code>PREFIX</code> line added. Hover an IRI for its label, types and where it is defined; <em>Go to Definition</em> jumps to its Turtle line, even from a query. <kbd>Cmd/Ctrl+Shift+E</kbd> shows the SQL a query compiles to and the planner’s join order. The same keys run a Datalog goal in a <code>.dl</code> file and a Cypher statement in a <code>.cypher</code> file.</p>
 
       <h2><span class="step">4</span>Reasoning that explains itself</h2>
-      <p>Pick a reasoning profile from the status bar: <code>rdfs</code> and <code>owlql</code> rewrite queries, and <code>owl2rl</code> materializes the closure. Your rule files are materialized too. Each producer, OWL 2 RL or a rule file, keeps its own conclusions, so editing one rule file does not wipe the others: oxilite now attributes every inferred triple to the producer that derived it.</p>
-      <p>Take an ontology, some data and one rule:</p>
-<pre><code><span class="c"># onto.ttl</span>
-@prefix ex: &lt;http://ex.org/&gt; .
-@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
-ex:Manager  rdfs:subClassOf ex:Employee .
-ex:Employee rdfs:subClassOf ex:Person .
-
-<span class="c"># data.ttl</span>
-@prefix ex: &lt;http://ex.org/&gt; .
-ex:ann a ex:Manager .
-ex:ann ex:manages ex:bo .
-
-<span class="c"># rules/boss.dl</span>
-ex:boss(?y, ?x) :- ex:manages(?x, ?y), ex:Person(?x).</code></pre>
-      <p>Open <code>ex:bo</code> in the resource view (right-click an IRI, <em>Open Resource View</em>) and the statement <code>ex:bo ex:boss ex:ann</code> carries a badge: <em>inferred: rules/boss.dl</em>. Click <strong>why?</strong>:</p>
-<pre><code>inferred  ex:bo ex:boss ex:ann
-  by rules/boss.dl: &lt;…boss&gt;(?y, ?x) :- &lt;…manages&gt;(?x, ?y), &lt;…Person&gt;(?x).
-  ├─ asserted  ex:ann ex:manages ex:bo          data.ttl:3
-  └─ inferred  ex:ann rdf:type ex:Person
-       by owl2rl: cax-sco (subclass)
-       └─ …  down to  ex:ann a ex:Manager  (data.ttl:2)  and the subclass axioms in onto.ttl</code></pre>
-      <p>A rule's conclusion is explained by running that rule's body again in the Datalog engine with its head bound to the triple. An OWL or RDFS conclusion is explained by rule templates run as SPARQL. Either way the tree ends at statements you wrote, and each one opens at its line.</p>
+      <p>Pick a reasoning profile from the status bar, or set it in the manifest: <code>rdfs</code> and <code>owlql</code> rewrite queries, and <code>owl2rl</code> materializes the closure. Rule files are materialized too, each under its own name, so editing one does not wipe the others. The demo’s rules derive who reports to whom:</p>
+<pre><code><span class="c">% rules/org.dl</span>
+ex:reportsTo(?x, ?m)   :- ex:manages(?m, ?x).
+ex:reportsTo(?x, ?top) :- ex:manages(?m, ?x), ex:reportsTo(?m, ?top).</code></pre>
+      <p>Open <code>ex:eve</code> in the resource view (right-click an IRI, <em>Open Resource View</em>). Only two of her statements are written down; the rest are badged with the producer that inferred them:</p>
+      <figure class="shot">
+        <a href="../assets/studio/resource.png"><img src="../assets/studio/resource.png" alt="The resource view of ex:eve: two asserted statements, three types inferred by owl2rl and two reportsTo statements inferred by rules/org.dl, each with a why? link" loading="lazy" width="1600" height="1000"></a>
+        <figcaption>Eve is a Person, an Employee and an <code>owl:Thing</code> by OWL 2 RL, and reports to Bob and to Ada by <code>rules/org.dl</code>.</figcaption>
+      </figure>
+      <p>Click <strong>why?</strong> next to <code>reportsTo ada</code>:</p>
+      <figure class="shot">
+        <a href="../assets/studio/why.png"><img src="../assets/studio/why.png" alt="A proof tree: eve reportsTo ada by the recursive rule, from bob manages eve (people.ttl:15) and bob reportsTo ada, itself from ada manages bob (people.ttl:10)" loading="lazy" width="1600" height="1000"></a>
+        <figcaption>Eve reports to Ada through Bob. The recursive rule is chosen because its premises hold, and each asserted premise links to its line.</figcaption>
+      </figure>
+      <p>A rule’s conclusion is explained by running that rule’s body again in the Datalog engine with its head bound to the triple, using the first rule whose premises hold. An OWL or RDFS conclusion is explained by rule templates run as SPARQL. Either way the tree ends at statements you wrote.</p>
 
       <h2><span class="step">5</span>SHACL on the line that broke it</h2>
-      <p>Shapes validate in the background after every change, and each result is a diagnostic <em>on the data line</em>, linked to the shape that failed. With a reasoning profile on, validation sees inferred triples, which is what SHACL means but most tools skip:</p>
-<pre><code><span class="c"># shapes.ttl</span>
+      <p>Shapes validate in the background after every change, and each result is a diagnostic <em>on the data line</em>, linked to the shape that failed. With reasoning on, validation sees inferred triples, which is what SHACL means but most tools skip:</p>
+<pre><code><span class="c"># shapes/person.ttl</span>
 ex:PersonShape a sh:NodeShape ;
   sh:targetClass ex:Person ;
-  sh:property [ sh:path ex:name ; sh:minCount 1 ] .
-
-<span class="c"># staff.ttl</span>
-ex:carol a ex:Employee ; ex:name "Carol" .
-ex:dan a ex:Employee .                     <span class="c">⚠ sh:minCount violated on ex:name</span></code></pre>
-      <p>Without reasoning nobody is an <code>ex:Person</code>, so the data conforms. Switch to <code>rdfs</code> and employees become persons, so <code>ex:dan</code> gets a squiggle on line 3 of <code>staff.ttl</code>. The shapes file itself is never loaded as data, so your queries do not see it. ShEx works the same way: pair a <code>.shex</code> schema with a shape map of the same name. The SHACL report view groups results by shape or by focus node.</p>
+  sh:property [ sh:path ex:name ; sh:minCount 1 ; sh:message "Every person needs a name." ] .</code></pre>
+      <figure class="shot">
+        <a href="../assets/studio/shacl.png"><img src="../assets/studio/shacl.png" alt="data/people.ttl with ex:eve underlined on line 22, a hover saying Every person needs a name, and the Problems panel pointing to the shape in person.ttl" loading="lazy" width="1600" height="1000"></a>
+        <figcaption>Nobody typed Eve a Person, so a validator that ignores the ontology finds nothing wrong. With OWL 2 RL she is one, and she has no name.</figcaption>
+      </figure>
+      <p>The shapes file itself is never loaded as data, so your queries do not see it. ShEx works the same way: pair a <code>.shex</code> schema with a shape map of the same name. The SHACL report view groups the results by shape or by focus node.</p>
 
       <h2><span class="step">6</span>A manifest, tests, and CI</h2>
       <p>When conventions are not enough, an <code>oxilite.toml</code> at the root takes over completely. It names graphs, roles, the reasoning profile, and tests:</p>
@@ -138,13 +140,28 @@ ok</code></pre>
       <p>Every query, completion and explain works on an attached store. Writes are guarded: an update, a writing Cypher statement or an import asks first, and on D1 the question says what it will cost (<em>about 10 billed rows written (2 quads)</em> for a two-triple <code>INSERT DATA</code>), since D1 bills every written index entry. Each result on D1 reports the requests it took and the rows it read and wrote. OWL 2 RL materialization on D1 is a separate, confirmed command, because it runs over several requests and is not atomic across them.</p>
 
       <h2><span class="step">8</span>Notebooks, diagrams and a rules debugger</h2>
+      <p><strong>Notebooks</strong> (<code>.oxnb</code>) mix Markdown with SPARQL, Datalog and Cypher cells that run against the active connection. Their outputs are saved in the file, so <code>demo.oxnb</code> opens with its results, and they use the same table and graph views as the results panel:</p>
+      <figure class="shot">
+        <a href="../assets/studio/notebook.png"><img src="../assets/studio/notebook.png" alt="The demo notebook: a Markdown introduction, a SPARQL cell and its table of four people" loading="lazy" width="1600" height="1000"></a>
+        <figcaption>The demo as a notebook. Cells run on the Project store with OWL 2 RL, and their results are saved with the notebook.</figcaption>
+      </figure>
+      <figure class="shot">
+        <a href="../assets/studio/notebook-cypher.png"><img src="../assets/studio/notebook-cypher.png" alt="A Cypher cell drawn as a graph: Ada manages Bob and Cyd, Bob manages Eve" loading="lazy" width="1600" height="1000"></a>
+        <figcaption>Cypher over the same data: <code>:Manager</code> and <code>:manages</code> resolve to the demo’s namespace, and the paths draw as a graph.</figcaption>
+      </figure>
+      <figure class="shot">
+        <a href="../assets/studio/notebook-graph.png"><img src="../assets/studio/notebook-graph.png" alt="A SPARQL CONSTRUCT of reportsTo and worksFor edges drawn as a graph of Ada, Bob, Cyd, Eve and ACME" loading="lazy" width="1600" height="1000"></a>
+        <figcaption>A CONSTRUCT over inferred <code>reportsTo</code> edges, drawn as a graph.</figcaption>
+      </figure>
       <ul>
-        <li><strong>Notebooks</strong> (<code>.oxnb</code>) mix Markdown with SPARQL, Datalog and Cypher cells. Their outputs are saved in the file and drawn with the same table and graph views.</li>
-        <li><strong>The ontology diagram</strong> draws classes with their datatype properties and instance counts, subclass links, and object properties from domain to range.</li>
+        <li><strong>The ontology diagram</strong> draws classes with their datatype properties and instance counts, subclass links (dashed), and object properties from domain to range.</li>
         <li><strong>Debug Rules</strong> on a <code>.dl</code> file lists each rule with how many ways its body matches and how many facts its head holds. A rule that matches nothing, or explodes, stands out next to its line.</li>
         <li><strong>Full-text search</strong> runs <code>oxl:textMatch</code> over string literals. Set <code>text_index = true</code> in the manifest and it uses the FTS5 index.</li>
       </ul>
-
+      <figure class="shot">
+        <a href="../assets/studio/ontology.png"><img src="../assets/studio/ontology.png" alt="The ontology diagram: Manager subClassOf Employee subClassOf Person, Manager manages Employee, Employee worksFor Company, with salary and name as datatype properties" loading="lazy" width="1600" height="1000"></a>
+        <figcaption>The demo ontology as a diagram. Datatype properties are listed under their class.</figcaption>
+      </figure>
       <h2><span class="step">9</span>Give your agent the graph</h2>
       <p><code>oxilite mcp</code> serves the studio's operations as Model Context Protocol tools: <code>sparql_query</code>, <code>datalog_query</code>, <code>schema</code>, <code>validate</code>, <code>why</code> and <code>reload</code>. It loads the project the way the studio does. The extension registers it for your workspace, and <em>Copy MCP Server Config</em> gives the same entry for other agents:</p>
 <pre><code>{ <span class="s">"mcpServers"</span>: { <span class="s">"oxilite"</span>: { <span class="s">"command"</span>: <span class="s">"oxilite"</span>, <span class="s">"args"</span>: [<span class="s">"mcp"</span>, <span class="s">"--root"</span>, <span class="s">"/path/to/project"</span>] } } }</code></pre>
