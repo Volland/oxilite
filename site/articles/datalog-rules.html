@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Datalog rules on oxilite – oxilite</title>
+  <meta name="description" content="Recursive Datalog rules over RDF in SQLite: stratified negation, constraints and aggregation, compiled to a single SQL statement and running on Node.js, Rust and Cloudflare D1.">
+  <meta property="og:title" content="Rules your SPARQL can't write">
+  <meta property="og:description" content="Datalog on oxilite: recursion with joins, negation and aggregation, compiled to one SQL statement over the same quads.">
+  <meta property="og:image" content="../assets/logo.png">
+  <meta name="theme-color" content="#0a0a0a">
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg">
+  <link rel="icon" type="image/png" href="../assets/logo.png">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt=""><span>oxi<b>lite</b></span></a>
+      <nav class="nav" aria-label="Main">
+        <a href="../">Home</a>
+        <a href="./">Articles</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="article">
+    <article class="wrap">
+      <span class="kicker">Datalog · Recursion · Rules</span>
+      <h1>Rules your SPARQL can't write</h1>
+      <p class="standfirst">SPARQL's only recursion is a property path: one predicate, a fixed regular expression, no way to join another relation or filter part-way through. oxilite 0.3.0 adds Datalog over the same quads — and compiles it to a single SQL statement.</p>
+      <p class="meta">A walkthrough · Every program on this page is taken from the test suite: <a href="https://github.com/Volland/oxilite/blob/main/crates/oxilite-datalog/tests/basics.rs"><code>basics.rs</code></a>, <a href="https://github.com/Volland/oxilite/blob/main/crates/oxilite-datalog/tests/recursion.rs"><code>recursion.rs</code></a> and <a href="https://github.com/Volland/oxilite/blob/main/bindings/node/test/datalog.test.ts"><code>datalog.test.ts</code></a></p>
+
+      <h2>The ceiling</h2>
+      <p>You can ask SPARQL for everyone Ada is an ancestor of:</p>
+<pre><code>SELECT ?who WHERE { ex:ada ex:parent+ ?who }</code></pre>
+      <p>That is the last recursive question SPARQL will answer for you. A property path walks <em>one</em> predicate along a fixed regular expression. It cannot join a second relation between two steps, cannot drop a branch that fails a test, cannot say "reachable but <em>not</em> blocked", and cannot count what it found on the way. The moment your question needs any of that, you leave the query language: you write a loop in the host language and pay a round trip per hop.</p>
+      <p>Datalog is the standard answer, and it has been for forty years. A rule is an implication; rules may refer to themselves; the engine finds the fixpoint. oxilite 0.3.0 ships that as <code>oxilite-datalog</code>, over the same quads, the same term encoding and the same backends as SPARQL and Cypher.</p>
+
+      <h2>The language</h2>
+      <p>It is RDF-native, spelled like Turtle and SPARQL, so nothing new to learn about terms:</p>
+      <table>
+        <thead><tr><th>Form</th><th>Means</th></tr></thead>
+        <tbody>
+          <tr><td><code>ex:parent(?x, ?y)</code></td><td>the triple pattern <code>?x ex:parent ?y</code></td></tr>
+          <tr><td><code>ex:Person(?x)</code></td><td><code>?x rdf:type ex:Person</code></td></tr>
+          <tr><td><code>triple(?s, ?p, ?o)</code></td><td>any triple in the default graph — predicate variable included</td></tr>
+          <tr><td><code>triple(?s, ?p, ?o, ?g)</code></td><td>any quad</td></tr>
+          <tr><td><code>p(?x, ?y)</code></td><td>a relation defined by rules</td></tr>
+          <tr><td><code>not p(?x, ?y)</code></td><td>stratified negation</td></tr>
+          <tr><td><code>?a &gt;= 18</code>, <code>?a * 2 &lt; 40</code></td><td>constraints, in SPARQL's expression language</td></tr>
+          <tr><td><code>n(?x, COUNT(?y)) :- …</code></td><td>aggregation, grouped by the head's other arguments</td></tr>
+          <tr><td><code>?- p(?x, ?y).</code></td><td>the goal: what the program returns</td></tr>
+        </tbody>
+      </table>
+      <p>Variables are <code>?x</code>, <code>_</code> is anonymous, prefixes come from <code>@prefix</code>, literals carry <code>^^</code> datatypes and <code>@</code> language tags, and <code>%</code> or <code>#</code> starts a comment.</p>
+
+      <h2>Setup</h2>
+<pre><code>npm install @oxilite/node              <span class="c"># Node.js</span>
+cargo add oxilite --features datalog   <span class="c"># Rust</span></code></pre>
+      <p>The data for every example below is a parent chain and a few ages:</p>
+<pre><code><span class="c"># ada → bob → cy → dee</span>
+ex:ada ex:parent ex:bob . ex:bob ex:parent ex:cy . ex:cy ex:parent ex:dee .
+ex:ada ex:age 42 . ex:bob ex:age 17 . ex:cy ex:age 71 . ex:dee ex:age 8 .
+ex:ada a ex:Person . ex:bob a ex:Person . ex:cy a ex:Person . ex:dee a ex:Person .</code></pre>
+
+      <h2><span class="step">1</span>Recursion, with a goal</h2>
+<pre><code><span class="k">const</span> r = store.datalog(<span class="s">`
+  @prefix ex: &lt;http://example.org/&gt; .
+
+  anc(?x, ?y) :- ex:parent(?x, ?y).
+  anc(?x, ?z) :- ex:parent(?x, ?y), anc(?y, ?z).
+
+  ?- anc(ex:ada, ?who).`</span>);
+
+r.columns          <span class="c">// ["who"]</span>
+r.rows.map(row =&gt; row[<span class="s">0</span>].value)
+<span class="c">// http://example.org/bob, .../cy, .../dee</span></code></pre>
+      <p>Two rules: the base case and the recursive step. The goal fixes Ada and projects the other column. Results come back as RDF/JS terms, and <code>r.records</code> gives the same rows keyed by variable name.</p>
+      <p>So far a property path would have done. Now the things it cannot.</p>
+
+      <h2><span class="step">2</span>Join and filter mid-recursion</h2>
+      <p>A constraint is an ordinary body item, in SPARQL's expression language:</p>
+<pre><code>adult(?p) :- ex:age(?p, ?a), ?a &gt;= 18.
+?- adult(?p).
+<span class="c">// ex:ada, ex:cy</span>
+
+young(?p) :- ex:age(?p, ?a), ?a * 2 &lt; 40.
+?- young(?p).
+<span class="c">// ex:bob, ex:dee</span></code></pre>
+      <p>Arithmetic is evaluated on the bound value, not on a string. Drop either rule into the recursive <code>anc</code> definition and the filter applies at every step of the walk — the thing a property path has no syntax for.</p>
+
+      <h2><span class="step">3</span>Negation, stratified</h2>
+<pre><code>anc(?x, ?y) :- ex:parent(?x, ?y).
+anc(?x, ?z) :- ex:parent(?x, ?y), anc(?y, ?z).
+root(?x)    :- ex:Person(?x), not anc(_, ?x).
+?- root(?x).
+<span class="c">// ex:ada — the only person with nobody above them</span></code></pre>
+      <p><code>not</code> ranges over a relation the program itself derived recursively. That is <em>stratified</em> negation: <code>anc</code> is computed to completion first, then <code>root</code> is evaluated against it. The compiler works out the strata; you never order the rules yourself.</p>
+      <p>Ask for something that cannot be stratified and you get a rule diagnostic, not a runtime surprise:</p>
+<pre><code>p(?x) :- ex:Person(?x), not p(?x).
+<span class="c">// error: … not stratified … naming the cycle through p</span></code></pre>
+
+      <h2><span class="step">4</span>Aggregation</h2>
+<pre><code>n(?x, COUNT(?y)) :- anc(?x, ?y).
+?- n(?x, ?c).
+<span class="c">// ex:ada 3, ex:bob 2, ex:cy 1</span></code></pre>
+      <p>An aggregate in the head groups by the head's other arguments. Counting the results of a recursive relation in the query language is, again, not something SPARQL's property paths reach.</p>
+
+      <h2><span class="step">5</span>Quantify over the predicate</h2>
+<pre><code>uses(?p) :- triple(ex:ada, ?p, _).
+?- uses(?p).
+<span class="c">// ex:parent, ex:age, rdf:type</span></code></pre>
+      <p>The built-in <code>triple/3</code> and <code>triple/4</code> forms put a variable in the predicate — or the graph — position, which is how you write rules <em>about</em> the shape of your data rather than about one vocabulary.</p>
+
+      <h2>One statement, one round trip</h2>
+      <p>The interesting part is what this compiles to. Every relation — stored or derived — is a set of rows of tagged 64-bit term ids, the same encoding the SPARQL compiler uses, so a derived predicate composes with a triple pattern with no conversion at all. Then:</p>
+      <ul>
+        <li>a non-recursive predicate becomes a plain common table expression;</li>
+        <li>a linear recursive component becomes one <code>WITH RECURSIVE</code> member;</li>
+        <li>a mutually recursive component becomes one member carrying a discriminant column.</li>
+      </ul>
+      <p>The whole program is <strong>one SQL statement</strong>, which means one round trip — the property that makes oxilite work on a remote database like D1 at all. Mutual recursion is genuinely mutual:</p>
+<pre><code>even(?x) :- ex:Zero(?x).
+even(?x) :- ex:succ(?y, ?x), odd(?y).
+odd(?x)  :- ex:succ(?y, ?x), even(?y).
+?- even(?x).</code></pre>
+      <p><code>store.explainDatalog(…)</code> reports the strata and the strategy chosen for each component, and <code>datalog_sql()</code> hands you the SQL itself.</p>
+
+      <h2>The restrictions are the classical ones</h2>
+      <p>This is the part worth dwelling on. SQLite's recursive-CTE rules look arbitrary until you line them up with Datalog theory, and then they are the same conditions:</p>
+      <ul>
+        <li>one self-reference per recursive term &rarr; rules must be <strong>linear</strong>;</li>
+        <li>no self-reference under <code>NOT EXISTS</code> &rarr; negation must be <strong>stratified</strong>.</li>
+      </ul>
+      <p>So the compiler checks them before any SQL exists and reports them as rule diagnostics. An unsafe rule names the unbound variable:</p>
+<pre><code>p(?x, ?y) :- ex:Person(?x).
+<span class="c">// error: … ?y … — a head variable no body atom binds</span></code></pre>
+      <p>And a non-linear rule does not merely get refused — the diagnostic shows you the linear rewrite:</p>
+<pre><code>path(?x, ?y) :- ex:succ(?x, ?y).
+path(?x, ?z) :- path(?x, ?y), path(?y, ?z).   <span class="c">// two recursive atoms</span>
+<span class="c">// error: … non-linear … :- e(?x,?y), p(?y,?z)</span></code></pre>
+      <p>Take the rewrite and the program runs as a single statement again. If you would rather keep the non-linear form, it is evaluated instead by iterating to a fixpoint in a work table — one request per round, driven by the same step machine as everything else, so it still runs on D1. <code>r.rounds</code> reports what each iterated component took (it is empty when nothing needed iteration), and <code>maxIterations</code> bounds it. Because those rounds write, a non-linear program needs a writable store.</p>
+
+      <h2>Rules that become data</h2>
+      <p>A program can store its conclusions instead of returning them:</p>
+<pre><code><span class="k">const</span> stats = store.datalogMaterialize(<span class="s">`
+  @prefix ex: &lt;http://example.org/&gt; .
+  ex:ancestor(?x, ?y) :- ex:parent(?x, ?y).
+  ex:ancestor(?x, ?z) :- ex:parent(?x, ?y), ex:ancestor(?y, ?z).`</span>);
+
+stats  <span class="c">// { relations: 1, inferred: 6 }</span>
+
+store.query(<span class="s">"SELECT ?y WHERE { ex:ada ex:ancestor ?y }"</span>);
+<span class="c">// [] — asserted data is untouched</span>
+
+store.query(<span class="s">"SELECT ?y WHERE { ex:ada ex:ancestor ?y }"</span>, { include_inferred: <span class="k">true</span> });
+<span class="c">// 3 rows</span></code></pre>
+      <p>Note the head is an IRI here, <code>ex:ancestor</code>, because the conclusions have to be triples. They go into <code>quads_inf</code> — the same table OWL 2 RL materialization writes — so your rules <em>extend the reasoner</em> rather than running beside it, and SPARQL and Cypher both see them under <code>include_inferred</code>. The two share one inference set: running either replaces it. A one-argument head such as <code>ex:Adult(?p)</code> is stored as an <code>rdf:type</code> triple.</p>
+
+      <h2>Everywhere oxilite runs</h2>
+<pre><code><span class="c">// Rust</span>
+<span class="k">let</span> r = store.datalog(program)?;
+<span class="k">let</span> plan = store.explain_datalog(program)?;
+<span class="k">let</span> stats = store.datalog_materialize(program)?;</code></pre>
+<pre><code><span class="c"># Command line</span>
+oxilite datalog -l db.sqlite -f rules.dl
+oxilite datalog -l db.sqlite -f rules.dl --explain
+oxilite datalog -l db.sqlite -f rules.dl --materialize</code></pre>
+<pre><code><span class="c">// Cloudflare Worker with @oxilite/d1</span>
+<span class="k">const</span> r = <span class="k">await</span> store.datalog(program, { useDefaultGraphAsUnion: <span class="k">true</span> });</code></pre>
+      <p>One caveat worth stating plainly: in the WebAssembly core the dialect is an <strong>off-by-default feature</strong>, because it costs about 0.2 MB and a Worker that does not use rules should not pay for it. The published <code>@oxilite/d1</code> therefore ships <em>without</em> Datalog, and calling it raises a clear error telling you to rebuild the wasm with the <code>datalog</code> feature. The native <code>@oxilite/node</code> has it built in.</p>
+
+      <h2>Limits to know</h2>
+      <ul>
+        <li><strong>Aggregates</strong> must produce a value the term encoding can inline: <code>COUNT</code>, <code>COUNT DISTINCT</code>, <code>SUM</code>, <code>MIN</code>, <code>MAX</code> and <code>SAMPLE</code> work; <code>AVG</code> and <code>GROUP_CONCAT</code> are refused rather than silently approximated.</li>
+        <li><strong>Non-linear components</strong> cost one request per round, need write access, and the relation may be at most six columns wide.</li>
+        <li><strong>Out of scope:</strong> existential rules and unstratified negation.</li>
+      </ul>
+
+      <div class="callout">
+        <p><strong>The takeaway.</strong> If your question needs recursion with a join, a filter, a negation or a count in the middle of it, you no longer have to leave the query language and write a loop. Rules go in, one SQL statement comes out, and the answers are either returned or folded into the same inference set the OWL reasoner uses — on your laptop and on Cloudflare D1.</p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt="" width="28" height="28"><span>oxilite</span></a>
+      <span>MIT or Apache-2.0</span>
+      <nav aria-label="Rechtliches">
+        <a href="../impressum.html">Impressum</a>
+        <a href="../datenschutz.html">Datenschutz</a>
+        <a href="../agb.html">AGB</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>

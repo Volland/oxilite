@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Articles – oxilite</title>
-  <meta name="description" content="Guides and design notes on oxilite: an overview of the RDF and SPARQL engine, Verifiable Credentials and JSON-LD in SQLite, querying them with SPARQL and Cypher, property graphs, and graph memory for AI agents on Cloudflare Durable Objects.">
+  <meta name="description" content="Guides and design notes on oxilite: an overview of the RDF and SPARQL engine, Verifiable Credentials and JSON-LD in SQLite, querying them with SPARQL and Cypher, property graphs, Datalog rules, the schema registry, and graph memory for AI agents on Cloudflare Durable Objects.">
   <meta property="og:title" content="oxilite articles">
   <meta property="og:description" content="Guides and design notes: what you can build with oxilite and how it works inside.">
   <meta property="og:image" content="../assets/logo.png">
@@ -32,7 +32,7 @@
       <div class="wrap">
         <span class="eyebrow">Guides · design notes</span>
         <h1>Articles<span class="dot">.</span></h1>
-        <p class="sub">What you can build with oxilite and how it works inside. Every walkthrough on this page is asserted by a runnable example in the repository, on <code>@oxilite/node</code> and on Cloudflare D1.</p>
+        <p class="sub">What you can build with oxilite and how it works inside. Every walkthrough here is asserted by code in the repository — a runnable example, or the test suite — on <code>@oxilite/node</code> and on Cloudflare D1.</p>
       </div>
     </section>
 
@@ -63,6 +63,23 @@
             <h3>Ask your credentials anything</h3>
             <p>Query JSON-LD documents and Verifiable Credentials by provenance, joins, typed dates, RDFS reasoning and full-text search, then match them as a Cypher graph. Every query is a tested example.</p>
             <span class="more">Take the query tour →</span>
+          </a>
+        </div>
+
+        <h2 class="group">Rules and schema<span class="dot">.</span></h2>
+        <p class="sub">New in 0.3.0: recursion the query language could not express, and graphs that declare what they are.</p>
+        <div class="articles">
+          <a class="article-card" href="datalog-rules.html">
+            <span class="kicker">Datalog · Recursion · Rules</span>
+            <h3>Rules your SPARQL can't write</h3>
+            <p>Recursive Datalog over the same quads: joins, constraints, stratified negation and aggregation mid-recursion, compiled to a single SQL statement — and foldable into the reasoner's inference set.</p>
+            <span class="more">Read the walkthrough →</span>
+          </a>
+          <a class="article-card" href="schema-registry.html">
+            <span class="kicker">Ontologies · SHACL · Reasoning</span>
+            <h3>Tell the store which graphs are schema</h3>
+            <p>Declare a graph an ontology or a shapes graph: scope reasoning to the ontologies you trust, keep axioms out of data queries, and give Cypher and the SHACL validator one compiled source of truth.</p>
+            <span class="more">Read the design note →</span>
           </a>
         </div>
 

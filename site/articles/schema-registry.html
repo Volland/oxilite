@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The schema registry – oxilite</title>
+  <meta name="description" content="Declare which named graphs hold your ontology and SHACL shapes: scope reasoning to chosen ontologies, keep axioms out of data queries, and give Cypher and rudof one compiled source of truth for shapes.">
+  <meta property="og:title" content="Tell the store which graphs are schema">
+  <meta property="og:description" content="oxilite's schema registry: ontologies and SHACL shapes declared as such, with scoped reasoning and a compiled shape index.">
+  <meta property="og:image" content="../assets/logo.png">
+  <meta name="theme-color" content="#0a0a0a">
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg">
+  <link rel="icon" type="image/png" href="../assets/logo.png">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt=""><span>oxi<b>lite</b></span></a>
+      <nav class="nav" aria-label="Main">
+        <a href="../">Home</a>
+        <a href="./">Articles</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="article">
+    <article class="wrap">
+      <span class="kicker">Ontologies · SHACL · Reasoning</span>
+      <h1>Tell the store which graphs are schema</h1>
+      <p class="standfirst">In most triple stores an ontology is just more triples: you cannot list what is loaded, version it, switch it off, or reason under one ontology instead of all of them. oxilite 0.3.0 lets a graph declare what it <em>is</em> — and the store acts on it.</p>
+      <p class="meta">A design note · The behaviour on this page is asserted by <a href="https://github.com/Volland/oxilite/blob/main/crates/oxilite/tests/schema_registry.rs"><code>schema_registry.rs</code></a> and <a href="https://github.com/Volland/oxilite/blob/main/crates/oxilite-validate/tests/validate.rs"><code>validate.rs</code></a> · Rust API</p>
+
+      <h2>Two problems that are the same problem</h2>
+      <p>Load an ontology into a triple store and something odd happens: it vanishes into the data. It is triples in the same table as everything else, so the store has no idea it is schema. Concretely, before 0.3.0 you could not ask oxilite which ontologies were loaded, pin a version, drop one cleanly, or reason under a chosen ontology rather than the union of every axiom in the database. Reasoning found its axioms by sniffing predicates — anything anywhere that looked like <code>rdfs:subClassOf</code> counted.</p>
+      <p>SHACL shapes had a sharper version of the same problem: <strong>two sources of truth</strong>. The Cypher frontend read shapes <em>from the dataset</em> by running a SPARQL query — once per writing statement, which on D1 is a network round trip per write. The validator took shapes as a <em>string from outside the store</em>. So the same shapes could be stored and ignored by the validator, or used by the validator and absent from the store entirely.</p>
+      <p>Both are the same missing concept: a graph whose <em>role</em> is schema rather than data.</p>
+
+      <h2><span class="step">1</span>Register a graph</h2>
+<pre><code><span class="k">use</span> oxilite::schema::{Registration, SchemaRole};
+
+store.register_schema_graph(
+    NamedNodeRef::new(<span class="s">"http://example.com/onto"</span>)?,
+    SchemaRole::Ontology,
+    &amp;Registration::new()
+        .with_iri(NamedNode::new(<span class="s">"http://example.com/onto"</span>)?)
+        .with_version(<span class="s">"2026-09"</span>),
+)?;
+
+store.schema_graphs()?;   <span class="c">// [RegisteredGraph { graph, role, registration, loaded_at }]</span></code></pre>
+      <p>The roles are <code>Ontology</code>, <code>Shacl</code> and <code>Shex</code>. Registering records a role, an optional ontology IRI, a version, a content digest and an import list — and <strong>moves nothing</strong>. The graph's triples stay exactly where they were, ordinary RDF that SPARQL reads and updates:</p>
+<pre><code>SELECT ?o WHERE { GRAPH &lt;http://example.com/onto&gt; { ex:Dog rdfs:subClassOf ?o } }
+<span class="c">-- still answers ex:Animal</span></code></pre>
+      <p>That is deliberate. SHACL shapes <em>are</em> RDF and people query them; moving schema into a private table would break that, and <code>GRAPH ?g</code> already gives you the separation for free. Registering also makes lifecycle cheap — <code>drop_schema_graph</code> removes the registration and every quad of the graph in one atomic request, with no read first.</p>
+
+      <h2><span class="step">2</span>Reason under the ontologies you choose</h2>
+      <p>Now the registration does work. Two ontology graphs, one of which you do not currently trust:</p>
+<pre><code><span class="c">// ex:good says  Dog ⊑ Animal      ex:bad says  Rock ⊑ Animal</span>
+store.register_schema_graph(good, SchemaRole::Ontology, &amp;Registration::new())?;
+store.register_schema_graph(bad,  SchemaRole::Ontology, &amp;Registration::new())?;
+
+<span class="c">// ?x a ex:Animal  with RDFS reasoning → ex:rex, ex:granite</span>
+
+store.set_schema_graph_active(bad, <span class="k">false</span>)?;
+
+<span class="c">// same query → ex:rex only</span></code></pre>
+      <p>Deactivating withdraws exactly that ontology's entailments; reactivating restores them, with no reloading of data. An axiom written to a graph that is <em>not</em> registered as an ontology now entails nothing at all — which is the point: you decide what counts as schema, instead of the store guessing from predicates.</p>
+      <p>The mechanism is a single SQL subquery inside the existing closure statements, so this costs no extra round trip and the closure is still rebuilt inside the same atomic request as the write that changed it.</p>
+
+      <h2><span class="step">3</span>An empty registry means every graph</h2>
+      <p>The compatibility rule that makes this safe to ship: every scoping predicate reads <em>"the active graphs of this role, or every graph while none is registered."</em> A store that registers nothing behaves exactly as it did before the registry existed — same entailments, same results. Registering your first ontology is the act that narrows the scope.</p>
+      <p>So this is purely additive. Nothing you have breaks by upgrading, and you opt in when you want the control.</p>
+
+      <h2><span class="step">4</span>Keep axioms out of data queries</h2>
+      <p>Anyone who has loaded a real ontology knows this annoyance: <code>SELECT ?s ?p ?o</code> over your data now returns fifty thousand axioms.</p>
+<pre><code><span class="k">let</span> opts = QueryOptions { include_schema_graphs: <span class="k">false</span>, ..Default::default() };
+<span class="c">// registered schema graphs drop out of every pattern scan</span></code></pre>
+      <p>It defaults to <code>true</code> — the dataset is the dataset — and switching it off covers the default graph, <code>GRAPH ?g</code>, property paths and <code>OPTIONAL</code> alike, because every quad source in the compiler goes through one place. Hiding ignores the active flag, since an inactive ontology graph is still schema and still noise. <code>named_graphs()</code> and the dumps are untouched.</p>
+
+      <h2><span class="step">5</span>Shapes, compiled once</h2>
+      <p>The second half of the release fixes the two-sources-of-truth problem. The SHACL property shapes of the registered shapes graphs are compiled into an index — target class, path, <code>sh:datatype</code>, <code>sh:minCount</code>, <code>sh:maxCount</code>, <code>sh:pattern</code>, the <code>sh:in</code> values, and whether the shape is relationship-valued:</p>
+<pre><code>store.shape_index()?;   <span class="c">// one request, no SPARQL evaluation</span></code></pre>
+      <p>It is a cache with the same discipline the reasoning closure already follows: rebuilt by pure <code>INSERT … SELECT</code> statements over the quads — an <code>rdf:rest*</code>/<code>rdf:first</code> recursive CTE walks <code>sh:in</code> — by <code>optimize()</code> and, <strong>inside the same atomic request</strong>, by any write that touches a SHACL predicate. Write a shape and the index already knows about it; no rebuild step, no staleness window.</p>
+      <p>Two consumers now read that one index:</p>
+      <ul>
+        <li><strong>Cypher</strong> reads its property-graph schema from it in one indexed request, instead of evaluating a SPARQL query per writing statement. On D1 that is the difference between one round trip and a compiled query on every write.</li>
+        <li><strong>The validator</strong> can be driven by shapes held in the store, rather than a string you pass in:</li>
+      </ul>
+<pre><code><span class="k">use</span> oxilite_validate::{validate_shacl_stored, ShaclValidationMode};
+
+<span class="k">let</span> report = validate_shacl_stored(&amp;store, <span class="k">None</span>, &amp;ShaclValidationMode::Native)?;</code></pre>
+      <p>With <code>None</code> the registry decides, and it refuses to guess: exactly one registered SHACL graph is used, none is an error, more than one is an error naming the candidates. Pass a graph explicitly to override. The shapes are handed to rudof's own parser, so a stored shapes graph and a shapes file compile identically — a property the test suite asserts by comparing the two reports.</p>
+
+      <h2>Why register rather than separate</h2>
+      <p>The obvious alternative was separate <code>ontology_quads</code> and <code>shape_quads</code> tables. It was rejected for three reasons, and they are worth stating because they explain the whole shape of the feature:</p>
+      <ul>
+        <li>SHACL shapes are RDF that people query — a private table breaks that, and named graphs already separate them;</li>
+        <li>a second table would force a <code>UNION</code> into every pattern scan, which is precisely what the compiler exists to avoid;</li>
+        <li>no new index on <code>quads</code> means no extra write cost on D1, where every written index entry is billed.</li>
+      </ul>
+      <p>The registry is one small table that <em>labels</em> a graph. Everything else falls out of that.</p>
+
+      <h2>Limits to know</h2>
+      <ul>
+        <li><strong>Rust only, for now.</strong> The registry is not yet exposed in <code>@oxilite/node</code> or <code>@oxilite/d1</code>, and there is no CLI subcommand for it. The behaviour it drives — scoped reasoning, the shape index behind Cypher — applies everywhere; the registration calls are Rust.</li>
+        <li><strong><code>owl:imports</code> is recorded, not resolved.</strong> The registry stores the import list; it does not fetch them.</li>
+        <li><strong>One closure, not one per ontology.</strong> The registry decides which graphs <em>feed</em> the closure, not how many closures exist.</li>
+        <li><strong>A stale <code>sh:in</code> corner.</strong> <code>rdf:first</code>/<code>rdf:rest</code> are deliberately not refresh triggers — they would rebuild the shape index on every write touching any RDF list anywhere. Appending to an existing <code>sh:in</code> list without touching a <code>sh:</code> predicate leaves the index stale until the next <code>optimize()</code>.</li>
+        <li><strong>On D1, adding tables needs a migration.</strong> A D1 store is opened with <code>open_existing</code>, so no DDL runs per request. 0.3.0 adds four tables; regenerate and apply a migration before upgrading an existing database, as the <a href="https://github.com/Volland/oxilite/tree/main/packages/d1"><code>@oxilite/d1</code> README</a> describes.</li>
+      </ul>
+
+      <div class="callout">
+        <p><strong>The takeaway.</strong> Your ontology and your shapes stop being anonymous triples. Declare a graph's role once and reasoning narrows to the ontologies you trust, axioms stay out of your data queries, and Cypher and the SHACL validator read one compiled source of truth instead of two different ones. A store that registers nothing behaves exactly as before.</p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt="" width="28" height="28"><span>oxilite</span></a>
+      <span>MIT or Apache-2.0</span>
+      <nav aria-label="Rechtliches">
+        <a href="../impressum.html">Impressum</a>
+        <a href="../datenschutz.html">Datenschutz</a>
+        <a href="../agb.html">AGB</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>
