@@ -44,7 +44,11 @@ enum State {
     /// Waiting for the seed of a phase; the count comes back with it.
     Seeded(usize),
     /// Waiting for a step of a phase, with the count before it and the round number.
-    Stepped { phase: usize, before: i64, round: usize },
+    Stepped {
+        phase: usize,
+        before: i64,
+        round: usize,
+    },
     Rows,
     CleaningUp,
     Resolving,

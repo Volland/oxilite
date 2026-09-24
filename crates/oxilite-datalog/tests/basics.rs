@@ -182,9 +182,11 @@ fn aggregation_counts_per_group() {
         .unwrap();
     assert_eq!(
         rows(&r),
-        ["\"1\"^^<http://www.w3.org/2001/XMLSchema#integer>".to_owned(),
+        [
+            "\"1\"^^<http://www.w3.org/2001/XMLSchema#integer>".to_owned(),
             "\"2\"^^<http://www.w3.org/2001/XMLSchema#integer>".to_owned(),
-            "\"3\"^^<http://www.w3.org/2001/XMLSchema#integer>".to_owned()]
+            "\"3\"^^<http://www.w3.org/2001/XMLSchema#integer>".to_owned()
+        ]
         .iter()
         .zip(["cy", "bob", "ada"])
         .map(|(c, p)| format!("<http://example.org/{p}>|{c}"))
@@ -216,7 +218,9 @@ fn unstratified_negation_is_rejected() {
 fn unsafe_head_variable_is_rejected() {
     let s = store();
     let err = s
-        .datalog(&format!("{PREFIX} p(?x, ?y) :- ex:Person(?x).\n?- p(?x, ?y)."))
+        .datalog(&format!(
+            "{PREFIX} p(?x, ?y) :- ex:Person(?x).\n?- p(?x, ?y)."
+        ))
         .unwrap_err();
     let msg = err.to_string();
     assert!(msg.contains("?y"), "got: {msg}");
@@ -244,8 +248,14 @@ fn triple_atom_binds_the_predicate() {
         ))
         .unwrap();
     let got = rows(&r);
-    assert!(got.contains(&"<http://example.org/parent>".to_owned()), "{got:?}");
-    assert!(got.contains(&"<http://example.org/age>".to_owned()), "{got:?}");
+    assert!(
+        got.contains(&"<http://example.org/parent>".to_owned()),
+        "{got:?}"
+    );
+    assert!(
+        got.contains(&"<http://example.org/age>".to_owned()),
+        "{got:?}"
+    );
 }
 
 // @lat: [[tests#Datalog#Cycle terminates]]
@@ -397,8 +407,10 @@ fn the_documented_program_runs() {
     // Of ada's descendants, cy (71) is an adult; bob (17) and dee (8) are not.
     assert_eq!(
         rows(&r),
-        ["<http://example.org/ada>|<http://example.org/cy>",
-            "<http://example.org/bob>|<http://example.org/cy>"]
+        [
+            "<http://example.org/ada>|<http://example.org/cy>",
+            "<http://example.org/bob>|<http://example.org/cy>"
+        ]
         .iter()
         .cloned()
         .collect::<std::collections::BTreeSet<_>>()

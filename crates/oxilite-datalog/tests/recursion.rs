@@ -57,7 +57,9 @@ fn mutual_recursion_even() {
 #[test]
 fn mutual_recursion_odd() {
     let s = chain();
-    let r = s.datalog(&format!("{PREFIX}{EVEN_ODD}?- odd(?x).")).unwrap();
+    let r = s
+        .datalog(&format!("{PREFIX}{EVEN_ODD}?- odd(?x)."))
+        .unwrap();
     assert_eq!(
         sorted(&r),
         vec!["<http://example.org/n1>", "<http://example.org/n3>"]
@@ -72,7 +74,10 @@ fn mutual_recursion_is_one_tagged_member() {
         .datalog_sql(&format!("{PREFIX}{EVEN_ODD}?- even(?x)."))
         .unwrap();
     assert!(sql.contains("WITH RECURSIVE"), "{sql}");
-    assert!(sql.contains("tag"), "expected a discriminant column in:\n{sql}");
+    assert!(
+        sql.contains("tag"),
+        "expected a discriminant column in:\n{sql}"
+    );
     let explain = s
         .explain_datalog(&format!("{PREFIX}{EVEN_ODD}?- even(?x)."))
         .unwrap();
@@ -107,7 +112,11 @@ fn non_linear_recursion_agrees_with_the_linear_form() {
         v
     };
     assert_eq!(key(&non_linear), key(&linear));
-    assert_eq!(non_linear.rows.len(), 10, "4 + 3 + 2 + 1 pairs on the chain");
+    assert_eq!(
+        non_linear.rows.len(),
+        10,
+        "4 + 3 + 2 + 1 pairs on the chain"
+    );
 }
 
 // @lat: [[tests#Datalog#Doubling reaches the fixpoint faster]]
@@ -159,7 +168,11 @@ fn iteration_cleans_up_its_work_rows() {
         let r = s
             .datalog(&format!("{PREFIX}{NON_LINEAR}?- path(?x, ?y)."))
             .unwrap();
-        assert_eq!(r.rows.len(), 10, "a second run must not see the first's rows");
+        assert_eq!(
+            r.rows.len(),
+            10,
+            "a second run must not see the first's rows"
+        );
     }
 }
 

@@ -162,7 +162,10 @@ pub enum Expr {
     Not(Box<Expr>),
     Neg(Box<Expr>),
     /// A SPARQL-style function call, e.g. `REGEX`, `STRLEN`, `ABS`.
-    Call { name: String, args: Vec<Expr> },
+    Call {
+        name: String,
+        args: Vec<Expr>,
+    },
 }
 
 /// One item in a rule body.

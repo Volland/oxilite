@@ -212,7 +212,12 @@ impl ShapeIndex {
             let (Some(target), Some(path)) = (named(col(row, 0)?), named(col(row, 1)?)) else {
                 continue;
             };
-            let shape = me.by_class.entry(target).or_default().entry(path).or_default();
+            let shape = me
+                .by_class
+                .entry(target)
+                .or_default()
+                .entry(path)
+                .or_default();
             shape.datatype = named(col(row, 2)?);
             shape.min = col(row, 3)?.as_i64();
             shape.max = col(row, 4)?.as_i64();
@@ -223,9 +228,11 @@ impl ShapeIndex {
             return Ok(me);
         };
         for row in &values.rows {
-            let (Some(target), Some(path), Some(id)) =
-                (named(col(row, 0)?), named(col(row, 1)?), col(row, 2)?.as_i64())
-            else {
+            let (Some(target), Some(path), Some(id)) = (
+                named(col(row, 0)?),
+                named(col(row, 1)?),
+                col(row, 2)?.as_i64(),
+            ) else {
                 continue;
             };
             let term = match col(row, 3)?.clone().into_string() {
@@ -243,7 +250,12 @@ impl ShapeIndex {
                     None => continue,
                 },
             };
-            let shape = me.by_class.entry(target).or_default().entry(path).or_default();
+            let shape = me
+                .by_class
+                .entry(target)
+                .or_default()
+                .entry(path)
+                .or_default();
             if !shape.values_in.contains(&term) {
                 shape.values_in.push(term);
             }

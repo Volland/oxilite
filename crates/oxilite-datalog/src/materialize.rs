@@ -144,7 +144,11 @@ fn insert_for(head: &Head, compiled: &sql::Compiled) -> Result<String> {
             "v0".to_owned(),
             "v1".to_owned(),
             "v2".to_owned(),
-            if *graph { "v3".to_owned() } else { "0".to_owned() },
+            if *graph {
+                "v3".to_owned()
+            } else {
+                "0".to_owned()
+            },
         ),
         Pred::Idb(_) => {
             return Err(DatalogError::NotTripleShaped {
@@ -167,7 +171,11 @@ fn insert_for(head: &Head, compiled: &sql::Compiled) -> Result<String> {
 enum State {
     Start,
     Seeded(usize),
-    Stepped { phase: usize, before: i64, round: usize },
+    Stepped {
+        phase: usize,
+        before: i64,
+        round: usize,
+    },
     Wrote,
     CleaningUp(u64),
     Done,

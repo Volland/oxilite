@@ -59,10 +59,7 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
     /// Conclusions go to the same place OWL 2 RL materialization writes, so they are visible
     /// to SPARQL and Cypher under `include_inferred`. The two share one inference set:
     /// running either replaces it.
-    pub fn datalog_materialize(
-        &self,
-        program: &str,
-    ) -> Result<MaterializeStats, DatalogError> {
+    pub fn datalog_materialize(&self, program: &str) -> Result<MaterializeStats, DatalogError> {
         self.datalog_materialize_with(program, &Options::default())
     }
 

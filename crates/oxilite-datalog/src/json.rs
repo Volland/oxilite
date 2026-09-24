@@ -18,11 +18,14 @@ pub fn options_from_json(v: &Value) -> Result<Options> {
         return if v.is_null() {
             Ok(out)
         } else {
-            Err(DatalogError::unsupported("datalog options must be an object"))
+            Err(DatalogError::unsupported(
+                "datalog options must be an object",
+            ))
         };
     };
     let flag = |m: &Map<String, Value>, k: &str| m.get(k).and_then(Value::as_bool);
-    if let Some(b) = flag(map, "useDefaultGraphAsUnion").or_else(|| flag(map, "unionDefaultGraph")) {
+    if let Some(b) = flag(map, "useDefaultGraphAsUnion").or_else(|| flag(map, "unionDefaultGraph"))
+    {
         out.union_default_graph = b;
     }
     if let Some(b) = flag(map, "includeInferred") {

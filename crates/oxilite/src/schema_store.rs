@@ -9,9 +9,9 @@
 
 use crate::store::Store;
 use crate::AsyncStore;
+use oxilite_core::job::run_async;
 use oxilite_core::registry::{SchemaGraph, SchemaRole};
 use oxilite_core::shapes::ShapeIndex;
-use oxilite_core::job::run_async;
 use oxilite_core::{encoding, ops, AsyncBackend, Result, SyncBackend};
 use oxrdf::{GraphName, GraphNameRef, NamedNode};
 
@@ -164,10 +164,7 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
 
     /// Removes a registration, leaving the graph's triples in place; returns whether one was
     /// found.
-    pub fn unregister_schema_graph<'a>(
-        &self,
-        graph: impl Into<GraphNameRef<'a>>,
-    ) -> Result<bool> {
+    pub fn unregister_schema_graph<'a>(&self, graph: impl Into<GraphNameRef<'a>>) -> Result<bool> {
         let id = encoding::graph_id(graph.into());
         let removed = self.run(ops::unregister_schema_graph_job(id))?;
         self.reload_stats()?;
@@ -210,11 +207,13 @@ impl<B: AsyncBackend> AsyncStore<B> {
 
     /// The registry, ordered by role and graph.
     pub async fn schema_graphs(&self) -> Result<Vec<RegisteredGraph>> {
-        Ok(run_async(&self.backend, ops::schema_graphs_job(self.caps()))
-            .await?
-            .into_iter()
-            .map(|(row, name)| from_row(row, name))
-            .collect())
+        Ok(
+            run_async(&self.backend, ops::schema_graphs_job(self.caps()))
+                .await?
+                .into_iter()
+                .map(|(row, name)| from_row(row, name))
+                .collect(),
+        )
     }
 
     /// Activates or deactivates a registration; returns whether one was found.
@@ -224,7 +223,8 @@ impl<B: AsyncBackend> AsyncStore<B> {
         active: bool,
     ) -> Result<bool> {
         let id = encoding::graph_id(graph.into());
-        let changed = run_async(&self.backend, ops::set_schema_graph_active_job(id, active)).await?;
+        let changed =
+            run_async(&self.backend, ops::set_schema_graph_active_job(id, active)).await?;
         self.reload_stats().await?;
         Ok(changed)
     }
@@ -241,10 +241,7 @@ impl<B: AsyncBackend> AsyncStore<B> {
     }
 
     /// Removes a registration together with every quad of its graph, in one atomic request.
-    pub async fn drop_schema_graph<'a>(
-        &self,
-        graph: impl Into<GraphNameRef<'a>>,
-    ) -> Result<u64> {
+    pub async fn drop_schema_graph<'a>(&self, graph: impl Into<GraphNameRef<'a>>) -> Result<u64> {
         let id = encoding::graph_id(graph.into());
         let removed = run_async(&self.backend, ops::drop_schema_graph_job(id)).await?;
         self.reload_stats().await?;

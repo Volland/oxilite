@@ -7,8 +7,8 @@ use crate::AsyncStore;
 use oxilite_core::job::Job;
 use oxilite_core::{AsyncBackend, Step, SyncBackend};
 use oxilite_cypher::{
-    prepare_for, CypherError, CypherOptions, CypherResult, CypherStep, Params,
-    Schema, SqlCypherJob, StepInput,
+    prepare_for, CypherError, CypherOptions, CypherResult, CypherStep, Params, Schema,
+    SqlCypherJob, StepInput,
 };
 
 impl<B: SyncBackend + Send + Sync + 'static> Store<B> {

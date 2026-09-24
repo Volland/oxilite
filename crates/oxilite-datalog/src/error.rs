@@ -25,10 +25,7 @@ pub enum DatalogError {
 
     /// A variable that no positive body atom binds.
     #[error("unsafe rule for `{predicate}`: {variable} is not bound by a positive body atom")]
-    Unsafe {
-        predicate: String,
-        variable: String,
-    },
+    Unsafe { predicate: String, variable: String },
 
     /// Negation or aggregation inside a recursive component.
     #[error("{kind} is not stratified: it occurs inside the recursive component {component:?}")]

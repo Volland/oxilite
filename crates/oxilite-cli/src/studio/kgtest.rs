@@ -603,8 +603,7 @@ impl Answer {
                 results_format(ext),
             )?,
             Answer::Rows(vars, rows) => {
-                let variables: Vec<Variable> =
-                    vars.iter().map(Variable::new_unchecked).collect();
+                let variables: Vec<Variable> = vars.iter().map(Variable::new_unchecked).collect();
                 let parsed: Vec<Vec<Option<Term>>> = rows
                     .iter()
                     .map(|r| {
