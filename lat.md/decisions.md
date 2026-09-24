@@ -166,4 +166,11 @@ SQLite has no mutually recursive CTEs, but since 3.34.0 the recursive term may b
 
 Materializing a rule program writes into the inference table OWL 2 RL materialization already uses, instead of a table of its own.
 
-SPARQL and Cypher already read that table through `include_inferred`, so a user rule becomes visible to every dialect the moment it is materialized, with no new schema, no new option and no new cache to invalidate — rules extend the reasoner rather than forming a second inference universe ([[architecture#Reasoning]]). The trade-off is a shared lifecycle: running either materialization replaces the whole inferred set. That is stated rather than hidden, and a later change can namespace the table by producer if it proves painful.
+SPARQL and Cypher already read that table through `include_inferred`, so a user rule becomes visible to every dialect the moment it is materialized, with no new schema, no new option and no new cache to invalidate — rules extend the reasoner rather than forming a second inference universe ([[architecture#Reasoning]]). The shared lifecycle this first implied (running either materialization replaced the whole inferred set) proved painful for the studio, which runs OWL 2 RL and several rule files side by side; [[decisions#D28 Inferences are attributed to producers]] resolves it.
+
+## D28 Inferences are attributed to producers
+
+A side table `quads_inf_src(src, s, p, o, g)` records which producer derived each inferred quad (`owl2rl`, or a Datalog `Options::producer` name); `quads_inf` itself is unchanged.
+
+Materializing resets only its own producer: its attributions are deleted, then every inferred quad no producer still claims. After writing, it claims every unclaimed quad. Readers and the fixpoint loop are untouched, so queries, Cypher and Datalog read `quads_inf` exactly as before, and a quad two producers can derive stays until neither does. Rejected: a producer column in `quads_inf`'s key, which would duplicate rows every reader would then have to de-duplicate. The cost is one extra row per inference, written once per run; on D1 that is billed. See [[architecture#Reasoning]].
+
