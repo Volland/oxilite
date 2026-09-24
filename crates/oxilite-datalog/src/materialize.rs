@@ -2,7 +2,8 @@
 //!
 //! Derived facts go into `quads_inf`, the table OWL 2 RL materialization already uses, so a
 //! user rule is visible to SPARQL and Cypher through the `inferred` option that already
-//! exists — and so the two share one lifecycle, which running either one replaces.
+//! exists. Conclusions are attributed to a producer (`Options::producer`), so materializing a
+//! program replaces its own earlier conclusions and leaves other producers' in place.
 //!
 // @lat: [[architecture#Datalog frontend#Materialization]]
 
@@ -58,7 +59,7 @@ pub fn plan(
     let heads = materializable(&program)?;
     let run = sql::new_run();
 
-    let mut statements = oxilite_core::reason::materialize_reset(caps);
+    let mut statements = oxilite_core::reason::materialize_reset_for(caps, &options.producer);
     let mut rows = EncodedRows::default();
     let mut inserts = Vec::new();
     let mut fixpoint = Fixpoint {
@@ -84,6 +85,7 @@ pub fn plan(
     rows.dedup();
     statements.extend(oxilite_core::writer::term_statements(&rows, caps));
     statements.extend(inserts);
+    statements.push(oxilite_core::reason::inference_attribute(&options.producer));
     statements.push(Statement::new("SELECT COUNT(*) FROM quads_inf"));
     Ok((fixpoint, statements, heads.len()))
 }

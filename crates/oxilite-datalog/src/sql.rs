@@ -34,6 +34,9 @@ fn int_hi() -> i64 {
 /// iteration may be.
 pub const MAX_FIXPOINT_ARITY: usize = 6;
 
+/// The default producer name of materialized rule conclusions.
+pub const DATALOG_PRODUCER: &str = "datalog";
+
 /// Options for compiling a program. The defaults match SPARQL's: the default graph only, and
 /// asserted triples only.
 #[derive(Debug, Clone)]
@@ -45,6 +48,9 @@ pub struct Options {
     /// How many rounds a component evaluated by iteration may take before it is called
     /// divergent. Each round is one request, so this also bounds the round trips.
     pub max_iterations: usize,
+    /// The name materialized conclusions are attributed to: materializing replaces only this
+    /// producer's earlier conclusions (default `datalog`).
+    pub producer: String,
 }
 
 impl Default for Options {
@@ -53,6 +59,7 @@ impl Default for Options {
             union_default_graph: false,
             include_inferred: false,
             max_iterations: 100,
+            producer: DATALOG_PRODUCER.to_owned(),
         }
     }
 }

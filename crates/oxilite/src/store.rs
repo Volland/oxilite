@@ -427,6 +427,17 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
         self.run(ops::clear_inferences_job())
     }
 
+    /// Removes the inferences of one producer (`"owl2rl"`, or a Datalog `Options::producer`),
+    /// keeping those another producer also derived.
+    pub fn clear_inferences_of(&self, producer: &str) -> Result<()> {
+        self.run(ops::clear_inferences_of_job(producer))
+    }
+
+    /// The producers that derived a materialized quad: empty when it is not an inference.
+    pub fn inference_producers<'a>(&self, quad: impl Into<QuadRef<'a>>) -> Result<Vec<String>> {
+        self.run(ops::inference_producers_job(quad.into()))
+    }
+
     /// Dumps the whole dataset (dataset formats: N-Quads, TriG).
     pub fn dump_to_writer<W: Write>(
         &self,

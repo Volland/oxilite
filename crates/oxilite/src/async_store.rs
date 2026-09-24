@@ -168,6 +168,19 @@ impl<B: AsyncBackend> AsyncStore<B> {
         run_async(&self.backend, ops::clear_inferences_job()).await
     }
 
+    /// Removes the inferences of one producer (see [`crate::Store::clear_inferences_of`]).
+    pub async fn clear_inferences_of(&self, producer: &str) -> Result<()> {
+        run_async(&self.backend, ops::clear_inferences_of_job(producer)).await
+    }
+
+    /// The producers that derived a materialized quad (see [`crate::Store::inference_producers`]).
+    pub async fn inference_producers<'a>(
+        &self,
+        quad: impl Into<QuadRef<'a>>,
+    ) -> Result<Vec<String>> {
+        run_async(&self.backend, ops::inference_producers_job(quad.into())).await
+    }
+
     pub async fn quads_for_pattern(
         &self,
         subject: Option<NamedOrBlankNodeRef<'_>>,
