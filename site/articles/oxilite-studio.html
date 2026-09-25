@@ -138,9 +138,13 @@ ok</code></pre>
         <li><strong>A remote D1 database.</strong> Over Cloudflare's HTTP API, with the token in VS Code's secret storage. It opens read-only unless you ask otherwise.</li>
       </ul>
       <p>Every query, completion and explain works on an attached store. Writes are guarded: an update, a writing Cypher statement or an import asks first, and on D1 the question says what it will cost (<em>about 10 billed rows written (2 quads)</em> for a two-triple <code>INSERT DATA</code>), since D1 bills every written index entry. Each result on D1 reports the requests it took and the rows it read and wrote. OWL 2 RL materialization on D1 is a separate, confirmed command, because it runs over several requests and is not atomic across them.</p>
+      <p><strong>Which store does a query run on?</strong> The active connection, shown in the status bar, unless the file says otherwise. A comment at the top pins a file to its own store, and a CodeLens above it shows where it will run:</p>
+      <pre><code><span class="c"># oxilite: connection = data/prod.sqlite</span>
+SELECT ?s ?o WHERE { ?s &lt;https://example.org/source&gt; ?o }</code></pre>
+      <p>The target is <code>project</code>, a SQLite path (read-only unless you add <code>read-write</code>) or <code>d1:&lt;account&gt;/&lt;database&gt;</code>. Datalog pins with <code>%</code> and Cypher with <code>//</code>. The pinned store is attached without becoming active, so the rest of the workspace keeps querying what it did before.</p>
 
       <h2><span class="step">8</span>Notebooks, diagrams and a rules debugger</h2>
-      <p><strong>Notebooks</strong> (<code>.oxnb</code>) mix Markdown with SPARQL, Datalog and Cypher cells that run against the active connection. Their outputs are saved in the file, so <code>demo.oxnb</code> opens with its results, and they use the same table and graph views as the results panel:</p>
+      <p><strong>Notebooks</strong> (<code>.oxnb</code>) mix Markdown with SPARQL, Datalog and Cypher cells. Each connection is a kernel: pick one from the kernel picker, and the notebook saves that choice and reattaches it the next time it opens. Every output says which store it came from. Their outputs are saved in the file, so <code>demo.oxnb</code> opens with its results, and they use the same table and graph views as the results panel:</p>
       <figure class="shot">
         <a href="../assets/studio/notebook.png"><img src="../assets/studio/notebook.png" alt="The demo notebook: a Markdown introduction, a SPARQL cell and its table of four people" loading="lazy" width="1600" height="1000"></a>
         <figcaption>The demo as a notebook. Cells run on the Project store with OWL 2 RL, and their results are saved with the notebook.</figcaption>
