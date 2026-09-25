@@ -8,6 +8,6 @@
     "deploy": "wrangler deploy",
     "test": "node test.mjs"
   },
-  "dependencies": { "@oxilite/d1": "0.3.0" },
+  "dependencies": { "@oxilite/d1": "0.3.1" },
   "devDependencies": { "miniflare": "^4", "esbuild": "*" }
 }
