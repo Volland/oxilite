@@ -323,12 +323,16 @@ pub struct Vocab {
 
 impl Vocab {
     pub fn compute(store: &Handle, options: &QueryOptions) -> Result<Self> {
-        let rows = |text: &str| -> Result<Vec<Vec<Option<Term>>>> {
+        Self::from_rows(|text| {
             match store.query_output(SparqlParser::new().parse_query(text)?, options)? {
                 QueryOutput::Solutions { rows, .. } => Ok(rows),
                 _ => Ok(Vec::new()),
             }
-        };
+        })
+    }
+
+    /// The vocabulary from any way of running a `SELECT` (the shell runs it on its own store).
+    pub fn from_rows(rows: impl Fn(&str) -> Result<Vec<Vec<Option<Term>>>>) -> Result<Self> {
         let counted = |rows: Vec<Vec<Option<Term>>>| -> Vec<(String, u64)> {
             rows.into_iter()
                 .filter_map(|r| match (&r[0], r.get(1).cloned().flatten()) {

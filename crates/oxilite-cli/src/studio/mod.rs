@@ -4,17 +4,17 @@
 // @lat: [[architecture#Studio server]]
 
 pub mod check;
-mod conn;
+pub(crate) mod conn;
 mod d1;
 mod debug;
 mod explorer;
-mod index;
+pub(crate) mod index;
 mod kgtest;
-mod lang;
+pub(crate) mod lang;
 pub mod manifest;
 pub mod mcp;
 mod project;
-mod scanner;
+pub(crate) mod scanner;
 #[cfg(test)]
 mod tests;
 mod validate;

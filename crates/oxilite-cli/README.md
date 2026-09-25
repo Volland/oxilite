@@ -6,7 +6,7 @@
 
 [![crates.io](https://img.shields.io/crates/v/oxilite-cli.svg)](https://crates.io/crates/oxilite-cli) [![docs.rs](https://img.shields.io/docsrs/oxilite-cli)](https://docs.rs/oxilite-cli) [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](https://github.com/Volland/oxilite#license)
 
-**The `oxilite` command line:** load, query and explain a SQLite-backed RDF store, or serve it over the SPARQL 1.1 protocol with the same routes as `oxigraph serve`.
+**The `oxilite` command line:** an interactive SPARQL shell, load, query and explain a SQLite-backed RDF store, or serve it over the SPARQL 1.1 protocol with the same routes as `oxigraph serve`.
 
 **[Website](https://oxilitedb.com)** · [API docs](https://docs.rs/oxilite-cli) · **[Guide and architecture](https://github.com/Volland/oxilite#readme)** · [Changelog and issues](https://github.com/Volland/oxilite/issues)
 
@@ -16,7 +16,33 @@
 cargo install oxilite-cli
 ```
 
-## Usage
+## Shell
+
+```bash
+oxilite                 # a transient in-memory store with the full schema
+oxilite data.sqlite     # that SQLite file, created with the schema if missing
+oxilite data.sqlite < script.rq   # run a script; exit status 1 if a statement failed
+```
+
+```text
+oxilite> PREFIX ex: <http://example.com/>
+oxilite> INSERT DATA { ex:alice a foaf:Person ; foaf:name "Alice" ; ex:knows ex:bob }
+OK · 412 µs
+oxilite> SELECT ?who ?name WHERE {
+   ...>   ?who a foaf:Person ; foaf:name ?name
+   ...> };
+┌──────────┬───────┐
+│ who      │ name  │
+├──────────┼───────┤
+│ ex:alice │ Alice │
+└──────────┴───────┘
+1 row · 380 µs
+oxilite> .exit
+```
+
+A statement runs as soon as it is complete on one line; a statement over several lines runs when it ends with `;` or an empty line. Tab completes dot-commands, SPARQL keywords, prefixes, variables and the store's own predicates and classes in the position they fit. Well-known prefixes (`rdf`, `rdfs`, `owl`, `xsd`, `foaf`, `schema`, …) are predeclared, and `PREFIX` declarations and loaded Turtle files add to them. Results are tables fitted to the terminal; `.mode` switches to JSON, XML, CSV, TSV or an RDF format. `.help` lists the commands: `.open`, `.save`, `.load`, `.read`, `.dump`, `.explain`, `.datalog`, `.graphs`, `.stats`, `.prefix`, `.timer`, `.maxrows`, `.exit` and more. History is kept in `~/.oxilite_history`.
+
+## Commands
 
 ```bash
 oxilite load     -l data.sqlite -f dump.nt data.ttl              # bulk load, then refresh statistics

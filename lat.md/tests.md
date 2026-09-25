@@ -784,6 +784,46 @@ Measured on an Apple Silicon laptop (M1 milestone):
 | friends-of-badged | 96 µs | 87 µs |
 | city-age-filter | 478 µs | 7.8 ms |
 
+## Shell
+
+The interactive shell of [[architecture#Command line and HTTP endpoint#Interactive shell]], driven through a session with captured output and through the binary with a script on standard input.
+
+### Statements run when complete
+
+Brackets inside strings, IRIs and comments do not count; one line runs when it parses, several lines wait for `;` or an empty line and then run once, and a broken statement reports its error.
+
+### Exit stops at once
+
+`.exit`, `.quit` and `.exit N` end the session with status 0 or `N`, even with leading spaces.
+
+### Session prefixes
+
+Well-known prefixes are declared for statements that use them, a statement's own declaration wins, and a `PREFIX` line joins the session so later statements and results use it.
+
+### Tables fit the terminal
+
+Column widths shrink the widest column first to fit the terminal, no table line is wider than the terminal, and clipped cells end with `…`.
+
+### Completion knows the store
+
+Predicates and classes of the store complete after their prefix in the right position, keywords complete from their start, variables from earlier lines of the statement complete, and dot-commands and their fixed arguments complete.
+
+### Save copies the store
+
+`.save FILE` copies default-graph and named-graph quads into a new SQLite file and refuses a file that exists.
+
+### A new file gets the schema
+
+`oxilite FILE` creates the file with the schema, and what the shell inserted is seen by `oxilite query -l FILE` and by `oxilite -l FILE`.
+
+### In memory by default
+
+`oxilite` without a file keeps inserts for the session and creates no file; subcommands behave as before.
+
+### Scripts report failures
+
+A script prints what succeeded, reports errors with their line on standard error and exits with 1; `.exit` stops before later lines run.
+
 ## Studio server
 
 The language server behind oxilite studio, driven over an in-memory LSP connection against a temporary workspace, see [[architecture#Studio server]].

@@ -181,9 +181,21 @@ With `StoreOptions::text_index`, `terms_fts` (external content over `terms`) ind
 
 ## Command line and HTTP endpoint
 
-The `oxilite` binary (`crates/oxilite-cli`) loads, queries, explains and updates stores, and `oxilite serve` exposes the SPARQL 1.1 protocol on the routes of `oxigraph serve` (`/query`, `/update`, `/store`). See [[crates/oxilite-cli/src/main.rs]].
+The `oxilite` binary (`crates/oxilite-cli`) opens an interactive shell, loads, queries, explains and updates stores, and `oxilite serve` exposes the SPARQL 1.1 protocol on the routes of `oxigraph serve` (`/query`, `/update`, `/store`). See [[crates/oxilite-cli/src/main.rs]].
 
 It also checks projects (`oxilite check`, [[architecture#Studio server#Check command]]), serves agents (`oxilite mcp`, [[architecture#Studio server#Agent tools]]) and runs the studio's language server (`oxilite studio-server`). It opens a SQLite file with the bundled SQLite, the same file through a SQLite shared library (`--library`), or a D1 database behind the local sidecar (`--d1-sidecar`). Results follow the `Accept` header (SPARQL JSON/XML/CSV/TSV, RDF formats for graphs). The benchmarks drive it with the official BSBM test driver.
+
+### Interactive shell
+
+`oxilite` without a subcommand is a SPARQL shell like `sqlite3`: on a transient in-memory store, or on the file it names, created with the schema when missing. See [[crates/oxilite-cli/src/shell/mod.rs#Session]].
+
+Store flags (`-l`, `--library`, `--text-index`, `--no-graph-index`, `--d1-sidecar`) apply as for the other commands. A statement runs when its brackets balance outside strings, IRIs and comments and it ends with `;`, is followed by an empty line, or is one line that parses ([[crates/oxilite-cli/src/shell/input.rs#complete]]); a multi-line query never runs just because it parses, since `ORDER BY` or `LIMIT` may follow.
+
+Session prefixes ([[crates/oxilite-cli/src/shell/prefixes.rs#Prefixes]]) start with the studio's well-known prefixes and `oxl:`, learn every `PREFIX` of a successful statement and the `@prefix` lines of loaded Turtle files, and are declared on a statement's first line when it uses one without declaring it, so error lines stay right; `.datalog` programs get them as `@prefix`. Results compact IRIs with the same table.
+
+The line editor is `rustyline` with a continuation prompt, history in `~/.oxilite_history`, history hints, and highlighting from the studio scanner. Tab completion ([[crates/oxilite-cli/src/shell/editor.rs#complete_sparql]]) runs the studio's `complete` over the session prologue, the pending lines and the current line, with the store's `Vocab` computed lazily after each change; dot-commands complete their names and fixed arguments, and file arguments complete paths.
+
+Tables ([[crates/oxilite-cli/src/shell/render.rs#table]]) fit the terminal by shrinking the widest columns and clipping cells with `…`, show at most `.maxrows` rows, and colour terms by kind only on a terminal without `NO_COLOR`. Graph results print as Turtle with the prefixes they use; `.mode` selects the SPARQL results formats or RDF formats. `.dump` and `.save` select every quad with SPARQL, so they work on every backend. When standard input is not a terminal the shell runs it as a script: no banner or prompt, errors with line numbers, status 1 if a statement failed.
 
 ## Studio server
 

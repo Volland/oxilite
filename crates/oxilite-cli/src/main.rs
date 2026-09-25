@@ -1,5 +1,6 @@
-//! `oxilite`: load and query a store from the command line, or serve it over the SPARQL 1.1
-//! protocol with the same routes as `oxigraph serve` (`/query`, `/update`, `/store`).
+//! `oxilite`: an interactive SPARQL shell (the default command), load and query a store from the
+//! command line, or serve it over the SPARQL 1.1 protocol with the same routes as
+//! `oxigraph serve` (`/query`, `/update`, `/store`).
 //!
 //! The store is a SQLite file (bundled SQLite), the same file through a SQLite shared library
 //! (`--library`), or a D1 database behind the local sidecar (`--d1-sidecar`, used by the
@@ -8,6 +9,7 @@
 // @lat: [[architecture#Command line and HTTP endpoint]]
 
 mod db;
+mod shell;
 mod studio;
 
 use clap::{Parser, Subcommand};
@@ -21,11 +23,19 @@ use tiny_http::{Header, Method, Request, Response, Server};
 #[command(
     name = "oxilite",
     version,
-    about = "oxilite: an Oxigraph-compatible SPARQL store on SQLite"
+    about = "oxilite: an Oxigraph-compatible SPARQL store on SQLite",
+    long_about = "oxilite: an Oxigraph-compatible SPARQL store on SQLite.\n\n\
+        Without a command, opens an interactive SPARQL shell on DATABASE (a SQLite file, created \
+        with the schema if missing) or on a transient in-memory store.",
+    args_conflicts_with_subcommands = true
 )]
 struct Args {
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
+    /// The shell's SQLite database file (created if missing; in memory when omitted).
+    database: Option<String>,
+    #[command(flatten)]
+    location: Location,
 }
 
 #[derive(clap::Args, Clone)]
@@ -147,14 +157,29 @@ enum Command {
 }
 
 fn main() {
-    if let Err(e) = run(Args::parse()) {
+    let args = Args::parse();
+    let result = match args.command {
+        Some(command) => run(command),
+        None => {
+            let mut location = args.location;
+            if let Some(database) = args.database {
+                location.location = Some(database);
+            }
+            match shell::run(location) {
+                Ok(0) => Ok(()),
+                Ok(code) => std::process::exit(code),
+                Err(e) => Err(e),
+            }
+        }
+    };
+    if let Err(e) = result {
         eprintln!("error: {e}");
         std::process::exit(1);
     }
 }
 
-fn run(args: Args) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    match args.command {
+fn run(command: Command) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    match command {
         Command::Serve {
             location,
             bind,
