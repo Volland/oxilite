@@ -3,9 +3,10 @@
 use crate::Location;
 use oxilite::dylib::DylibBackend;
 use oxilite::io::{RdfFormat, RdfParser};
-use oxilite::model::{GraphName, NamedNode};
+use oxilite::model::{GraphName, NamedNode, NamedOrBlankNode, Term};
 use oxilite::sparql::{QueryOptions, SparqlParser};
 use oxilite::store::Store;
+use oxilite::version::{Change, CommitInfo, CommitRecord, LevelChange, VersionStatus, Versioning};
 use oxilite::AsyncStore;
 use oxilite_core::encoding::graph_id;
 use oxilite_core::{AsyncBackend, Capabilities, QueryOutput, Request, Response, StoreOptions};
@@ -78,7 +79,25 @@ impl Db {
         let options = StoreOptions {
             graph_index: !l.no_graph_index,
             text_index: l.text_index,
+            versioning: match &l.versioning {
+                Some(v) => v.parse()?,
+                None => Versioning::Off,
+            },
+            as_of_index: l.as_of_index,
+            stamp_index: l.stamp_index,
         };
+        let db = Self::open_with(l, &options)?;
+        if l.author.is_some() || l.message.is_some() {
+            db.set_commit_info(CommitInfo {
+                author: l.author.clone(),
+                message: l.message.clone(),
+            });
+        }
+        Ok(db)
+    }
+
+    fn open_with(l: &Location, options: &StoreOptions) -> Result<Self> {
+        let options = options.clone();
         if let Some(url) = &l.d1_sidecar {
             let backend = SidecarD1 {
                 url: url.trim_end_matches('/').to_string(),
@@ -104,24 +123,122 @@ impl Db {
         default_graphs: &[String],
         named_graphs: &[String],
     ) -> Result<QueryOutput> {
+        self.query_at(query, default_graphs, named_graphs, None)
+    }
+
+    /// Runs a query, optionally on a past version of the store.
+    pub fn query_at(
+        &self,
+        query: &str,
+        default_graphs: &[String],
+        named_graphs: &[String],
+        as_of: Option<&str>,
+    ) -> Result<QueryOutput> {
         let q = SparqlParser::new().parse_query(query)?;
         let options = QueryOptions {
             default_graph: graph_ids(default_graphs)?,
             named_graphs: graph_ids(named_graphs)?,
+            as_of: as_of.map(str::to_owned),
             ..QueryOptions::default()
         };
         Ok(sync_store!(self, s => s.query_output(q, &options), s => s.query_output(q, &options))?)
     }
 
     pub fn explain(&self, query: &str) -> Result<String> {
+        self.explain_at(query, None)
+    }
+
+    pub fn explain_at(&self, query: &str, as_of: Option<&str>) -> Result<String> {
+        let options = QueryOptions {
+            as_of: as_of.map(str::to_owned),
+            ..QueryOptions::default()
+        };
         Ok(match self {
-            Db::Native(s) => s.explain(query)?,
-            Db::Library(s) => s.explain(query)?,
+            Db::Native(s) => s.explain_opt(query, &options)?,
+            Db::Library(s) => s.explain_opt(query, &options)?,
+            Db::D1(_) if as_of.is_some() => {
+                return Err("explain --as-of is not available on D1; run the query instead".into())
+            }
             Db::D1(m) => m
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .explain(query)?,
         })
+    }
+
+    /// Runs a Datalog program, optionally on a past version of the store.
+    pub fn datalog_at(
+        &self,
+        program: &str,
+        as_of: Option<&str>,
+    ) -> Result<oxilite::datalog::DatalogResult> {
+        let options = oxilite::datalog::Options {
+            as_of: as_of.map(str::to_owned),
+            ..Default::default()
+        };
+        Ok(
+            sync_store!(self, s => s.datalog_with(program, &options), s => s.datalog_with(program, &options))?,
+        )
+    }
+
+    // ------------------------------------------------------------------------- versioning
+
+    /// Author and message recorded on the commits of later writes.
+    pub fn set_commit_info(&self, info: CommitInfo) {
+        match self {
+            Db::Native(s) => s.set_commit_info(info),
+            Db::Library(s) => s.set_commit_info(info),
+            Db::D1(m) => m
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .set_commit_info(info),
+        }
+    }
+
+    pub fn versioning(&self) -> Result<VersionStatus> {
+        Ok(sync_store!(self, s => s.versioning(), s => s.versioning())?)
+    }
+
+    pub fn set_versioning(&self, level: Versioning, change: LevelChange) -> Result<VersionStatus> {
+        Ok(
+            sync_store!(self, s => s.set_versioning(level, change), s => s.set_versioning(level, change))?,
+        )
+    }
+
+    pub fn history(&self, limit: usize) -> Result<Vec<CommitRecord>> {
+        Ok(sync_store!(self, s => s.history(limit), s => s.history(limit))?)
+    }
+
+    pub fn resolve_version(&self, version: &str) -> Result<i64> {
+        Ok(sync_store!(self, s => s.resolve_version(version), s => s.resolve_version(version))?)
+    }
+
+    pub fn changes(&self, after: i64, until: Option<i64>) -> Result<Vec<Change>> {
+        Ok(sync_store!(self, s => s.changes(after, until), s => s.changes(after, until))?)
+    }
+
+    pub fn diff(&self, from: &str, to: &str) -> Result<Vec<Change>> {
+        Ok(sync_store!(self, s => s.diff(from, to), s => s.diff(from, to))?)
+    }
+
+    pub fn purge(
+        &self,
+        pattern: (
+            Option<NamedOrBlankNode>,
+            Option<NamedNode>,
+            Option<Term>,
+            Option<GraphName>,
+        ),
+        reason: Option<&str>,
+    ) -> Result<()> {
+        let (s_, p, o, g) = pattern;
+        let (s_, p, o, g) = (
+            s_.as_ref().map(NamedOrBlankNode::as_ref),
+            p.as_ref().map(NamedNode::as_ref),
+            o.as_ref().map(Term::as_ref),
+            g.as_ref().map(GraphName::as_ref),
+        );
+        Ok(sync_store!(self, s => s.purge(s_, p, o, g, reason), s => s.purge(s_, p, o, g, reason))?)
     }
 
     /// Runs a Datalog program and returns its solutions.

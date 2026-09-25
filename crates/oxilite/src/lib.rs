@@ -32,6 +32,7 @@ mod schema_store;
 pub mod store;
 #[cfg(feature = "vc")]
 mod vc_store;
+mod version_store;
 
 pub use async_store::AsyncStore;
 pub use oxilite_core as core;
@@ -46,6 +47,15 @@ pub mod schema {
     pub use crate::schema_store::{RegisteredGraph, Registration};
     pub use oxilite_core::registry::{SchemaGraph, SchemaRole};
     pub use oxilite_core::shapes::{PropertyShape, ShapeIndex};
+}
+
+/// Optional versioning: the store clock, the immutable change log and time travel (see
+/// `StoreOptions::versioning`, `Store::set_versioning`, `QueryOptions::as_of`).
+pub mod version {
+    pub use oxilite_core::version::{
+        Change, CommitInfo, CommitRecord, History, LevelChange, VersionRef, VersionState,
+        VersionStatus, Versioning,
+    };
 }
 
 /// The same `Store` as [`store::Store`] (blocking API).

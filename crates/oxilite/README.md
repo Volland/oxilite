@@ -124,6 +124,10 @@ docs.put_document(r#"{"@context": {"name": "http://schema.org/name"}, "@id": "ur
 
 Each document is stored byte for byte, and its RDF goes into a named graph of its own (by default its `id`), which SPARQL queries. Keys, graphs, contexts and metadata indexes are configurable. See [`oxilite-jsonld`](https://crates.io/crates/oxilite-jsonld) and [`oxilite-vc`](https://crates.io/crates/oxilite-vc).
 
+## Versioning and time travel
+
+Create a store with `StoreOptions { versioning: Versioning::Log, .. }` and every write becomes a commit in an immutable change log. `QueryOptions::as_of` (`"HEAD~1"`, `"#42"`, `"@2026-09-01T12:00:00Z"`) queries any past version, and `SERVICE <oxilite:version/HEAD~1> { … }` compares two versions in one query. `GRAPH <oxilite:history>` reads commits (PROV-O) and changes (`oxl:added` / `oxl:removed`) as RDF. Datalog adds `at "HEAD~1"` / `at ?c` per atom and `commit`/`added`/`removed`/`branch` relations, and Cypher takes the same `as_of`. `history`, `changes`, `diff`, `with_commit` and `purge` read and manage the log, and `set_versioning` raises or lowers an existing store's level. `Versioning::Stamped` keeps only a store clock and the tick that added each quad, and writes no extra row per quad. See the [README](https://github.com/Volland/oxilite#versioning-history-and-time-travel).
+
 ## Full-text search
 
 Create the store with `StoreOptions { text_index: true, .. }` and match literals with FTS5:

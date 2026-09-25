@@ -35,6 +35,8 @@ pub enum Tok {
     Query,
     /// `@prefix`
     AtPrefix,
+    /// `@version`
+    AtVersion,
     LParen,
     RParen,
     Comma,
@@ -203,6 +205,8 @@ impl<'a> Lexer<'a> {
                     let word = self.read_name(span)?;
                     if word == "prefix" || word == "base" {
                         Tok::AtPrefix
+                    } else if word == "version" {
+                        Tok::AtVersion
                     } else {
                         return Err(DatalogError::parse(
                             span,

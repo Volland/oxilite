@@ -57,7 +57,9 @@ Seven small tables; the quad table is a `WITHOUT ROWID` clustered index whose se
 - `stats_pred`, `stats_class` — planner statistics ([[architecture#Query planner#Statistics]]).
 - `update_buffer(op, s, p, o, g)` — staging for atomic SPARQL UPDATE ([[architecture#Updates and atomicity]]).
 - `oxilite_guard(graph_does_not_exist, graph_already_exists)` — assertions inside batches: inserting a non-NULL value fails a `CHECK` constraint named after the violated SPARQL condition (e.g. `CREATE GRAPH` on an existing graph), aborting the batch.
-- `oxilite_meta(key, value)` — schema version and options.
+- `oxilite_meta(key, value)` — schema version and options, the versioning level included.
+
+Versioned stores add `ticks`, `quads.t`, `quad_log` and `commits` by level ([[architecture#Versioning]]); an `off` store has none of them.
 
 Three mandatory permutations cover every bound/unbound combination of s, p, o; `g` is last in each so graph restrictions are checked inside the index. When another position is bound, graph conditions are emitted as `+q.g = …` (SQLite's unary-plus convention) so the planner never picks `gspo` for a `g = 0` that almost every quad matches — this alone made star queries two orders of magnitude faster. Index count is kept deliberately low because D1 bills every index entry written. See [[crates/oxilite-core/src/schema.rs#create_schema]].
 
@@ -149,6 +151,60 @@ Every write — `INSERT DATA`, `DELETE/INSERT … WHERE`, `CLEAR`, `DROP`, `exte
 
 Conditions SQL cannot express as data become constraint failures on `oxilite_guard`, whose CHECK columns (`graph_does_not_exist`, `graph_already_exists`, `computed_value_not_storable`) abort the whole batch and are mapped back to SPARQL errors (see [[crates/oxilite-core/src/error.rs]]). A template that stores a computed non-integer value (a decimal from arithmetic, a new string) raises `computed_value_not_storable`; native stores then rerun the update through spareval's `delete_insert` inside one transaction, while D1 reports it. `explain_update()` shows the SQL of every operation.
 
+## Versioning
+
+Optional history, chosen per store: `off` (the default, today's store), `stamped` (a store clock), `log` (an immutable change log with time travel). Levels nest; `off` adds no table, column, statement or row. See [[crates/oxilite-core/src/version.rs]].
+
+The level lives in `oxilite_meta` and is read with the statistics at open ([[crates/oxilite-core/src/version.rs#VersionState]]), so every driver knows it before its first write. Rows written per triple, measured on a local D1 by `write-cost` ([[architecture#Benchmarks]]): 4.81 at `off`, 4.81 at `stamped`, 6.82 at `log`, 8.82 at `log` with the as-of index.
+
+### Store clock
+
+`ticks(t, time, kind, author, message)` holds one row per atomic write that touches `quads`: the tick, its wall time, and who made it and why. Level changes, freezes and purges are ticks of their own kind.
+
+The tick is opened by the store, never by a writer: [[crates/oxilite-core/src/version.rs#prepare]] prepends two statements to every atomic request with a statement that writes `quads` (every writer spells it `INSERT OR IGNORE INTO quads(` or `DELETE FROM quads `) — the terms of the tick's time (from the host clock), author and message, then `INSERT INTO ticks … SELECT max(t) + 1` recording their ids ([[crates/oxilite-core/src/version.rs#write_tick_statements]]) — and strips their results from the response. Rust stores apply it through [[crates/oxilite-core/src/version.rs#VersionedBackend]], which also opens one tick per interactive transaction; the wasm engine applies it to every job it hands to JavaScript. D1 and SQLite have one writer, so `max(t) + 1` is strictly monotonic and ordering never depends on clocks; `time` maps a tick to wall time. A versioned store's capabilities reserve two statements per request for the tick ([[crates/oxilite-core/src/version.rs#effective_caps]]).
+
+From `stamped` on, the two quad inserts ([[crates/oxilite-core/src/writer.rs#insert_statements_into]] and the `update_buffer` insert) write `quads.t`, the tick that added the quad, from `(SELECT max(t) FROM ticks)`. `INSERT OR IGNORE` leaves an existing row alone, so `t` is when the quad was first added since it was last absent. `t` is not in the secondary indexes, so scans stay index-only; the optional `quads_t` index serves "added since". `stamped` costs three rows per batch (the tick, its time term and that term's timestamp index entry) and none per quad.
+
+### Change log
+
+At `log`, triggers on `quads` record every effective change in `quad_log(s, p, o, g, tx, op)`.
+
+An `INSERT OR IGNORE` that inserts nothing and a `DELETE` that matches nothing fire no trigger, so re-adding a present quad or removing an absent one leaves no trace.
+
+A change undone within the same tick (added then removed, or removed then re-added) deletes its log row instead of adding one, so a tick records its net effect. `quad_log`'s key is `(s, p, o, g, tx)`, the probe of as-of reads; `quad_log_tx` lists a commit's changes; `commits(tx)` marks the ticks that changed something. Triggers make `quad_log`, `ticks` and `commits` immutable: only the tick being written may change, and only a purge may delete. Every writer is captured — SPARQL, bulk loads, Cypher, JSON-LD and credentials, the studio — because the capture is below them. The optional as-of index adds `(p, o, s, g, tx)` and `(o, s, p, g, tx)`. SQLite forbids aliases on the target of a `DELETE` inside a trigger, and D1 enforces it, so the triggers name the table.
+
+### As-of reads
+
+The store at tick T is the set of quads whose latest logged change at or before T is an addition ([[crates/oxilite-core/src/version.rs#as_of_sql]]): a log scan with one `NOT EXISTS` probe on the key.
+
+Measured by `as-of-latency`: subject-bound patterns read the past at about 3× the present; patterns bound by predicate or object scan the log unless the as-of index exists (10–100× without it, 1–3.6× with it); aggregating a predicate's whole history costs about 17× even with it, the case checkpoints would address. Current-state queries cost the same at every level, and a golden test pins an unversioned store's SQL for the W3C corpus to 0.3.1's ([[crates/oxilite-core/tests/golden_off.rs]]).
+
+`QueryOptions::as_of` takes a version reference ([[crates/oxilite-core/src/version.rs#VersionRef]]): `HEAD`, `HEAD~n` (n commits back), a tick `#42`, or `@<xsd:dateTime>` (the last tick at or before it). The store resolves every reference a query names in one read ([[crates/oxilite-core/src/version.rs#resolve_job]]), checking that each tick lies inside the recorded history, then `Entailment::base()` — the quad source of the compiler and the fallback evaluator — reads the log at that tick instead of `quads`, so patterns, paths, `OPTIONAL`, `GRAPH` and DESCRIBE follow. `SERVICE <oxilite:version/REF> { … }` compiles its group against another tick, so one query compares versions. Datalog reads a version through `Options::as_of` or an `@version "REF" .` directive, and per atom with `at` ([[architecture#Versioning#History queries]]). Cypher takes `QueryOptions::as_of` in its options: the store resolves it once per statement, its SPARQL reads compile at that tick and its direct quad reads use the as-of table; a writing statement with a version is refused. Inferences and reasoning describe the current state, so they are refused with a version; so is materialization.
+
+### History queries
+
+The history is itself queryable: a virtual graph in SPARQL and built-in relations in Datalog, compiled over `ticks`, `commits` and `quad_log` with no stored copy. See [[crates/oxilite-core/src/version.rs#history_sql]].
+
+A commit is its tick as an inline `xsd:integer` (the id is the tick plus the integer offset), the one kind of id SQL can compute; its time, author and message are the terms its tick recorded. In SPARQL, `GRAPH <oxilite:history>` reads commits described with PROV-O (`a prov:Activity`, `prov:startedAtTime`, `prov:wasAssociatedWith`, `rdfs:comment`, `prov:wasInformedBy` the commit before) and changes as `?c oxl:added <<( s p o )>>` / `oxl:removed`, whose triple-term parts bind the log's columns directly (`Compiler::change_access`); a query on the history graph never falls back to the evaluator, which would see an empty graph. In Datalog, `commit(?c, ?parent, ?time, ?author)`, `added` / `removed(?s, ?p, ?o, ?g, ?c)` and `branch(?name, ?c)` are built-ins unless the program defines rules of that name; `at "REF"` reads an atom at a resolved version and `at ?c` at the commit a positive atom binds, placed by a placeholder filled once the rule's bindings are known ([[crates/oxilite-datalog/src/sql.rs]]). Datalog results read the default graph's id 0 as unbound.
+
+### Level changes
+
+A store's level changes only explicitly ([[crates/oxilite-core/src/version.rs#change_statements]]), one atomic request that is also the body of a D1 migration; opening never changes it ([[crates/oxilite-core/src/ops.rs#open_job]]).
+
+The stored level wins at open; a higher requested level is applied only to an empty store (that is how a store is created versioned) and refused otherwise. Upgrades keep every quad. `off → stamped` adds `quads.t` with `ALTER TABLE` (metadata only; old rows read 0) and starts the clock. `stamped → log` records the whole store as its genesis commit, one log row per quad, so the log alone describes every state from genesis on; as-of before genesis is an error. Downgrades keep data unless `allow_loss`: `log → stamped` drops the capture triggers and freezes the log, which still answers up to the freeze; raising it again records the gap's net changes on a resume tick, against the frozen state, and as-of inside the gap is an error. `stamped → off` stops the clock and keeps `t`; with `allow_loss` it drops the column (a table rewrite). A purge ([[crates/oxilite-core/src/version.rs#purge_request]]) is the one operation that rewrites history: it deletes matching quads from `quads` and `quad_log` under a `purging` flag the triggers respect, and records a purge tick without the removed content.
+
+### History API
+
+Stores expose the level and the history on every surface: `versioning()`, `set_versioning()`, `set_commit_info()`, `history()`, `changes()`, `diff()` and `purge()` ([[crates/oxilite/src/version_store.rs]]).
+
+The Rust blocking and async stores implement them over the core's jobs ([[crates/oxilite-core/src/version.rs#status_job]], [[crates/oxilite-core/src/version.rs#log_job]], [[crates/oxilite-core/src/version.rs#changes_job]], [[crates/oxilite-core/src/version.rs#diff_job]]); the wasm engine and `@oxilite/d1` expose them to Workers, `@oxilite/node` to Node.js. `changes` reads `quad_log` by tick with a change log, or `quads.t` with only the clock (additions only). Commit ids are ticks, local to a store.
+
+### Command line
+
+`--versioning`, `--as-of-index` and `--stamp-index` create a store at a level; `--author` and `-m` record who writes and why; `query`, `explain` and `datalog` take `--as-of`; `serve` answers `/query?version=REF`. See [[crates/oxilite-cli/src/versioning.rs]].
+
+`oxilite versioning` has `status`, `set LEVEL`, `log`, `changes --since`, `diff FROM [TO]`, `purge … --yes` and `migration --from --to`, which prints the level change as SQL for `wrangler d1 migrations`. Changes and diffs print as RDF Patch lines (`A` and `D` quads, grouped by tick). `oxilite schema` prints the whole schema for a set of store options, versioning included; `npx oxilite-d1 schema --versioning` and `npx oxilite-d1 versioning-migration` do the same from the D1 package.
+
 ## Backends
 
 Four ways to reach SQLite, all behind the same sans-IO contract.
@@ -189,7 +245,7 @@ It also checks projects (`oxilite check`, [[architecture#Studio server#Check com
 
 `oxilite` without a subcommand is a SPARQL shell like `sqlite3`: on a transient in-memory store, or on the file it names, created with the schema when missing. See [[crates/oxilite-cli/src/shell/mod.rs#Session]].
 
-Store flags (`-l`, `--library`, `--text-index`, `--no-graph-index`, `--d1-sidecar`) apply as for the other commands. A statement runs when its brackets balance outside strings, IRIs and comments and it ends with `;`, is followed by an empty line, or is one line that parses ([[crates/oxilite-cli/src/shell/input.rs#complete]]); a multi-line query never runs just because it parses, since `ORDER BY` or `LIMIT` may follow.
+Store flags (`-l`, `--library`, `--text-index`, `--no-graph-index`, `--d1-sidecar`, `--versioning`) apply as for the other commands. A statement runs when its brackets balance outside strings, IRIs and comments and it ends with `;`, is followed by an empty line, or is one line that parses ([[crates/oxilite-cli/src/shell/input.rs#complete]]); a multi-line query never runs just because it parses, since `ORDER BY` or `LIMIT` may follow.
 
 Session prefixes ([[crates/oxilite-cli/src/shell/prefixes.rs#Prefixes]]) start with the studio's well-known prefixes and `oxl:`, learn every `PREFIX` of a successful statement and the `@prefix` lines of loaded Turtle files, and are declared on a statement's first line when it uses one without declaring it, so error lines stay right; `.datalog` programs get them as `@prefix`. Results compact IRIs with the same table.
 
@@ -201,7 +257,7 @@ Tables ([[crates/oxilite-cli/src/shell/render.rs#table]]) fit the terminal by sh
 
 `oxilite studio-server` is the language server behind oxilite studio, the VS Code extension: LSP over standard input and output with custom `oxilite/*` requests. See [[crates/oxilite-cli/src/studio/mod.rs]].
 
-It runs in its own process so a panic or a long operation never takes the editor down, and it links the engine crates directly (SHACL included, which has no JavaScript binding). It is built on `lsp-server`, which needs no async runtime, matching the blocking `Store`. Requests: `oxilite/query` (SPARQL, returning the RDF/JS payload of `output_to_json` plus `elapsedMs` and `truncated`, capped at a row limit), `oxilite/status` and `oxilite/reload`; the server sends `oxilite/storeChanged` after every load. The studio's own design lives in the `oxilite-studio` repository; OpenSpec change `studio-server-skeleton`.
+It runs in its own process so a panic or a long operation never takes the editor down, and it links the engine crates directly (SHACL included, which has no JavaScript binding). It is built on `lsp-server`, which needs no async runtime, matching the blocking `Store`. Requests: `oxilite/query` (SPARQL, returning the RDF/JS payload of `output_to_json` plus `elapsedMs` and `truncated`, capped at a row limit), `oxilite/status` and `oxilite/reload`; the server sends `oxilite/storeChanged` after every load. The studio's own design lives in the `oxilite-studio` repository; OpenSpec changes `studio-server-skeleton` and `studio-server-v1`, archived as `2026-09-25-studio-server-skeleton` and `2026-09-25-studio-server-v1`; the resulting spec is `openspec/specs/studio-server`.
 
 ### Project store
 
@@ -305,7 +361,7 @@ A schema pairs with its manifest `[[shex]]` shape map (a file or inline), or by 
 
 The Berlin SPARQL Benchmark runs oxilite (bundled SQLite, system SQLite, D1 through the sidecar) against Oxigraph with RocksDB using the official BSBM tools (`bench/bsbm.sh`, submodule `bench/bsbm-tools`).
 
-The script generates a dataset, loads it into each engine, serves it, runs the explore and business-intelligence mixes with the BSBM test driver, and records load time, database size and the driver's XML results in `bench/results`. `bsbm-report` turns them into `summary.json` and the README table. `write-cost` measures D1 rows written per triple (index entries included) for each schema option on a local D1: about 4.8 by default, 3.8 without the graph index, 5.0 with the text index.
+The script generates a dataset, loads it into each engine, serves it, runs the explore and business-intelligence mixes with the BSBM test driver, and records load time, database size and the driver's XML results in `bench/results`. `bsbm-report` turns them into `summary.json` and the README table. `write-cost` measures D1 rows written per triple (index entries included) for each schema option on a local D1: about 4.8 by default, 3.8 without the graph index, 5.0 with the text index; with versioning, 4.82 at `stamped` (three rows per batch, none per triple), 6.82 at `log` and 8.82 at `log` with the as-of index ([[architecture#Versioning]]). `as-of-latency` builds a synthetic ticket store at each level (bulk load, then commits), records load time, time per commit and database size, and times the same queries on the present, on past versions and at several depths, with and without the as-of index, into `bench/results/as-of-latency*.json` (arguments: tickets and commits).
 
 ## Schema registry
 
@@ -506,6 +562,8 @@ Articles live in `site/articles/`, one HTML file each, behind an index at `site/
 `site/articles/introducing-oxilite.html` is the overview article and the announcement's canonical URL: the gap Oxigraph leaves, the sans-IO core, term encoding, the schema, the single-statement compiler and its fallback, the planner, atomicity, reasoning, validation, the Cypher frontend, the JSON-LD and Verifiable Credentials layer, the BSBM numbers, the tested Oxigraph compatibility and the limits. It leads the articles index and the landing page's `#articles` section. Its claims are drawn from this file, [[decisions]] and the README rather than from a runnable example, so a change to any of those should be reflected in it.
 
 The landing page's `#studio` section introduces oxilite studio, the VS Code extension built on [[architecture#Studio server]], with its Marketplace install and the build-from-source path for platforms without a bundled server. `site/articles/oxilite-studio.html` is its tour: install, conventions, completion, reasoning with "why?", live SHACL, the manifest and `oxilite check`, attached SQLite and D1 stores, notebooks, MCP, and the limits. Its examples come from the studio server's tests, so a change to those behaviours should be reflected in it. The studio logo is `site/assets/studio.svg` (rendered to `studio.png`). The article's screenshots in `site/assets/studio/` are taken from the extension running on the studio repository's `examples/demo` project, so the text and the images describe the same data.
+
+The landing page's `#versioning` section and a Features card present [[architecture#Versioning]] as a key feature, with the measured D1 costs. `site/articles/time-travel.html` is its walkthrough: levels, commits with author and message, as-of queries, `SERVICE` version comparison, Datalog `@version` and `at`, Cypher `asOf`, the history graph and Datalog's history relations, diffs and changes, level changes and purges. Its outputs are those of the CLI, and its behaviour is asserted by the versioning suites of `oxilite`, `@oxilite/d1` and `oxilite-datalog`. `site/articles/versioning-on-d1.html` is the design note: triggers, the clock, the genesis snapshot and the `write-cost` table. A change to [[decisions#D29 The change log is the history, the quad table stays the present]] through D32, or to the measured costs, should be reflected there. `site/articles/versioning-knowledge-graph-memory.html` is the overview: what versioning records, what can be asked of the past, and the use cases (agent memory, curated graphs, audit, change feeds, reproducible analysis, pipeline debugging) with a level for each. `site/articles/versioning-benchmarks.html` is the benchmark article: `write-cost` and `as-of-latency` at three sizes (80,000 triples with 500 and 2,000 commits, 400,000 triples), how the past's cost depends on the as-of index, the store, the history and the depth, and a recommendation per use case; its tables are copied from `bench/results`, so a rerun that moves them should update it. `docs/versioning.md` is the reference for every surface, option, error and schema object.
 
 The site is plain HTML and one stylesheet in a white, black and orange palette. It loads no external fonts, scripts or trackers, which keeps the Datenschutz page to the hosting logs of GitHub Pages and Cloudflare, and Cloudflare's bot-protection cookies. The logo (`site/assets/logo.svg`, rendered to `logo.png` with `rsvg-convert`) combines a SQLite-style tile, a quill drawn as a graph, and a small edge-worker cloud.
 

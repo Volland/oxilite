@@ -11,6 +11,9 @@
 mod db;
 mod shell;
 mod studio;
+mod versioning;
+
+use versioning::VersioningCommand;
 
 use clap::{Parser, Subcommand};
 use db::Db;
@@ -38,7 +41,7 @@ struct Args {
     location: Location,
 }
 
-#[derive(clap::Args, Clone)]
+#[derive(clap::Args, Clone, Default)]
 struct Location {
     /// SQLite database file (created if missing).
     #[arg(long, short)]
@@ -55,6 +58,25 @@ struct Location {
     /// Create the full-text index over string literals (for `oxl:textMatch`).
     #[arg(long)]
     text_index: bool,
+    /// Versioning of a new store: `off` (default), `stamped` (a store clock and the tick that
+    /// added each quad) or `log` (an immutable change log: history and time travel). An existing
+    /// store keeps its level; change it with `oxilite versioning set`.
+    #[arg(long, value_name = "LEVEL")]
+    versioning: Option<String>,
+    /// With `--versioning log`: also index the change log by predicate and object (faster
+    /// as-of queries, two more rows written per change).
+    #[arg(long)]
+    as_of_index: bool,
+    /// With `--versioning stamped` or `log`: index the tick that added each quad (faster
+    /// "added since" queries, one more row written per quad).
+    #[arg(long)]
+    stamp_index: bool,
+    /// Author recorded on the commits of this command's writes (versioned stores).
+    #[arg(long)]
+    author: Option<String>,
+    /// Message recorded on the commits of this command's writes (versioned stores).
+    #[arg(long, short = 'm')]
+    message: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -85,6 +107,10 @@ enum Command {
         location: Location,
         #[arg(long, short)]
         query: String,
+        /// Read the store as it was at this version: `HEAD~2`, `#42` (a tick) or
+        /// `@2026-09-01T12:00:00Z` (versioning `log`).
+        #[arg(long, value_name = "VERSION")]
+        as_of: Option<String>,
         /// Results format (json, xml, csv, tsv, or an RDF format for graph results).
         #[arg(long, default_value = "json")]
         results_format: String,
@@ -95,6 +121,9 @@ enum Command {
         location: Location,
         #[arg(long, short)]
         query: String,
+        /// Compile the query against this version of the store (see `query --as-of`).
+        #[arg(long, value_name = "VERSION")]
+        as_of: Option<String>,
     },
     /// Runs a SPARQL update.
     Update {
@@ -122,6 +151,33 @@ enum Command {
         /// Store what the program derives as inferences instead of returning its goal.
         #[arg(long, conflicts_with = "explain")]
         materialize: bool,
+        /// Run the program on this version of the store (like an `@version` directive).
+        #[arg(long, value_name = "VERSION", conflicts_with = "materialize")]
+        as_of: Option<String>,
+    },
+    /// Versioning: the level, the history, changes, diffs, purges and D1 migrations.
+    Versioning {
+        #[command(subcommand)]
+        action: VersioningCommand,
+    },
+    /// Prints the schema as a SQL script, e.g. for `wrangler d1 migrations` (the store options
+    /// choose the indexes and the versioning level).
+    Schema {
+        /// Without the graph index.
+        #[arg(long)]
+        no_graph_index: bool,
+        /// With the full-text index.
+        #[arg(long)]
+        text_index: bool,
+        /// Versioning level: off (default), stamped or log.
+        #[arg(long, value_name = "LEVEL", default_value = "off")]
+        versioning: String,
+        /// With `log`: the as-of index.
+        #[arg(long)]
+        as_of_index: bool,
+        /// With `stamped` or `log`: the stamp index.
+        #[arg(long)]
+        stamp_index: bool,
     },
     /// Refreshes planner statistics and the reasoning closure.
     Optimize {
@@ -226,17 +282,25 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
             location,
             query,
             results_format,
+            as_of,
         } => {
             let db = Db::open(&location)?;
-            let out = db.query(&query, &[], &[])?;
+            let out = db.query_at(&query, &[], &[], as_of.as_deref())?;
             print!(
                 "{}",
                 oxilite_core::json::output_to_format(&out, &results_format)?
             );
             Ok(())
         }
-        Command::Explain { location, query } => {
-            println!("{}", Db::open(&location)?.explain(&query)?);
+        Command::Explain {
+            location,
+            query,
+            as_of,
+        } => {
+            println!(
+                "{}",
+                Db::open(&location)?.explain_at(&query, as_of.as_deref())?
+            );
             Ok(())
         }
         Command::Update { location, update } => Ok(Db::open(&location)?.update(&update, &[])?),
@@ -246,6 +310,7 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
             file,
             explain,
             materialize,
+            as_of,
         } => {
             let source = read_program(program, file)?;
             let db = Db::open(&location)?;
@@ -261,7 +326,7 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
                 );
                 return Ok(());
             }
-            let r = db.datalog(&source)?;
+            let r = db.datalog_at(&source, as_of.as_deref())?;
             println!("{}", r.variables.join("\t"));
             for row in &r.rows {
                 let line: Vec<String> = row
@@ -273,6 +338,24 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
             Ok(())
         }
         Command::Optimize { location } => Ok(Db::open(&location)?.optimize()?),
+        Command::Versioning { action } => versioning::run(action),
+        Command::Schema {
+            no_graph_index,
+            text_index,
+            versioning,
+            as_of_index,
+            stamp_index,
+        } => {
+            let options = oxilite::StoreOptions {
+                graph_index: !no_graph_index,
+                text_index,
+                versioning: versioning.parse()?,
+                as_of_index,
+                stamp_index,
+            };
+            print!("{}", oxilite_core::schema::schema_sql(&options));
+            Ok(())
+        }
         Command::StudioServer { store } => studio::run(store),
         Command::Mcp { root, location } => studio::mcp::serve(root.map(Into::into), location),
         Command::Check { root, json } => {
@@ -401,7 +484,12 @@ fn handle(db: &Db, mut request: Request) {
                 None => return Err("missing query".into()),
             };
             let out = db
-                .query(&query, &all("default-graph-uri"), &all("named-graph-uri"))
+                .query_at(
+                    &query,
+                    &all("default-graph-uri"),
+                    &all("named-graph-uri"),
+                    get("version").as_deref(),
+                )
                 .map_err(|e| e.to_string())?;
             let graph = matches!(out, oxilite_core::QueryOutput::Graph(_));
             let media = negotiate(header(&request, "Accept").as_deref(), graph);

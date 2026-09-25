@@ -30,13 +30,7 @@ impl Buf {
 }
 
 fn memory() -> Location {
-    Location {
-        location: None,
-        library: None,
-        d1_sidecar: None,
-        no_graph_index: false,
-        text_index: false,
-    }
+    Location::default()
 }
 
 fn session() -> (Session, Buf, Buf) {

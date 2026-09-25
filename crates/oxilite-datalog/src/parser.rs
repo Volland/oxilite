@@ -24,12 +24,61 @@ use std::collections::HashMap;
 /// Parses a program.
 pub fn parse(src: &str) -> Result<Program> {
     let tokens = Lexer::new(src).tokenize()?;
-    Parser {
+    let mut program = Parser {
         toks: tokens,
         pos: 0,
         prefixes: default_prefixes(),
     }
-    .program()
+    .program()?;
+    history_names(&mut program)?;
+    Ok(program)
+}
+
+/// `commit`, `added`, `removed` and `branch` are the history built-ins unless the program
+/// defines rules of that name, in which case they are its own relations as before.
+fn history_names(program: &mut Program) -> Result<()> {
+    use crate::ast::{BodyItem, HistoryRel};
+    let defined: std::collections::HashSet<HistoryRel> = program
+        .rules
+        .iter()
+        .filter_map(|r| match r.head.pred {
+            Pred::History(h) => Some(h),
+            _ => None,
+        })
+        .collect();
+    let fix = |pred: &mut Pred| {
+        if let Pred::History(h) = *pred {
+            if defined.contains(&h) {
+                *pred = Pred::Idb(h.name().to_owned());
+            }
+        }
+    };
+    let check = |atom: &Atom| -> Result<()> {
+        if let Pred::History(h) = atom.pred {
+            if atom.args.len() != h.arity() {
+                return Err(DatalogError::Arity {
+                    predicate: atom.pred.to_string(),
+                    expected: h.arity(),
+                    found: atom.args.len(),
+                });
+            }
+        }
+        Ok(())
+    };
+    for rule in &mut program.rules {
+        fix(&mut rule.head.pred);
+        for item in &mut rule.body {
+            if let BodyItem::Atom(a) | BodyItem::Negated(a) = item {
+                fix(&mut a.pred);
+                check(a)?;
+            }
+        }
+    }
+    if let Some(goal) = &mut program.goal {
+        fix(&mut goal.atom.pred);
+        check(&goal.atom)?;
+    }
+    Ok(())
 }
 
 fn default_prefixes() -> HashMap<String, String> {
@@ -106,6 +155,18 @@ impl Parser {
         while self.pos < self.toks.len() {
             match self.peek() {
                 Some(Tok::AtPrefix) => self.directive()?,
+                Some(Tok::AtVersion) => {
+                    self.bump();
+                    let span = self.span();
+                    match self.bump() {
+                        Some(Tok::Str { value, .. }) => program.version = Some(value),
+                        _ => return Err(DatalogError::parse(
+                            span,
+                            "expected a version string after @version, e.g. @version \"HEAD~1\" .",
+                        )),
+                    }
+                    self.expect(&Tok::Dot, "`.` after the @version directive")?;
+                }
                 Some(Tok::Query) => {
                     self.bump();
                     let items = self.body()?;
@@ -225,6 +286,10 @@ impl Parser {
                 if n == "triple" || n == "quad" {
                     // Arity decides which form this is; fixed up once the arguments are read.
                     Ok(Pred::Triple { graph: n == "quad" })
+                } else if let Some(h) = crate::ast::HistoryRel::from_name(&n) {
+                    // A program that defines rules of that name keeps its own relation (see
+                    // `parse`).
+                    Ok(Pred::History(h))
                 } else {
                     Ok(Pred::Idb(n))
                 }
@@ -377,6 +442,25 @@ impl Parser {
             }
         }
         self.expect(&Tok::RParen, "`)` closing the atom")?;
+        // `… at "REF"` / `… at ?c`: the version the atom reads.
+        let at = if matches!(self.peek(), Some(Tok::Name(n)) if n == "at") {
+            self.bump();
+            let at_span = self.span();
+            Some(match self.arg()? {
+                Arg::Var(v) => crate::ast::At::Var(v),
+                Arg::Const(oxrdf::Term::Literal(l)) => {
+                    crate::ast::At::Version(l.value().to_owned())
+                }
+                _ => {
+                    return Err(DatalogError::parse(
+                        at_span,
+                        "`at` takes a version string (\"HEAD~1\") or a commit variable",
+                    ))
+                }
+            })
+        } else {
+            None
+        };
         // `triple(s,p,o)` and `triple(s,p,o,g)` share a name; the arity picks the form.
         if let Pred::Triple { .. } = pred {
             pred = Pred::Triple {
@@ -384,7 +468,8 @@ impl Parser {
             };
         }
         if let Some(want) = pred.arity() {
-            if args.len() != want {
+            // A history name may be the program's own relation: checked after parsing.
+            if args.len() != want && !matches!(pred, Pred::History(_)) {
                 return Err(DatalogError::Arity {
                     predicate: pred.to_string(),
                     expected: want,
@@ -401,7 +486,18 @@ impl Parser {
                 });
             }
         }
-        Ok(Atom { pred, args, span })
+        if at.is_some() && !matches!(pred, Pred::Edb(_) | Pred::Triple { .. }) {
+            return Err(DatalogError::parse(
+                span,
+                "`at` applies to atoms that read the store (an IRI predicate or triple/quad)",
+            ));
+        }
+        Ok(Atom {
+            pred,
+            args,
+            span,
+            at,
+        })
     }
 
     // Expression parsing, lowest precedence first.

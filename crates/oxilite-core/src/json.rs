@@ -205,6 +205,9 @@ pub struct JsQueryOptions {
     pub reasoning: crate::reason::Reasoning,
     /// Also match materialized inferences.
     pub include_inferred: bool,
+    /// Read the store as it was at this version (`HEAD~1`, `#42`, `@2026-09-01T00:00:00Z`).
+    #[serde(alias = "asOf")]
+    pub as_of: Option<String>,
 }
 
 impl JsQueryOptions {
@@ -230,6 +233,7 @@ impl JsQueryOptions {
                 .transpose()?,
             reasoning: self.reasoning,
             include_inferred: self.include_inferred,
+            as_of: self.as_of.clone(),
             ..crate::QueryOptions::default()
         })
     }

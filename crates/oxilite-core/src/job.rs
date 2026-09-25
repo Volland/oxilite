@@ -155,3 +155,40 @@ impl Job for Sequence {
         })
     }
 }
+
+/// Runs `first`, then the job `next` builds from its output (e.g. resolve versions, then
+/// query), as one job.
+/// Builds the second job of a [`Then`] from the first one's output.
+type Continuation<A, B> = Box<dyn FnOnce(<A as Job>::Output) -> Result<B>>;
+
+pub struct Then<A: Job, B> {
+    first: A,
+    next: Option<Continuation<A, B>>,
+    second: Option<B>,
+}
+
+impl<A: Job, B: Job> Then<A, B> {
+    pub fn new(first: A, next: impl FnOnce(A::Output) -> Result<B> + 'static) -> Self {
+        Self {
+            first,
+            next: Some(Box::new(next)),
+            second: None,
+        }
+    }
+}
+
+impl<A: Job, B: Job> Job for Then<A, B> {
+    type Output = B::Output;
+    fn step(&mut self, response: Option<Response>) -> Result<Step<B::Output>> {
+        if let Some(b) = self.second.as_mut() {
+            return b.step(response);
+        }
+        match self.first.step(response)? {
+            Step::Execute(r) => Ok(Step::Execute(r)),
+            Step::Done(out) => {
+                let make = self.next.take().expect("Then continued twice");
+                self.second.insert(make(out)?).step(None)
+            }
+        }
+    }
+}

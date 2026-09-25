@@ -81,6 +81,24 @@ impl Compiler<'_> {
                 path,
                 object,
             } => self.path(subject, path, object),
+            GraphPattern::Service {
+                name: spargebra::term::NamedNodePattern::NamedNode(n),
+                inner,
+                ..
+            } if n.as_str().starts_with(super::VERSION_SERVICE) => {
+                // A version of this store: the group reads the change log at that tick.
+                let r = &n.as_str()[super::VERSION_SERVICE.len()..];
+                // Queries resolve their versions before compiling; updates do not read the past.
+                let tick = *self.options.versions.get(r).ok_or_else(|| {
+                    Error::Other(format!(
+                        "version {r} cannot be read here: SERVICE <oxilite:version/…> works in queries, not in updates (writes apply to the current state)"
+                    ))
+                })?;
+                let saved = self.as_of.replace(tick);
+                let out = self.pattern(inner);
+                self.as_of = saved;
+                out
+            }
             GraphPattern::Service { .. } => Err(Error::unsupported("SERVICE")),
             other => Err(Error::unsupported(format!(
                 "graph pattern {}",

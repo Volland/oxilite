@@ -92,6 +92,8 @@ Contexts can also be persisted with `docs.putContext(iri, context)`. Errors are 
 | `explain(sparql)`, `explainUpdate`, `explainCypher` | The SQL a statement compiles to, with the planner's notes |
 | `materialize({ engine? })`, `clearInferences()` | OWL 2 RL closure (`"sql"` or `"reasonable"`) |
 | `optimize()`, `backup(path)`, `clear()` | Refresh planner statistics, `VACUUM INTO` a copy, empty the store |
+| `new Store({ versioning: "log" })`, `query(q, { as_of: "HEAD~1" })`, `cypher(q, {}, { asOf })`, `datalog(p, { asOf })` | Versioning: a store clock (`"stamped"`) or an immutable change log (`"log"`) with time travel; `GRAPH <oxilite:history>` and Datalog's `commit`/`added`/`removed` read the history |
+| `withCommit`, `setCommitInfo`, `history`, `changes`, `diff`, `purge`, `versioning`, `setVersioning` | Commit author and message, the history, net changes between versions, erasure, the level |
 
 Oxigraph's own `store.test.ts` runs unchanged against this package.
 

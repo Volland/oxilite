@@ -6,9 +6,31 @@ use crate::store::Store;
 use crate::AsyncStore;
 use oxilite_core::{AsyncBackend, SyncBackend};
 use oxilite_datalog::{
-    compile, explain as explain_program, prepare, DatalogError, DatalogJob, DatalogResult,
-    MaterializeJob, MaterializeStats, Options,
+    compile, explain as explain_program, prepare, version_of, version_refs, DatalogError,
+    DatalogJob, DatalogResult, MaterializeJob, MaterializeStats, Options,
 };
+use std::borrow::Cow;
+
+/// A program reading a version: inferences exist only for the current state.
+fn check_version(options: &Options) -> Result<(), DatalogError> {
+    if options.include_inferred {
+        return Err(DatalogError::Unsupported(
+            "inferences describe the current state only; they cannot be combined with @version"
+                .into(),
+        ));
+    }
+    Ok(())
+}
+
+/// Materialization writes the current state: it cannot read another version.
+fn check_materialize(program: &str, options: &Options) -> Result<(), DatalogError> {
+    if version_of(program, options)?.is_some() {
+        return Err(DatalogError::Unsupported(
+            "materialization derives from the current state; drop @version / as_of".into(),
+        ));
+    }
+    Ok(())
+}
 
 impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
     /// Runs a Datalog program and returns the solutions of its goal.
@@ -39,8 +61,29 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
         program: &str,
         options: &Options,
     ) -> Result<DatalogResult, DatalogError> {
-        let job: DatalogJob = prepare(program, self.caps(), options)?;
+        let options = self.datalog_version(program, options)?;
+        let job: DatalogJob = prepare(program, self.caps(), &options)?;
         Ok(self.run(job)?)
+    }
+
+    /// The options with the version the program reads resolved to a tick.
+    fn datalog_version<'o>(
+        &self,
+        program: &str,
+        options: &'o Options,
+    ) -> Result<Cow<'o, Options>, DatalogError> {
+        let (whole, atoms) = version_refs(program, options)?;
+        let mut o = options.clone();
+        o.history = Some(self.stats().version);
+        if let Some(v) = whole {
+            check_version(options)?;
+            o.as_of_tick = Some(self.resolve_version(&v)?);
+        }
+        for r in atoms {
+            let t = self.resolve_version(&r)?;
+            o.versions.insert(r, t);
+        }
+        Ok(Cow::Owned(o))
     }
 
     /// Describes how a program runs: its strata, the strategy chosen for each recursive
@@ -69,7 +112,10 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
         program: &str,
         options: &Options,
     ) -> Result<MaterializeStats, DatalogError> {
-        let job = MaterializeJob::new(program, self.caps(), options)?;
+        check_materialize(program, options)?;
+        let mut options = options.clone();
+        options.history = Some(self.stats().version);
+        let job = MaterializeJob::new(program, self.caps(), &options)?;
         Ok(self.run(job)?)
     }
 }
@@ -86,7 +132,19 @@ impl<B: AsyncBackend> AsyncStore<B> {
         program: &str,
         options: &Options,
     ) -> Result<DatalogResult, DatalogError> {
-        let job: DatalogJob = prepare(program, self.caps(), options)?;
+        let (whole, atoms) = version_refs(program, options)?;
+        let mut o = options.clone();
+        o.history = Some(self.stats.borrow().version);
+        if let Some(v) = whole {
+            check_version(options)?;
+            o.as_of_tick = Some(self.resolve_version(&v).await?);
+        }
+        for r in atoms {
+            let t = self.resolve_version(&r).await?;
+            o.versions.insert(r, t);
+        }
+        let options: Cow<'_, Options> = Cow::Owned(o);
+        let job: DatalogJob = prepare(program, self.caps(), &options)?;
         Ok(oxilite_core::run_async(&self.backend, job).await?)
     }
 
@@ -100,6 +158,7 @@ impl<B: AsyncBackend> AsyncStore<B> {
         &self,
         program: &str,
     ) -> Result<MaterializeStats, DatalogError> {
+        check_materialize(program, &Options::default())?;
         let job = MaterializeJob::new(program, self.caps(), &Options::default())?;
         Ok(oxilite_core::run_async(&self.backend, job).await?)
     }

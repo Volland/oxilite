@@ -9,6 +9,7 @@ use crate::common::{
 use oxilite_core::job::run_async;
 use oxilite_core::query::{compile_query, QueryJob, QueryOutput};
 use oxilite_core::update::{plan_update_with, PlannedOp};
+use oxilite_core::version::VersionedBackend;
 use oxilite_core::{
     ops, AsyncBackend, Capabilities, Error, QueryOptions, Request, Result, Stats, StoreOptions,
 };
@@ -22,7 +23,8 @@ use std::io::{Read, Write};
 
 /// An RDF dataset in a SQLite-compatible engine reached asynchronously.
 pub struct AsyncStore<B: AsyncBackend> {
-    pub(crate) backend: B,
+    /// The backend, wrapped so every write of a versioned store opens a tick.
+    pub(crate) backend: VersionedBackend<B>,
     pub(crate) stats: RefCell<Stats>,
 }
 
@@ -34,23 +36,32 @@ impl<B: AsyncBackend> AsyncStore<B> {
 
     pub async fn open_with_options(backend: B, options: &StoreOptions) -> Result<Self> {
         let stats = run_async(&backend, ops::open_job(options, backend.capabilities())).await?;
-        Ok(Self {
-            backend,
-            stats: RefCell::new(stats),
-        })
+        Ok(Self::from_parts(backend, stats))
     }
 
     /// Opens a store whose schema was already applied (e.g. by a D1 migration): no DDL.
     pub async fn open_existing(backend: B) -> Result<Self> {
         let stats = run_async(&backend, ops::stats_job(backend.capabilities())).await?;
-        Ok(Self {
-            backend,
+        Ok(Self::from_parts(backend, stats))
+    }
+
+    fn from_parts(backend: B, stats: Stats) -> Self {
+        let caps = backend.capabilities().clone();
+        let level = stats.version.level;
+        Self {
+            backend: VersionedBackend::new(backend, &caps, level),
             stats: RefCell::new(stats),
-        })
+        }
     }
 
     pub fn backend(&self) -> &B {
-        &self.backend
+        self.backend.inner()
+    }
+
+    /// Replaces the statistics (and the versioning level the backend applies).
+    pub(crate) fn set_stats(&self, stats: Stats) {
+        self.backend.set_level(stats.version.level);
+        *self.stats.borrow_mut() = stats;
     }
 
     pub(crate) fn caps(&self) -> &Capabilities {
@@ -78,6 +89,7 @@ impl<B: AsyncBackend> AsyncStore<B> {
         options: &QueryOptions,
     ) -> Result<QueryOutput> {
         let q = query.into_query()?;
+        let options = &*self.resolve_versions(&q, options).await?;
         let compiled = compile_query(&q, &self.stats.borrow(), self.caps(), options)?;
         run_async(&self.backend, QueryJob::new(compiled, self.caps().clone())).await
     }
@@ -142,7 +154,7 @@ impl<B: AsyncBackend> AsyncStore<B> {
     /// Reloads statistics and the in-memory reasoning facts.
     pub(crate) async fn reload_stats(&self) -> Result<()> {
         let stats = run_async(&self.backend, ops::stats_job(self.caps())).await?;
-        *self.stats.borrow_mut() = stats;
+        self.set_stats(stats);
         Ok(())
     }
 
@@ -364,7 +376,7 @@ impl<B: AsyncBackend> AsyncStore<B> {
     /// Refreshes planner statistics.
     pub async fn optimize(&self) -> Result<()> {
         let stats = run_async(&self.backend, ops::optimize_job(self.caps())).await?;
-        *self.stats.borrow_mut() = stats;
+        self.set_stats(stats);
         Ok(())
     }
 }

@@ -31,7 +31,7 @@ fn triple_shaped(head: &Head) -> Result<()> {
         // Binary is a predicate, unary is a class: `ex:Adult(?p)` stores `?p rdf:type ex:Adult`.
         Pred::Edb(_) => matches!(head.args.len(), 1 | 2),
         Pred::Triple { graph } => head.args.len() == if *graph { 4 } else { 3 },
-        Pred::Idb(_) => false,
+        Pred::Idb(_) | Pred::History(_) => false,
     };
     if ok {
         Ok(())
@@ -117,6 +117,7 @@ fn relation_for(
             pred: head.pred.clone(),
             args: (0..arity).map(|i| Arg::Var(format!("__m{i}"))).collect(),
             span: head.span,
+            at: None,
         },
         constraints: Vec::new(),
     };
@@ -150,7 +151,7 @@ fn insert_for(head: &Head, compiled: &sql::Compiled) -> Result<String> {
                 "0".to_owned()
             },
         ),
-        Pred::Idb(_) => {
+        Pred::Idb(_) | Pred::History(_) => {
             return Err(DatalogError::NotTripleShaped {
                 predicate: head.pred.to_string(),
             })

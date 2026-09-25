@@ -17,6 +17,16 @@ pub struct StoreOptions {
     pub graph_index: bool,
     /// Create the full-text index over string literals (FTS5, see [`crate::text`]).
     pub text_index: bool,
+    /// How much history the store keeps (see [`crate::version`]); `Off` by default. Applied when
+    /// the store is created; an existing store changes level only through an explicit level
+    /// change.
+    pub versioning: crate::version::Versioning,
+    /// With `stamped` or `log`: index `quads.t` (fast "added since" queries, one more row
+    /// written per quad).
+    pub stamp_index: bool,
+    /// With `log`: index the change log by predicate and object too (fast as-of queries on
+    /// any pattern, two more rows written per change).
+    pub as_of_index: bool,
 }
 
 impl Default for StoreOptions {
@@ -24,6 +34,20 @@ impl Default for StoreOptions {
         Self {
             graph_index: true,
             text_index: false,
+            versioning: crate::version::Versioning::Off,
+            stamp_index: false,
+            as_of_index: false,
+        }
+    }
+}
+
+impl StoreOptions {
+    /// The level change that creates this store's versioning.
+    pub fn level_change(&self) -> crate::version::LevelChange {
+        crate::version::LevelChange {
+            as_of_index: self.as_of_index.then_some(true),
+            stamp_index: self.stamp_index.then_some(true),
+            ..Default::default()
         }
     }
 }
@@ -44,8 +68,25 @@ pub fn schema_sql_with(options: &StoreOptions, extra: &[Statement]) -> String {
     out
 }
 
-/// DDL statements creating (idempotently) the oxilite schema.
+/// DDL creating the oxilite schema, versioning included: a script for a new database (a D1
+/// migration). Not idempotent when versioning is on (`ALTER TABLE`); stores opened in place use
+/// [`base_schema`] and apply their level through `version::change_statements`.
 pub fn create_schema(options: &StoreOptions) -> Request {
+    let mut r = base_schema(options);
+    if options.versioning > crate::version::Versioning::Off {
+        let change = crate::version::change_statements(
+            &crate::version::VersionState::default(),
+            options.versioning,
+            &options.level_change(),
+        )
+        .expect("versioning from off is always possible");
+        r.statements.extend(change);
+    }
+    r
+}
+
+/// DDL statements creating (idempotently) the oxilite schema without versioning.
+pub fn base_schema(options: &StoreOptions) -> Request {
     let mut s = vec![
         "CREATE TABLE IF NOT EXISTS oxilite_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT",
         // Hashed terms. `id` is the rowid alias: the fastest possible key.

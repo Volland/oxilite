@@ -11,7 +11,7 @@
 
 **[oxilitedb.com](https://oxilitedb.com)** · [crates.io](https://crates.io/crates/oxilite) · [docs.rs](https://docs.rs/oxilite) · [npm](https://www.npmjs.com/package/@oxilite/node)
 
-> **Status: milestones M1–M8 implemented** — M1 (storage core), M2 (full SPARQL 1.1 query compiled to SQL), M3 (atomic SPARQL Update, Cloudflare D1), the TypeScript packages, M4 (RDFS / OWL reasoning), M5 (SHACL / ShEx validation with rudof), M6 (BSBM benchmarks, planner tuning, full-text search), M7 (openCypher over the same data), JSON-LD / Verifiable Credentials storage, and M8 ([Datalog rules](#datalog-your-own-recursive-rules)). See [Roadmap](#roadmap).
+> **Status: milestones M1–M8 implemented** — M1 (storage core), M2 (full SPARQL 1.1 query compiled to SQL), M3 (atomic SPARQL Update, Cloudflare D1), the TypeScript packages, M4 (RDFS / OWL reasoning), M5 (SHACL / ShEx validation with rudof), M6 (BSBM benchmarks, planner tuning, full-text search), M7 (openCypher over the same data), JSON-LD / Verifiable Credentials storage, M8 ([Datalog rules](#datalog-your-own-recursive-rules)), and M9 phase 1 ([versioning and time travel](#versioning-history-and-time-travel)). See [Roadmap](#roadmap).
 
 ---
 
@@ -221,6 +221,9 @@ oxilite query -l data.sqlite -q 'SELECT * WHERE { ?s ?p ?o } LIMIT 5'
 oxilite explain -l data.sqlite -q '…'                  # the SQL and the join order
 oxilite serve -l data.sqlite -b 127.0.0.1:7879         # /query, /update, /store like `oxigraph serve`
 oxilite serve -l data.sqlite --library /usr/lib/libsqlite3.dylib   # same file, system SQLite
+oxilite update -l data.sqlite -m "close t1" -u '…'   # a commit message (versioned stores)
+oxilite query -l data.sqlite --as-of HEAD~1 -q '…'   # the store as it was one commit ago
+oxilite versioning log -l data.sqlite                 # the history; also status, set, diff, changes, purge
 ```
 
 ### Full-text search
@@ -246,6 +249,8 @@ npx wrangler d1 migrations create my-graph oxilite-schema
 npx oxilite-d1 schema > migrations/0001_oxilite-schema.sql     # schema as a D1 migration
 npx wrangler d1 migrations apply my-graph --remote
 ```
+
+For a store that keeps its history, add `--versioning log` (or `stamped`) to `schema`. An existing database changes level with a migration from `npx oxilite-d1 versioning-migration --from off --to log` (see [Versioning](#versioning-history-and-time-travel)).
 
 ```toml
 # wrangler.toml
@@ -507,6 +512,39 @@ await vcs.find({ issuer: "did:example:issuer", validAt: new Date() });
 
 ---
 
+## Versioning: history and time travel
+
+A store can keep its own history. Versioning is off by default and costs nothing when it is off: the store has the same schema, the same SQL and the same D1 bill. Turn it on per store, at one of three levels:
+
+| Level | What you get | Rows written per triple on D1 (measured) |
+|---|---|---|
+| `off` (default) | the plain store | 4.81 |
+| `stamped` | a store clock: every write is a *tick* (time, author, message), and every quad records the tick that added it: "what was added since…", incremental export | 4.82 (+0.2 %; 3 rows per batch) |
+| `log` | an immutable change log: every addition and removal, queries on any past version, diffs, history as a change feed | 6.82 (+42 %) |
+| `log` + as-of index | as-of queries indexed on every pattern | 8.82 (+83 %) |
+
+```rust
+use oxilite::version::{CommitInfo, Versioning};
+let store = Store::open_with_options("kb.sqlite", StoreOptions { versioning: Versioning::Log, ..Default::default() })?;
+store.with_commit(CommitInfo { author: Some("ada".into()), message: Some("seed".into()) }, |s| s.update(seed))?;
+store.update(close_ticket)?;                                              // one update = one commit
+let before = store.query_opt(q, QueryOptions { as_of: Some("HEAD~1".into()), ..Default::default() })?;
+let changes = store.diff("HEAD~1", "HEAD")?;                              // quads added and removed
+```
+
+- **Time travel in every dialect.** SPARQL takes `as_of` (`HEAD~2`, a tick `#42`, or `@2026-09-01T12:00:00Z`). One query can compare versions with `SERVICE <oxilite:version/HEAD~1> { … }`. Datalog takes `@version "HEAD~1" .` for a whole program, or `at "HEAD~1"` / `at ?c` per atom. Cypher takes `asOf`. The CLI takes `--as-of`, and `oxilite serve` answers `/query?version=…`.
+- **History as data.** `GRAPH <oxilite:history>` describes commits with PROV-O (time, author, message, the commit before) and their changes as `oxl:added` / `oxl:removed` triple terms. `SELECT ?who { GRAPH <oxilite:history> { ?c oxl:removed <<( ex:alice ex:role ex:admin )>> ; prov:wasAssociatedWith ?who } }` asks who revoked a role. Datalog has `commit`, `added`, `removed` and `branch` relations.
+- **Immutable by construction.** Triggers on `quads` record every effective change, so every writer is captured: SPARQL, bulk loads, Cypher, JSON-LD documents and the studio. Re-adding a present quad records nothing. Log rows cannot be updated or deleted, and the only exception is an audited `purge` for erasure requests.
+- **Present queries are unchanged.** `quads` stays the current state. Only queries that ask for a past version read the log.
+- **Levels are explicit.** Opening a store never changes its level. `set_versioning` (or `oxilite versioning set`, or a D1 migration) raises or lowers it. An upgrade never loses data: `log` records the whole store as its genesis commit. A downgrade freezes the history and deletes it only with `allow_loss`. Raising the level again records the gap as one commit, and asking for a version inside the gap is an error, not a wrong answer.
+- **D1-native.** A D1 batch is one commit. The clock needs no coordination because D1 has a single writer, and versioned batches keep two of D1's 50 statements for the tick. `npx oxilite-d1 versioning-migration` writes the migration.
+
+Reading the past: current-state queries cost the same at every level. Past versions take about 3× as long for subject-bound queries. With the as-of index (`as_of_index`, `--as-of-index`), selective patterns take 1–3.6× as long; without it they scan the log (10–100×). Aggregates over a predicate's whole history take about 17× as long (`bench/results/as-of-latency.json`).
+
+Not yet: branches and merge ([`version-branches`](openspec/changes/version-branches/)) and push/pull between stores ([`version-sync`](openspec/changes/version-sync/)). Phase 1's design, measurements and assessment are in [`openspec/changes/archive/2026-09-25-versioned-store`](openspec/changes/archive/2026-09-25-versioned-store/). Reference: [`docs/versioning.md`](docs/versioning.md). Articles: [A knowledge graph with a memory](https://oxilitedb.com/articles/versioning-knowledge-graph-memory) (overview and use cases), [Time travel for your knowledge graph](https://oxilitedb.com/articles/time-travel) (walkthrough), [How much does versioning slow oxilite down?](https://oxilitedb.com/articles/versioning-benchmarks) (benchmarks) and [What history costs on D1](https://oxilitedb.com/articles/versioning-on-d1) (design).
+
+---
+
 ## Roadmap
 
 | Milestone | Scope | Done when | Status |
@@ -522,12 +560,14 @@ await vcs.find({ issuer: "did:example:issuer", validAt: new Date() });
 | **M7** Cypher | openCypher over the RDF store, OWL- and SHACL-aware | ≥ 80% of read-only TCK scenarios | ✅ done: 96.2% of the TCK (read-only 96.4%), on bundled SQLite, system SQLite and D1 |
 | JSON-LD / VC | verbatim JSON-LD documents and Verifiable Credentials, a named graph each | W3C `toRdf` suite + VC scenarios on every backend | ✅ done: 450 `toRdf` tests pass, scenarios pass on bundled SQLite, system SQLite and Miniflare D1 |
 | **M8** Datalog | recursive rules, stratified negation, constraints, aggregation, materialization | recursion agrees with the equivalent property path | ✅ done: language and checks, linear and mutual recursion in one statement, non-linear recursion iterated, negation, constraints, aggregation, materialization into `quads_inf`, CLI subcommand, wasm and JS bindings, D1 limits checked |
+| **M9** Versioning | store clock, immutable change log, time travel; then branches and merge, push/pull | as-of results equal snapshots after every commit, native and D1 | 🟡 phase 1 done: levels `off`/`stamped`/`log`, as-of in SPARQL and Datalog, `SERVICE` version comparison, history, diff, purge, level changes and D1 migrations, CLI and JS; branches and sync planned |
 
 ---
 
 ## Project documentation
 
 - [`site/`](site/): the project website, [oxilitedb.com](https://oxilitedb.com) (static, deployed to GitHub Pages by `.github/workflows/pages.yml`). The logo is [`site/assets/logo.svg`](site/assets/logo.svg), with a PNG at [`site/assets/logo.png`](site/assets/logo.png).
+- [`docs/`](docs/): feature references: [versioning](docs/versioning.md).
 - [`lat.md/`](lat.md/): the architecture knowledge graph (architecture, decisions, milestones, tests, test plan), checked by `lat check`.
 - [`openspec/changes/`](openspec/changes/): one change per milestone, each with a proposal, requirement specs with scenarios, a design, and a task list (`openspec validate --all --strict`).
 

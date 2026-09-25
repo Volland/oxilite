@@ -977,3 +977,114 @@ Each rule reports its body matches and its head's facts, and a rule over a predi
 ### Explorer shows the class hierarchy
 
 The explorer lists its folders, roots the class tree at the superclass with its inferred instances counted, lists subclasses with asserted counts, and gives files their roles.
+
+## Versioning
+
+The store clock, the immutable change log and time travel ([[architecture#Versioning]]), on bundled SQLite, the system SQLite, the D1 code path and Miniflare D1.
+
+### Off store is unchanged
+
+A store without versioning sends no statement touching `ticks` or `quad_log`, inserts quads with today's statement, reports level `off`, and refuses an as-of query as keeping no history.
+
+### Stamps record the adding tick
+
+At `stamped`, each write opens a tick and each new quad records it: changes since a tick list exactly the later additions in tick order, re-adding keeps the first tick, removals leave no trace, and as-of is refused.
+
+### As-of equals snapshots
+
+A deterministic random walk of inserts, removals and DELETE/INSERT updates; after every step the store is snapshotted, and a query as of each step's tick returns exactly that snapshot.
+
+### Only effective changes are logged
+
+Re-adding a present quad and removing an absent one add no commit, and a quad removed and re-added within one update leaves no change in the log.
+
+### History is immutable
+
+Updating or deleting rows of `quad_log` or `ticks` directly fails with "history is immutable".
+
+### Commits carry author and message
+
+Writes inside `with_commit` record its author and message on their commit, with their counts of added quads; later writes record none; the genesis appears in the history.
+
+### Versions compare within one query
+
+`SERVICE <oxilite:version/HEAD~1>` joins the previous version with the current one, returning each changed status with its old and new value; the diff of the two versions has one addition and one removal.
+
+A property path (`next+`) reaches one node fewer as of the version before the last edge was added.
+
+### Opening never changes the level
+
+Opening a store holding data with a higher level fails and names the explicit change; after `set_versioning`, reopening with default options keeps the level and history keeps recording.
+
+### Upgrade records the store as genesis
+
+Raising a plain store to `log` records its quads as the genesis commit: as-of genesis returns them even after later removals, and a tick before genesis is outside the history.
+
+### Downgrades freeze and resume
+
+Lowering to `stamped` freezes the history, which still answers at the freeze; raising it again records the gap on a resume tick, and as-of inside the gap fails.
+
+Writes in the gap are not logged, the history stays exact after the resume, and lowering to `off` with `allow_loss` drops the log, the ticks and the stamp column but no quad.
+
+### Updates do not read the past
+
+An update whose `WHERE` reads `SERVICE <oxilite:version/HEAD~1>` fails with an error saying versions are read in queries only, and writes nothing.
+
+### Off store SQL matches the pre-versioning snapshot
+
+Every W3C SPARQL 1.0, 1.1 and 1.2 query and update, and the batch writer's statements, compile for an unversioned store to the SQL and planner notes recorded from 0.3.1, before versioning.
+
+The snapshot covers native and D1 capabilities; renderings that embed fresh random blank nodes are recorded as varying, and the seven files with `\u` escapes are left out, since how they parse depends on a parser feature workspace builds enable.
+
+### History graph answers who changed what
+
+`GRAPH <oxilite:history>` returns the author, message, time and previous commit of the commit that removed a triple, and every added triple with its commit's author.
+
+The commit's number is its tick (`#n`); a store without a log refuses changes but still lists its commits.
+
+### Datalog compares versions per atom
+
+`at "HEAD~1"` on one atom compares a status with its previous value, `at ?c` bound by `commit` gives the value at every commit, and an `at` variable nothing binds is unsafe.
+
+### Datalog reads the history relations
+
+`removed` joined with `commit` names who removed each value, ancestry recurses over `commit`, and `branch("main", ?c)` has one row.
+
+The default graph reads as unbound, a program's own `commit` relation wins, and an unversioned store refuses the built-ins.
+
+### Cypher reads a past version
+
+`asOf: "HEAD~1"` returns the statuses before the last `SET`, node materialization included, on the native store and the D1 code path; a writing statement with a version is refused.
+
+### D1 driver queries the history
+
+`@oxilite/d1` on Miniflare reads who removed a triple from the history graph and runs Cypher at `HEAD~1`, refusing a versioned write.
+
+### Node binding queries the history
+
+`@oxilite/node` answers Cypher at `HEAD~1`, lists the authors in the history graph and reads `removed` in Datalog.
+
+### Purge removes from history
+
+A purge by subject removes the quads from the store, from every as-of state and from the change feed, and records a purge commit carrying the reason and no removed content.
+
+### D1 batches keep a statement for the tick
+
+With D1's limits, a versioned store's capabilities reserve two of the 50 statements (the tick's terms and the tick), stamped inserts stay under the SQL length limit, the prepared batch fits D1, and unversioned inserts never mention `ticks`.
+
+### Every engine keeps the same history
+
+The same scenario — commits, as-of by `HEAD~n`, commit counts per change, freeze, a write in the gap, resume — gives the same answers on bundled SQLite, the system SQLite, the D1 code path and, with `OXILITE_D1_URL`, Miniflare D1.
+
+### Datalog reads a past version
+
+An `@version "HEAD~1"` directive and `Options::as_of` run a recursive program on the previous version; materialization with a version and a version on an unversioned store are refused.
+
+### D1 driver keeps history
+
+`@oxilite/d1` on Miniflare opens a store at level `log`, records a commit's author and message, answers `as_of` queries, diffs and `SERVICE` comparisons, and applies a level change as a migration run with `db.exec`.
+
+### Node binding keeps history
+
+`@oxilite/node` records commits with `withCommit`, answers `as_of` queries and Datalog `asOf`, diffs versions and freezes the history by lowering the level.
+

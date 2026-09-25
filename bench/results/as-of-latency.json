@@ -1,0 +1,414 @@
+{
+  "backend": "bundled SQLite, in memory",
+  "commits": 500,
+  "depth": [
+    {
+      "depth": 0,
+      "ms": 22.324084000000003,
+      "query": "value lookup",
+      "store": "log"
+    },
+    {
+      "depth": 50,
+      "ms": 21.830416,
+      "query": "value lookup",
+      "store": "log"
+    },
+    {
+      "depth": 250,
+      "ms": 19.0875,
+      "query": "value lookup",
+      "store": "log"
+    },
+    {
+      "depth": 450,
+      "ms": 15.633958,
+      "query": "value lookup",
+      "store": "log"
+    },
+    {
+      "depth": 499,
+      "ms": 14.133417,
+      "query": "value lookup",
+      "store": "log"
+    },
+    {
+      "depth": 0,
+      "ms": 3.225917,
+      "query": "value lookup",
+      "store": "log + as-of index"
+    },
+    {
+      "depth": 50,
+      "ms": 3.0495829999999997,
+      "query": "value lookup",
+      "store": "log + as-of index"
+    },
+    {
+      "depth": 250,
+      "ms": 2.001875,
+      "query": "value lookup",
+      "store": "log + as-of index"
+    },
+    {
+      "depth": 450,
+      "ms": 0.955375,
+      "query": "value lookup",
+      "store": "log + as-of index"
+    },
+    {
+      "depth": 499,
+      "ms": 0.682708,
+      "query": "value lookup",
+      "store": "log + as-of index"
+    },
+    {
+      "depth": 0,
+      "ms": 19.470125000000003,
+      "query": "star join",
+      "store": "log"
+    },
+    {
+      "depth": 50,
+      "ms": 19.403750000000002,
+      "query": "star join",
+      "store": "log"
+    },
+    {
+      "depth": 250,
+      "ms": 17.841292000000003,
+      "query": "star join",
+      "store": "log"
+    },
+    {
+      "depth": 450,
+      "ms": 15.983,
+      "query": "star join",
+      "store": "log"
+    },
+    {
+      "depth": 499,
+      "ms": 15.958165999999999,
+      "query": "star join",
+      "store": "log"
+    },
+    {
+      "depth": 0,
+      "ms": 0.615459,
+      "query": "star join",
+      "store": "log + as-of index"
+    },
+    {
+      "depth": 50,
+      "ms": 0.62075,
+      "query": "star join",
+      "store": "log + as-of index"
+    },
+    {
+      "depth": 250,
+      "ms": 0.609292,
+      "query": "star join",
+      "store": "log + as-of index"
+    },
+    {
+      "depth": 450,
+      "ms": 0.600583,
+      "query": "star join",
+      "store": "log + as-of index"
+    },
+    {
+      "depth": 499,
+      "ms": 0.60175,
+      "query": "star join",
+      "store": "log + as-of index"
+    },
+    {
+      "depth": 0,
+      "ms": 29.242167,
+      "query": "group by",
+      "store": "log"
+    },
+    {
+      "depth": 50,
+      "ms": 27.9195,
+      "query": "group by",
+      "store": "log"
+    },
+    {
+      "depth": 250,
+      "ms": 24.093833,
+      "query": "group by",
+      "store": "log"
+    },
+    {
+      "depth": 450,
+      "ms": 21.979458,
+      "query": "group by",
+      "store": "log"
+    },
+    {
+      "depth": 499,
+      "ms": 21.004667,
+      "query": "group by",
+      "store": "log"
+    },
+    {
+      "depth": 0,
+      "ms": 15.917207999999999,
+      "query": "group by",
+      "store": "log + as-of index"
+    },
+    {
+      "depth": 50,
+      "ms": 15.726125,
+      "query": "group by",
+      "store": "log + as-of index"
+    },
+    {
+      "depth": 250,
+      "ms": 14.773958,
+      "query": "group by",
+      "store": "log + as-of index"
+    },
+    {
+      "depth": 450,
+      "ms": 14.334207999999999,
+      "query": "group by",
+      "store": "log + as-of index"
+    },
+    {
+      "depth": 499,
+      "ms": 13.370083,
+      "query": "group by",
+      "store": "log + as-of index"
+    }
+  ],
+  "entities": 20000,
+  "log_rows": 95724,
+  "results": [
+    {
+      "ms": 0.021916,
+      "query": "subject lookup",
+      "rows": 4,
+      "store": "off",
+      "version": "current"
+    },
+    {
+      "ms": 0.021333,
+      "query": "subject lookup",
+      "rows": 4,
+      "store": "log",
+      "version": "current"
+    },
+    {
+      "ms": 0.080667,
+      "query": "subject lookup",
+      "rows": 4,
+      "store": "log",
+      "version": "as of HEAD"
+    },
+    {
+      "ms": 0.064291,
+      "query": "subject lookup",
+      "rows": 4,
+      "store": "log",
+      "version": "as of the middle"
+    },
+    {
+      "ms": 0.020834000000000002,
+      "query": "subject lookup",
+      "rows": 4,
+      "store": "log + as-of index",
+      "version": "current"
+    },
+    {
+      "ms": 0.081625,
+      "query": "subject lookup",
+      "rows": 4,
+      "store": "log + as-of index",
+      "version": "as of HEAD"
+    },
+    {
+      "ms": 0.065625,
+      "query": "subject lookup",
+      "rows": 4,
+      "store": "log + as-of index",
+      "version": "as of the middle"
+    },
+    {
+      "ms": 1.854125,
+      "query": "value lookup",
+      "rows": 1902,
+      "store": "off",
+      "version": "current"
+    },
+    {
+      "ms": 1.8582500000000002,
+      "query": "value lookup",
+      "rows": 1902,
+      "store": "log",
+      "version": "current"
+    },
+    {
+      "ms": 22.156791,
+      "query": "value lookup",
+      "rows": 1902,
+      "store": "log",
+      "version": "as of HEAD"
+    },
+    {
+      "ms": 19.017875,
+      "query": "value lookup",
+      "rows": 1033,
+      "store": "log",
+      "version": "as of the middle"
+    },
+    {
+      "ms": 1.835167,
+      "query": "value lookup",
+      "rows": 1902,
+      "store": "log + as-of index",
+      "version": "current"
+    },
+    {
+      "ms": 3.3047910000000003,
+      "query": "value lookup",
+      "rows": 1902,
+      "store": "log + as-of index",
+      "version": "as of HEAD"
+    },
+    {
+      "ms": 2.1190409999999997,
+      "query": "value lookup",
+      "rows": 1033,
+      "store": "log + as-of index",
+      "version": "as of the middle"
+    },
+    {
+      "ms": 0.188,
+      "query": "star join",
+      "rows": 1,
+      "store": "off",
+      "version": "current"
+    },
+    {
+      "ms": 0.178459,
+      "query": "star join",
+      "rows": 1,
+      "store": "log",
+      "version": "current"
+    },
+    {
+      "ms": 20.372792,
+      "query": "star join",
+      "rows": 1,
+      "store": "log",
+      "version": "as of HEAD"
+    },
+    {
+      "ms": 17.627666,
+      "query": "star join",
+      "rows": 1,
+      "store": "log",
+      "version": "as of the middle"
+    },
+    {
+      "ms": 0.17675,
+      "query": "star join",
+      "rows": 1,
+      "store": "log + as-of index",
+      "version": "current"
+    },
+    {
+      "ms": 0.6102920000000001,
+      "query": "star join",
+      "rows": 1,
+      "store": "log + as-of index",
+      "version": "as of HEAD"
+    },
+    {
+      "ms": 0.596,
+      "query": "star join",
+      "rows": 1,
+      "store": "log + as-of index",
+      "version": "as of the middle"
+    },
+    {
+      "ms": 0.916917,
+      "query": "group by",
+      "rows": 4,
+      "store": "off",
+      "version": "current"
+    },
+    {
+      "ms": 0.908459,
+      "query": "group by",
+      "rows": 4,
+      "store": "log",
+      "version": "current"
+    },
+    {
+      "ms": 28.2315,
+      "query": "group by",
+      "rows": 4,
+      "store": "log",
+      "version": "as of HEAD"
+    },
+    {
+      "ms": 25.025458,
+      "query": "group by",
+      "rows": 4,
+      "store": "log",
+      "version": "as of the middle"
+    },
+    {
+      "ms": 0.919458,
+      "query": "group by",
+      "rows": 4,
+      "store": "log + as-of index",
+      "version": "current"
+    },
+    {
+      "ms": 15.865375,
+      "query": "group by",
+      "rows": 4,
+      "store": "log + as-of index",
+      "version": "as of HEAD"
+    },
+    {
+      "ms": 15.21575,
+      "query": "group by",
+      "rows": 4,
+      "store": "log + as-of index",
+      "version": "as of the middle"
+    }
+  ],
+  "runs": 15,
+  "triples": 80000,
+  "writes": [
+    {
+      "bytes": 13438976,
+      "commit_ms": 15.81459225,
+      "load_ms": 347.03720799999996,
+      "store": "off"
+    },
+    {
+      "bytes": 13656064,
+      "commit_ms": 15.862941418,
+      "load_ms": 361.66033400000003,
+      "store": "stamped"
+    },
+    {
+      "bytes": 21159936,
+      "commit_ms": 16.60566875,
+      "load_ms": 685.0482089999999,
+      "store": "log"
+    },
+    {
+      "bytes": 28475392,
+      "commit_ms": 17.205069916,
+      "load_ms": 792.084625,
+      "store": "log + as-of index"
+    }
+  ]
+}

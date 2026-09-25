@@ -174,3 +174,33 @@ A side table `quads_inf_src(src, s, p, o, g)` records which producer derived eac
 
 Materializing resets only its own producer: its attributions are deleted, then every inferred quad no producer still claims. After writing, it claims every unclaimed quad. Readers and the fixpoint loop are untouched, so queries, Cypher and Datalog read `quads_inf` exactly as before, and a quad two producers can derive stays until neither does. Rejected: a producer column in `quads_inf`'s key, which would duplicate rows every reader would then have to de-duplicate. The cost is one extra row per inference, written once per run; on D1 that is billed. See [[architecture#Reasoning]].
 
+## D29 The change log is the history, the quad table stays the present
+
+A versioned store keeps `quads` exactly as before and records changes beside it in an append-only `quad_log`, written by triggers on `quads`; past states are read from the log.
+
+Queries on the present — nearly all of them — keep their plans, their SQL and their cost, and every writer is captured because the capture sits below them. Rejected: reading every query from the log (every pattern pays a probe), and validity intervals on `quads` (a delete becomes an update, so rows are not immutable). The cost is billed on D1: one log row and one `tx` index entry per change ([[architecture#Versioning]]).
+
+## D30 One tick per atomic write, opened by the store
+
+The clock is `max(t) + 1` in `ticks`, inserted by the store in front of every request that writes `quads`, not by the writers and not from client clocks.
+
+SQLite and D1 have one writer, so the tick is strictly monotonic without coordination, and a D1 batch is exactly one tick — one commit. Writers need no change: [[crates/oxilite-core/src/version.rs#prepare]] recognizes their statements. Rejected: a hybrid logical clock computed in Rust (no extra row, but not monotonic across clients) and a trigger-opened tick (SQLite has no transaction identity to key it on).
+
+## D31 Genesis records the whole store
+
+Raising a store to `log` copies every quad into the log as the genesis commit, rather than inferring the baseline from quads that have no log entry.
+
+The inference is exact only while every change since genesis is logged; after a freeze and a resume it misattributes quads added in the gap. With a recorded genesis the log alone describes every state, freezes and resumes stay exact, and as-of is one query shape. The cost is one log row per quad, once, at the upgrade — free for a store created versioned.
+
+## D32 Levels change only explicitly
+
+Opening a store never changes its versioning level; raising or lowering it is a level change, applied by the API, the CLI or a D1 migration, and a downgrade deletes history only with `allow_loss`.
+
+Other store options apply when a store is opened (`text_index` even back-fills). Versioning does not: starting history is billed on D1 and takes a snapshot, and deleting it cannot be undone, so neither may happen because a configuration file sets a flag. An empty store opened with a level gets it, which is how a store is created versioned.
+
+## D33 Commits are ticks, and ticks record their terms
+
+In the history's RDF view a commit is its tick as an `xsd:integer`, and a write tick writes its time, author and message as terms in its own batch.
+
+Term ids are xxh3 hashes computed in Rust, so SQL cannot mint an id for a new IRI or literal; an inline integer is the one id SQL can compute, which makes the history graph and the Datalog history relations pure SQL over `ticks` and `quad_log` with no stored copy. The literals a commit is described with are known in Rust when the tick opens, so they are written then — one more statement per versioned batch and about two rows, never one per triple. Rejected: commit IRIs (no SQL-computable id), a materialized history graph (a write per change), and computing the terms at query time (a write during a read).
+

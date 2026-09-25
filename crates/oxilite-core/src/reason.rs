@@ -315,6 +315,8 @@ pub struct Entailment<'a> {
     pub transitive: &'a BTreeSet<i64>,
     /// Maximum terms of a compound SELECT.
     pub max_compound: usize,
+    /// Read the store as it was at this tick (see `version`), from the change log.
+    pub as_of: Option<i64>,
 }
 
 impl Entailment<'_> {
@@ -330,10 +332,13 @@ impl Entailment<'_> {
     /// applied once and covers patterns, paths, `OPTIONAL` and `GRAPH ?g` alike. Inferences
     /// are conclusions rather than schema, so they are never hidden.
     pub fn base(&self) -> String {
-        let asserted = if self.hide_schema {
-            crate::registry::quads_without_schema_graphs()
-        } else {
-            "quads"
+        let asserted = match (self.as_of, self.hide_schema) {
+            (Some(t), true) => {
+                crate::registry::without_schema_graphs(&crate::version::as_of_sql(&t.to_string()))
+            }
+            (Some(t), false) => crate::version::as_of_sql(&t.to_string()),
+            (None, true) => crate::registry::quads_without_schema_graphs().to_owned(),
+            (None, false) => "quads".to_owned(),
         };
         if self.inferred {
             format!(

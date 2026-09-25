@@ -51,6 +51,8 @@ pub struct CompiledQuery {
     layout: Vec<Out>,
     constants: HashMap<i64, Term>,
     union_default_graph: bool,
+    /// The quad table DESCRIBE reads (the change log at a tick for as-of queries).
+    source: String,
     /// Planner decisions and warnings.
     pub notes: Vec<String>,
 }
@@ -147,6 +149,7 @@ pub fn compile_query(
             base_iri,
         } => (dataset, pattern, base_iri, Form::Describe),
     };
+    crate::version::check_query_options(stats, options)?;
     let mut c = Compiler::new(
         stats,
         caps,
@@ -200,6 +203,10 @@ pub fn compile_query(
         layout,
         constants: c.constants,
         union_default_graph: options.union_default_graph,
+        source: options.as_of_tick.map_or_else(
+            || "quads".to_owned(),
+            |t| crate::version::as_of_sql(&t.to_string()),
+        ),
         notes: c.notes,
     })
 }
@@ -384,10 +391,11 @@ impl QueryJob {
             .chunks(400)
             .map(|chunk| {
                 Statement::new(format!(
-                    "SELECT DISTINCT {}, {}, {} FROM quads WHERE s IN ({}){graph}",
+                    "SELECT DISTINCT {}, {}, {} FROM {} x WHERE s IN ({}){graph}",
                     c("s"),
                     c("p"),
                     c("o"),
+                    self.compiled.source,
                     join(chunk)
                 ))
             })

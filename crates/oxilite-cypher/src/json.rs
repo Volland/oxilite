@@ -95,6 +95,13 @@ pub fn options_from_json(json: &str) -> Result<CypherOptions> {
             other => return Err(bad(format!("unknown reasoning '{other}'"))),
         };
     }
+    // The store as it was at this version (`HEAD~1`, `#42`, `@…`); `asOfTick` is a resolved one.
+    if let Some(v) = s("asOf") {
+        out.query.as_of = Some(v.to_owned());
+    }
+    if let Some(t) = v.get("asOfTick").and_then(serde_json::Value::as_i64) {
+        out.query.as_of_tick = Some(t);
+    }
     if let Some(x) = b("useDefaultGraphAsUnion") {
         out.query.union_default_graph = x;
     }

@@ -37,6 +37,13 @@ import {
   type QueryOptions,
   type QueryResult,
   type TermLike,
+  type Change,
+  type CommitInfo,
+  type CommitRecord,
+  type LevelChange,
+  type Versioning,
+  type VersionStatus,
+  toChanges,
   loadDataToString,
   outputToResult,
   toJson,
@@ -87,6 +94,15 @@ export interface WasmEngine {
   materialize(): WasmJob;
   clearInferences(): WasmJob;
   schemaSql(): string;
+  versioning(): WasmJob;
+  setVersioning(level: string, change?: string | null): WasmJob;
+  levelChangeSql(from: string, to: string, change?: string | null, state?: string | null): string;
+  setCommitInfo(info?: string | null): void;
+  history(limit: number): WasmJob;
+  resolveVersion(version: string): WasmJob;
+  changes(after: number, until?: number | null): WasmJob;
+  diff(from: string, to: string): WasmJob;
+  purge(pattern: string, reason?: string | null): WasmJob;
   jsonld(op: string, args: string, options?: string | null): WasmJob;
   jsonldSchemaSql(indexes?: string | null): string;
 }
@@ -128,7 +144,18 @@ export interface D1StoreOptions {
   migrated?: boolean;
   /** Create the FTS5 full-text index over string literals (for `oxl:textMatch`). */
   textIndex?: boolean;
+  /**
+   * Versioning of a new store: `"off"` (default), `"stamped"` (a store clock and the tick that
+   * added each quad) or `"log"` (an immutable change log: history and time travel). An existing
+   * store keeps its level: change it with `setVersioning` or a migration.
+   */
+  versioning?: Versioning;
+  /** With `"log"`: index the change log by predicate and object (faster as-of queries). */
+  asOfIndex?: boolean;
+  /** With `"stamped"` or `"log"`: index the tick that added each quad. */
+  stampIndex?: boolean;
 }
+
 
 /** An oxilite RDF store on a Cloudflare D1 database. */
 export class D1Store {
@@ -138,7 +165,16 @@ export class D1Store {
   ) {}
 
   static async openWith(Engine: EngineConstructor, db: D1DatabaseLike, options: D1StoreOptions = {}): Promise<D1Store> {
-    const engine = new Engine(null, JSON.stringify({ graphIndex: options.graphIndex ?? true, textIndex: options.textIndex ?? false }));
+    const engine = new Engine(
+      null,
+      JSON.stringify({
+        graphIndex: options.graphIndex ?? true,
+        textIndex: options.textIndex ?? false,
+        versioning: options.versioning ?? "off",
+        asOfIndex: options.asOfIndex ?? false,
+        stampIndex: options.stampIndex ?? false,
+      }),
+    );
     const store = new D1Store(db, engine);
     await store.run(options.migrated ? engine.openExisting() : engine.open());
     return store;
@@ -214,8 +250,18 @@ export class D1Store {
    * writing statement reads, then applies its changes as one D1 batch.
    */
   async cypher(query: string, params: Record<string, CypherValue> = {}, options: CypherOptions = {}): Promise<CypherResult> {
-    const out = (await this.run(this.engine.cypher(query, JSON.stringify(params), JSON.stringify(options)))) as unknown as CypherOutput;
+    // A version is resolved once, so every read of the statement sees the same tick.
+    const opts: Record<string, unknown> = { ...options };
+    if (options.asOf !== undefined) {
+      opts.asOfTick = await this.resolveVersion(options.asOf);
+    }
+    const out = (await this.run(this.engine.cypher(query, JSON.stringify(params), JSON.stringify(opts)))) as unknown as CypherOutput;
     return cypherResult(out);
+  }
+
+  /** The tick a version reference (`"HEAD~2"`, `"#42"`, `"@2026-09-01T00:00:00Z"`) designates. */
+  async resolveVersion(version: string): Promise<number> {
+    return ((await this.run(this.engine.resolveVersion(version))) as unknown as { value: number }).value;
   }
 
   /**
@@ -291,6 +337,66 @@ export class D1Store {
   /** The SQL a query compiles to, with join orders and warnings. */
   explain(query: string): string {
     return this.engine.explain(query);
+  }
+
+  // ---------------------------------------------------------------------------- versioning
+
+  /** The versioning level of the store and where its clock and history stand. */
+  async versioning(): Promise<VersionStatus> {
+    return (await this.run(this.engine.versioning())) as unknown as VersionStatus;
+  }
+
+  /**
+   * Changes the versioning level. Upgrades keep every quad (the upgrade to `"log"` records the
+   * whole store as its genesis commit); a downgrade freezes the history and stops the clock,
+   * and deletes them only with `allowLoss`. On a production D1 database prefer a migration
+   * (`npx oxilite-d1 versioning-migration`).
+   */
+  async setVersioning(level: Versioning, change: LevelChange = {}): Promise<VersionStatus> {
+    return (await this.run(this.engine.setVersioning(level, JSON.stringify(change)))) as unknown as VersionStatus;
+  }
+
+  /** Author and message recorded on the commits of the following writes (until changed). */
+  setCommitInfo(info: CommitInfo = {}): void {
+    this.engine.setCommitInfo(JSON.stringify(info));
+  }
+
+  /** Runs `f` with `info` recorded on its writes. */
+  async withCommit<T>(info: CommitInfo, f: (store: this) => Promise<T>): Promise<T> {
+    this.setCommitInfo(info);
+    try {
+      return await f(this);
+    } finally {
+      this.setCommitInfo({});
+    }
+  }
+
+  /** The latest commits and level changes, newest first. */
+  async history(limit = 20): Promise<CommitRecord[]> {
+    return (await this.run(this.engine.history(limit))) as unknown as CommitRecord[];
+  }
+
+  /** The changes after tick `after` (up to `until`), in order. */
+  async changes(after = 0, until?: number): Promise<Change[]> {
+    return toChanges(await this.run(this.engine.changes(after, until ?? null)));
+  }
+
+  /** The net difference between two versions (`"HEAD~1"`, `"#42"`, `"@2026-09-01T00:00:00Z"`). */
+  async diff(from: string, to = "HEAD"): Promise<Change[]> {
+    return toChanges(await this.run(this.engine.diff(from, to)));
+  }
+
+  /**
+   * Removes the quads matching the pattern from the store and from its whole history, for
+   * erasure requests; the purge is recorded without the removed content.
+   */
+  async purge(
+    pattern: { subject?: TermLike; predicate?: TermLike; object?: TermLike; graph?: TermLike },
+    reason?: string,
+  ): Promise<void> {
+    const json: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(pattern)) if (v) json[k] = toJson(v as TermLike);
+    await this.run(this.engine.purge(JSON.stringify(json), reason ?? null));
   }
 
   /** SPARQL update, applied atomically in one D1 batch. */

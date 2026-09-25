@@ -430,6 +430,7 @@ fn pred_text(p: &Pred) -> String {
         Pred::Idb(name) => name.clone(),
         Pred::Triple { graph: false } => "triple".into(),
         Pred::Triple { graph: true } => "quad".into(),
+        Pred::History(h) => h.name().into(),
     }
 }
 
@@ -489,9 +490,15 @@ pub(super) fn body_text(b: &BodyItem, subst: &impl Fn(&str) -> Option<Term>) -> 
                 .join(", ")
         )
     };
+    // `… at "REF"` / `… at ?c`: the version an atom reads.
+    let at = |a: &oxilite::datalog::ast::Atom| match &a.at {
+        None => String::new(),
+        Some(oxilite::datalog::ast::At::Version(r)) => format!(" at {r:?}"),
+        Some(oxilite::datalog::ast::At::Var(v)) => format!(" at ?{v}"),
+    };
     match b {
-        BodyItem::Atom(a) => atom(&a.pred, &a.args),
-        BodyItem::Negated(a) => format!("not {}", atom(&a.pred, &a.args)),
+        BodyItem::Atom(a) => format!("{}{}", atom(&a.pred, &a.args), at(a)),
+        BodyItem::Negated(a) => format!("not {}{}", atom(&a.pred, &a.args), at(a)),
         BodyItem::Constraint(e) => expr_text(e, subst),
     }
 }

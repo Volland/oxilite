@@ -200,3 +200,8 @@ pub fn scoped_quads(role: SchemaRole) -> String {
 pub fn quads_without_schema_graphs() -> &'static str {
     "(SELECT s, p, o, g FROM quads WHERE g NOT IN (SELECT g FROM schema_graphs))"
 }
+
+/// SQL: `source` (a quad table) with every registered schema graph removed.
+pub fn without_schema_graphs(source: &str) -> String {
+    format!("(SELECT s, p, o, g FROM {source} WHERE g NOT IN (SELECT g FROM schema_graphs))")
+}

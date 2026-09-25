@@ -8,7 +8,7 @@ use crate::encoding::{
 use crate::error::{Error, Result};
 use crate::job::{Job, OneShot, Step};
 use crate::resolve::TermResolver;
-use crate::schema::{create_schema, StoreOptions};
+use crate::schema::{base_schema, StoreOptions};
 use crate::sql::{Capabilities, Request, Response, SqlValue, Statement};
 use crate::stats::Stats;
 use crate::writer::{term_statements, EncodedQuads};
@@ -26,28 +26,84 @@ fn id_col(caps: &Capabilities, c: &str) -> String {
 }
 
 /// Creates the schema, then loads statistics.
+///
+/// The versioning level recorded in the store wins: opening never changes it, except that an
+/// empty store opened with a higher level gets it (that is how a store is created versioned).
+/// A higher level on a store holding data is refused: raising it is an explicit level change.
 pub fn open_job(options: &StoreOptions, caps: &Capabilities) -> impl Job<Output = Stats> {
-    let schema = create_schema(options);
-    let load = Stats::load_request(caps);
+    enum Phase {
+        Start,
+        Schema,
+        Stats,
+        Empty(Stats),
+        Upgraded,
+        Reloaded,
+    }
     struct Open {
-        schema: Option<Request>,
-        load: Option<Request>,
+        options: StoreOptions,
+        caps: Capabilities,
+        phase: Phase,
     }
     impl Job for Open {
         type Output = Stats;
         fn step(&mut self, response: Option<Response>) -> Result<Step<Stats>> {
-            if let Some(r) = self.schema.take() {
-                return Ok(Step::Execute(r));
+            let wanted = self.options.versioning;
+            match std::mem::replace(&mut self.phase, Phase::Reloaded) {
+                Phase::Start => {
+                    self.phase = Phase::Schema;
+                    Ok(Step::Execute(base_schema(&self.options)))
+                }
+                Phase::Schema => {
+                    self.phase = Phase::Stats;
+                    Ok(Step::Execute(Stats::load_request(&self.caps)))
+                }
+                Phase::Stats => {
+                    let stats = Stats::from_response(&response.unwrap_or_default())?;
+                    if wanted <= stats.version.level {
+                        return Ok(Step::Done(stats));
+                    }
+                    self.phase = Phase::Empty(stats);
+                    Ok(Step::Execute(Request::read(vec![Statement::new(
+                        "SELECT NOT EXISTS (SELECT 1 FROM quads)",
+                    )])))
+                }
+                Phase::Empty(stats) => {
+                    let response = response.unwrap_or_default();
+                    let empty = response
+                        .first()
+                        .and_then(|r| r.rows.first())
+                        .and_then(|row| row.first())
+                        .and_then(SqlValue::as_i64)
+                        == Some(1);
+                    if !empty || stats.version.history != crate::version::History::None {
+                        return Err(Error::Other(format!(
+                            "the store's versioning level is `{}`; opening does not change it. Raise it explicitly (`Store::set_versioning`, `oxilite versioning set {wanted}`)",
+                            stats.version.level
+                        )));
+                    }
+                    self.phase = Phase::Upgraded;
+                    Ok(Step::Execute(Request::atomic(
+                        crate::version::change_statements(
+                            &stats.version,
+                            wanted,
+                            &self.options.level_change(),
+                        )?,
+                    )))
+                }
+                Phase::Upgraded => {
+                    self.phase = Phase::Reloaded;
+                    Ok(Step::Execute(Stats::load_request(&self.caps)))
+                }
+                Phase::Reloaded => {
+                    Stats::from_response(&response.unwrap_or_default()).map(Step::Done)
+                }
             }
-            if let Some(r) = self.load.take() {
-                return Ok(Step::Execute(r));
-            }
-            Stats::from_response(&response.unwrap_or_default()).map(Step::Done)
         }
     }
     Open {
-        schema: Some(schema),
-        load: Some(load),
+        options: options.clone(),
+        caps: caps.clone(),
+        phase: Phase::Start,
     }
 }
 

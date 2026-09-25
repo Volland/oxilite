@@ -1,29 +1,68 @@
 [
   {
+    "as_of_index": false,
     "graph_index": true,
     "rows_written": 24060,
     "rows_written_per_triple": 4.812,
     "schema": "graph index (default)",
     "statements": 20,
     "text_index": false,
-    "triples": 5000
+    "triples": 5000,
+    "versioning": "off"
   },
   {
+    "as_of_index": false,
     "graph_index": false,
     "rows_written": 19060,
     "rows_written_per_triple": 3.812,
     "schema": "no graph index",
     "statements": 20,
     "text_index": false,
-    "triples": 5000
+    "triples": 5000,
+    "versioning": "off"
   },
   {
+    "as_of_index": false,
     "graph_index": true,
     "rows_written": 25060,
     "rows_written_per_triple": 5.012,
     "schema": "graph index + text index",
     "statements": 20,
     "text_index": true,
-    "triples": 5000
+    "triples": 5000,
+    "versioning": "off"
+  },
+  {
+    "as_of_index": false,
+    "graph_index": true,
+    "rows_written": 24090,
+    "rows_written_per_triple": 4.818,
+    "schema": "versioning: stamped",
+    "statements": 40,
+    "text_index": false,
+    "triples": 5000,
+    "versioning": "stamped"
+  },
+  {
+    "as_of_index": false,
+    "graph_index": true,
+    "rows_written": 34100,
+    "rows_written_per_triple": 6.82,
+    "schema": "versioning: log",
+    "statements": 40,
+    "text_index": false,
+    "triples": 5000,
+    "versioning": "log"
+  },
+  {
+    "as_of_index": true,
+    "graph_index": true,
+    "rows_written": 44100,
+    "rows_written_per_triple": 8.82,
+    "schema": "versioning: log + as-of index",
+    "statements": 40,
+    "text_index": false,
+    "triples": 5000,
+    "versioning": "log"
   }
 ]

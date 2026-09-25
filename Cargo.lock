@@ -3019,6 +3019,7 @@ dependencies = [
 name = "oxilite"
 version = "0.3.1"
 dependencies = [
+ "futures",
  "oxilite",
  "oxilite-core",
  "oxilite-cypher",
@@ -3032,9 +3033,11 @@ dependencies = [
  "oxiri 0.2.11",
  "oxrdf",
  "oxrdfio",
+ "serde_json",
  "sparesults",
  "spareval",
  "spargebra",
+ "ureq",
 ]
 
 [[package]]
