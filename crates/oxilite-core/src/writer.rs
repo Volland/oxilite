@@ -188,8 +188,23 @@ pub fn insert_statements_into(
     quads: &[[i64; 4]],
     caps: &Capabilities,
 ) -> Vec<Statement> {
-    let prefix = format!("INSERT OR IGNORE INTO {table}(s, p, o, g) VALUES ");
-    let mut c = Chunker::new(&prefix, "", caps.max_sql_len);
+    // A versioned store stamps each new quad with the current tick (see `version`).
+    let stamped = table == "quads" && caps.versioning >= crate::version::Versioning::Stamped;
+    let (prefix, suffix) = if stamped {
+        (
+            format!(
+                "INSERT OR IGNORE INTO {table}(s, p, o, g, t) SELECT column1, column2, column3, column4, {} FROM (VALUES ",
+                crate::version::CURRENT_TICK
+            ),
+            ")",
+        )
+    } else {
+        (
+            format!("INSERT OR IGNORE INTO {table}(s, p, o, g) VALUES "),
+            "",
+        )
+    };
+    let mut c = Chunker::new(&prefix, suffix, caps.max_sql_len);
     for [s, p, o, g] in quads {
         c.push(&format!("({s},{p},{o},{g})"));
     }

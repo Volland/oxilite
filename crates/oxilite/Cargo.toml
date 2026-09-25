@@ -55,3 +55,7 @@ oxiri.workspace = true
 
 [dev-dependencies]
 oxilite = { path = ".", features = ["rusqlite", "dylib"] }
+oxilite-core = { workspace = true, features = ["serde"] }
+futures = { version = "0.3", default-features = false, features = ["executor"] }
+ureq = { version = "2", features = ["json"] }
+serde_json = "1"

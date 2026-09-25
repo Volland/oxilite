@@ -5,7 +5,7 @@
 //! `bench/results/write-cost.json` and prints a Markdown table.
 
 use oxilite::model::{Literal, NamedNode, Quad};
-use oxilite_core::{ops, Capabilities, Job, Request, Step, StoreOptions};
+use oxilite_core::{ops, version, Capabilities, Job, Request, Step, StoreOptions, Versioning};
 use serde_json::{json, Value};
 
 fn post(url: &str, path: &str, body: Value) -> Value {
@@ -81,27 +81,25 @@ fn main() {
     let triples: usize = args.get(2).and_then(|n| n.parse().ok()).unwrap_or(5_000);
     let caps = Capabilities::d1();
     let quads = data(triples);
+    let base = |graph_index, text_index| StoreOptions {
+        graph_index,
+        text_index,
+        ..Default::default()
+    };
+    let versioned = |versioning, as_of_index| StoreOptions {
+        versioning,
+        as_of_index,
+        ..Default::default()
+    };
     let configs = [
+        ("graph index (default)", base(true, false)),
+        ("no graph index", base(false, false)),
+        ("graph index + text index", base(true, true)),
+        ("versioning: stamped", versioned(Versioning::Stamped, false)),
+        ("versioning: log", versioned(Versioning::Log, false)),
         (
-            "graph index (default)",
-            StoreOptions {
-                graph_index: true,
-                text_index: false,
-            },
-        ),
-        (
-            "no graph index",
-            StoreOptions {
-                graph_index: false,
-                text_index: false,
-            },
-        ),
-        (
-            "graph index + text index",
-            StoreOptions {
-                graph_index: true,
-                text_index: true,
-            },
+            "versioning: log + as-of index",
+            versioned(Versioning::Log, true),
         ),
     ];
     let mut report = Vec::new();
@@ -114,9 +112,13 @@ fn main() {
             let (v, _) = execute(&url, &r);
             response = Some(serde_json::from_value(v).unwrap());
         }
+        // A versioned store stamps its inserts and opens one tick per batch.
+        let caps = version::effective_caps(&caps, options.versioning);
         let (mut written, mut statements) = (0u64, 0usize);
         for chunk in quads.chunks(500) {
             let request = ops::insert_request(chunk.iter().map(Quad::as_ref), &caps);
+            let request = version::prepare(&request, options.versioning, &Default::default())
+                .unwrap_or(request);
             statements += request.statements.len();
             written += execute(&url, &request).1;
         }
@@ -129,6 +131,8 @@ fn main() {
             "schema": name,
             "graph_index": options.graph_index,
             "text_index": options.text_index,
+            "versioning": options.versioning.as_str(),
+            "as_of_index": options.as_of_index,
             "triples": quads.len(),
             "rows_written": written,
             "rows_written_per_triple": per_triple,

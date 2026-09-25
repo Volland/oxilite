@@ -9,6 +9,7 @@ pub use crate::common::{IntoQuery, IntoUpdate};
 use oxilite_core::job::run_sync;
 use oxilite_core::query::{compile_query, QueryJob, QueryOutput};
 use oxilite_core::update::{plan_update_with, PlannedOp};
+use oxilite_core::version::VersionedBackend;
 use oxilite_core::{
     ops, Capabilities, Error, QueryOptions, Request, Result, Stats, StoreOptions, SyncBackend,
 };
@@ -50,7 +51,8 @@ impl SyncBackend for NoBackend {
 }
 
 struct Inner<B> {
-    backend: Arc<B>,
+    /// The backend, wrapped so every write of a versioned store opens a tick.
+    backend: Arc<VersionedBackend<B>>,
     stats: RwLock<Stats>,
 }
 
@@ -93,12 +95,7 @@ impl Store {
     pub fn open_read_only(path: impl AsRef<std::path::Path>) -> Result<Self> {
         let backend = oxilite_rusqlite::RusqliteBackend::open_read_only(path)?;
         let stats = run_sync(&backend, ops::stats_job(backend.capabilities()))?;
-        Ok(Self {
-            inner: Arc::new(Inner {
-                backend: Arc::new(backend),
-                stats: RwLock::new(stats),
-            }),
-        })
+        Ok(Self::from_parts(backend, stats))
     }
 }
 
@@ -118,17 +115,38 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
 
     pub fn with_backend_and_options(backend: B, options: &StoreOptions) -> Result<Self> {
         let stats = run_sync(&backend, ops::open_job(options, backend.capabilities()))?;
-        Ok(Self {
+        Ok(Self::from_parts(backend, stats))
+    }
+
+    fn from_parts(backend: B, stats: Stats) -> Self {
+        let caps = backend.capabilities().clone();
+        let level = stats.version.level;
+        Self {
             inner: Arc::new(Inner {
-                backend: Arc::new(backend),
+                backend: Arc::new(VersionedBackend::new(backend, &caps, level)),
                 stats: RwLock::new(stats),
             }),
-        })
+        }
     }
 
     /// The backend.
     pub fn backend(&self) -> &B {
+        self.inner.backend.inner()
+    }
+
+    /// The backend as the store's operations see it: writes of a versioned store open a tick.
+    pub(crate) fn versioned(&self) -> &VersionedBackend<B> {
         &self.inner.backend
+    }
+
+    /// Replaces the statistics (and the versioning level the backend applies).
+    pub(crate) fn set_stats(&self, stats: Stats) {
+        self.inner.backend.set_level(stats.version.level);
+        *self
+            .inner
+            .stats
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = stats;
     }
 
     pub(crate) fn caps(&self) -> &Capabilities {
@@ -144,6 +162,7 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
         query: &spargebra::Query,
         options: &QueryOptions,
     ) -> Result<QueryOutput> {
+        let options = &*self.resolve_versions(query, options)?;
         let compiled = {
             let stats = self
                 .inner
@@ -154,7 +173,7 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
         };
         match compiled {
             Ok(c) => self.run(QueryJob::new(c, self.caps().clone())),
-            Err(e) if e.is_unsupported() => {
+            Err(e) if e.is_unsupported() && !oxilite_core::version::query_reads_history(query) => {
                 let stats = self.stats();
                 crate::partial::evaluate(Arc::clone(&self.inner.backend), query, &stats, options)
             }
@@ -194,6 +213,7 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
 
     pub fn explain_opt(&self, query: impl IntoQuery, options: &QueryOptions) -> Result<String> {
         let q = query.into_query()?;
+        let options = &*self.resolve_versions(&q, options)?;
         let stats = self
             .inner
             .stats
@@ -400,11 +420,7 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
 
     pub(crate) fn reload_stats(&self) -> Result<()> {
         let stats = self.run(ops::stats_job(self.caps()))?;
-        *self
-            .inner
-            .stats
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = stats;
+        self.set_stats(stats);
         Ok(())
     }
 
@@ -513,11 +529,7 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
     /// Refreshes the planner statistics (replaces RocksDB compaction).
     pub fn optimize(&self) -> Result<()> {
         let stats = self.run(ops::optimize_job(self.caps()))?;
-        *self
-            .inner
-            .stats
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = stats;
+        self.set_stats(stats);
         Ok(())
     }
 

@@ -27,6 +27,8 @@ pub struct SqlDataset<'a, B: SyncBackend> {
     inferred: bool,
     hide_schema: bool,
     transitive: BTreeSet<i64>,
+    /// Read the store as it was at this tick (see `version`).
+    as_of: Option<i64>,
 }
 
 impl<'a, B: SyncBackend> SqlDataset<'a, B> {
@@ -38,6 +40,7 @@ impl<'a, B: SyncBackend> SqlDataset<'a, B> {
             inferred: false,
             hide_schema: false,
             transitive: BTreeSet::new(),
+            as_of: None,
         }
     }
 
@@ -46,6 +49,7 @@ impl<'a, B: SyncBackend> SqlDataset<'a, B> {
         self.reasoning = options.reasoning;
         self.inferred = options.include_inferred;
         self.hide_schema = !options.include_schema_graphs;
+        self.as_of = options.as_of_tick;
         if self.reasoning == crate::reason::Reasoning::OwlQl {
             let stmt = crate::reason::transitive_statement(|c| self.id_col(c));
             for row in self.rows(stmt.sql)? {
@@ -152,6 +156,7 @@ impl<'a, B: SyncBackend> QueryableDataset<'a> for SqlDataset<'a, B> {
             reasoning: self.reasoning,
             inferred: self.inferred,
             hide_schema: self.hide_schema,
+            as_of: self.as_of,
             transitive: &self.transitive,
             max_compound: self.backend.capabilities().max_compound_select,
         };

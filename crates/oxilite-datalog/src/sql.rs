@@ -51,6 +51,16 @@ pub struct Options {
     /// The name materialized conclusions are attributed to: materializing replaces only this
     /// producer's earlier conclusions (default `datalog`).
     pub producer: String,
+    /// Read the store as it was at this version (`HEAD~1`, `#42`, `@2026-09-01T00:00:00Z`);
+    /// a program's `@version` directive sets it too. The store resolves it to
+    /// [`Self::as_of_tick`] before compiling.
+    pub as_of: Option<String>,
+    /// The resolved tick of the version read.
+    pub as_of_tick: Option<i64>,
+    /// Resolved ticks of the versions atoms name with `at "REF"` (by `REF`).
+    pub versions: std::collections::BTreeMap<String, i64>,
+    /// The store's versioning state, for the history built-ins and `at ?c` (set by the store).
+    pub history: Option<oxilite_core::version::VersionState>,
 }
 
 impl Default for Options {
@@ -60,6 +70,10 @@ impl Default for Options {
             include_inferred: false,
             max_iterations: 100,
             producer: DATALOG_PRODUCER.to_owned(),
+            as_of: None,
+            as_of_tick: None,
+            versions: std::collections::BTreeMap::new(),
+            history: None,
         }
     }
 }
@@ -252,8 +266,92 @@ impl<'a> Compiler<'a> {
         self.analysis.arity.contains_key(pred)
     }
 
+    /// The table an atom reading the store reads: the store, the store at the version of its
+    /// `at "REF"`, or the change log restricted to the commit bound by its `at ?c`.
+    fn atom_source(&self, atom: &Atom, alias: &str, extra: &mut Vec<String>) -> Result<String> {
+        match &atom.at {
+            None => Ok(self.quad_source()),
+            Some(_) if self.options.include_inferred => Err(DatalogError::Unsupported(
+                "inferences describe the current state only; they cannot be combined with `at`"
+                    .into(),
+            )),
+            Some(At::Version(r)) => {
+                let tick = self.options.versions.get(r).ok_or_else(|| {
+                    DatalogError::Unsupported(format!(
+                        "version {r} was not resolved: run the program through a store with a change log"
+                    ))
+                })?;
+                Ok(oxilite_core::version::as_of_sql(&tick.to_string()))
+            }
+            Some(At::Var(v)) => {
+                self.require_log()?;
+                // The tick is the value of `?v`, known once every positive atom is bound.
+                let t = at_placeholder(v);
+                extra.push(format!(
+                    "{alias}.op = 1 AND {alias}.tx <= {t} AND NOT EXISTS (SELECT 1 FROM quad_log r \
+                     WHERE r.s = {alias}.s AND r.p = {alias}.p AND r.o = {alias}.o AND r.g = {alias}.g \
+                     AND r.tx > {alias}.tx AND r.tx <= {t})"
+                ));
+                Ok("quad_log".to_owned())
+            }
+        }
+    }
+
+    fn require_log(&self) -> Result<()> {
+        match &self.options.history {
+            Some(s) if s.history != oxilite_core::version::History::None => Ok(()),
+            _ => Err(DatalogError::Unsupported(
+                "this store keeps no change log: raise its versioning level to `log`".into(),
+            )),
+        }
+    }
+
+    /// The history built-ins: `commit(c, parent, time, author)`, `added` / `removed(s, p, o,
+    /// g, c)`, `branch(name, c)`. A commit is its tick as an inline integer.
+    fn history_source(&mut self, h: HistoryRel) -> Result<(String, Vec<String>, Vec<String>)> {
+        use oxilite_core::version;
+        let state = match &self.options.history {
+            Some(s) if s.has_ticks() => *s,
+            _ => {
+                return Err(DatalogError::Unsupported(format!(
+                    "{}/{} reads the history: this store keeps none (versioning level `off`)",
+                    h.name(),
+                    h.arity()
+                )))
+            }
+        };
+        let cols = |c: &[&str]| c.iter().map(|x| (*x).to_owned()).collect::<Vec<_>>();
+        Ok(match h {
+            HistoryRel::Commit => (
+                version::commits_rel_sql(&state),
+                cols(&["c", "parent", "time", "author"]),
+                Vec::new(),
+            ),
+            HistoryRel::Added | HistoryRel::Removed => {
+                self.require_log()?;
+                (
+                    version::changes_rel_sql(h == HistoryRel::Added),
+                    cols(&["s", "p", "o", "g", "c"]),
+                    Vec::new(),
+                )
+            }
+            HistoryRel::Branch => {
+                let main =
+                    self.register_const(&Term::from(oxrdf::Literal::new_simple_literal("main")));
+                (
+                    version::branches_rel_sql(main),
+                    cols(&["name", "c"]),
+                    Vec::new(),
+                )
+            }
+        })
+    }
+
     /// The table every triple pattern reads.
     fn quad_source(&self) -> String {
+        if let Some(t) = self.options.as_of_tick {
+            return oxilite_core::version::as_of_sql(&t.to_string());
+        }
         if self.options.include_inferred {
             "(SELECT s, p, o, g FROM quads UNION ALL SELECT s, p, o, g FROM quads_inf)".to_owned()
         } else {
@@ -518,6 +616,7 @@ impl<'a> Compiler<'a> {
             }
         }
 
+        resolve_at(&mut frame)?;
         let mut sql = format!("SELECT {}", projection.join(", "));
         if frame.froms.is_empty() {
             // A fact: a row of constants, with no table to read.
@@ -614,6 +713,7 @@ impl<'a> Compiler<'a> {
             });
         }
         Ok(match &atom.pred {
+            Pred::History(h) => self.history_source(*h)?,
             Pred::Edb(iri) => {
                 let id = self.register_const(&Term::from(iri.clone()));
                 let unary = atom.args.len() == 1;
@@ -634,7 +734,8 @@ impl<'a> Compiler<'a> {
                 } else {
                     vec!["s".to_owned(), "o".to_owned()]
                 };
-                (self.quad_source(), cols, extra)
+                let source = self.atom_source(atom, alias, &mut extra)?;
+                (source, cols, extra)
             }
             Pred::Triple { graph } => {
                 let mut extra = Vec::new();
@@ -644,7 +745,8 @@ impl<'a> Compiler<'a> {
                 } else if !self.options.union_default_graph {
                     extra.push(format!("{alias}.g = 0"));
                 }
-                (self.quad_source(), cols, extra)
+                let source = self.atom_source(atom, alias, &mut extra)?;
+                (source, cols, extra)
             }
             Pred::Idb(name) => {
                 // A derived relation with no rules is empty, and the goal naming one is a
@@ -944,6 +1046,7 @@ impl<'a> Compiler<'a> {
             let sql = self.expr(c, &frame)?.as_bool();
             frame.wheres.push(format!("({sql})"));
         }
+        resolve_at(&mut frame)?;
         let mut variables = Vec::new();
         atom_vars(&goal.atom, &mut variables);
         // Columns are aliased `v0…` so that a caller — materialization, for one — can wrap
@@ -977,6 +1080,32 @@ struct Frame {
     froms: Vec<String>,
     wheres: Vec<String>,
     binding: HashMap<String, String>,
+}
+
+/// Stands for the tick of `at ?v` until the rule's bindings are known.
+fn at_placeholder(v: &str) -> String {
+    format!("\u{1}at:{v}\u{1}")
+}
+
+/// Replaces the `at ?v` placeholders with the tick bound to `?v` (a commit is an inline
+/// integer). An `at` variable no positive atom binds is unsafe.
+fn resolve_at(frame: &mut Frame) -> Result<()> {
+    let base = oxilite_core::compiler::expr_int_base();
+    for w in &mut frame.wheres {
+        while let Some(start) = w.find("\u{1}at:") {
+            let end = start + 4 + w[start + 4..].find('\u{1}').expect("closed placeholder");
+            let var = w[start + 4..end].to_owned();
+            let bound = frame
+                .binding
+                .get(&var)
+                .ok_or_else(|| DatalogError::Unsafe {
+                    predicate: "at".to_owned(),
+                    variable: format!("?{var}"),
+                })?;
+            w.replace_range(start..=end, &format!("({bound} - {base})"));
+        }
+    }
+    Ok(())
 }
 
 /// The tagged relation of a mutually recursive component: its name, the component, the tag

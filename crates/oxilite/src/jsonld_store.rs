@@ -62,7 +62,7 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
         options: JsonLdOptions,
         first: S,
     ) -> R<JsonLdStore<'_, B, S>> {
-        self.backend()
+        self.versioned()
             .execute(&schema::create_schema(&options.indexes))
             .map_err(from_core)?;
         Ok(JsonLdStore {
@@ -85,7 +85,7 @@ impl<B: SyncBackend + Send + Sync + 'static, S: Loader> JsonLdStore<'_, B, S> {
     }
 
     fn run<J: Job>(&self, job: J) -> R<J::Output> {
-        run_sync(self.store.backend(), job).map_err(from_core)
+        run_sync(self.store.versioned(), job).map_err(from_core)
     }
 
     /// Runs a write; reads of previous versions and the write share one transaction
@@ -98,7 +98,7 @@ impl<B: SyncBackend + Send + Sync + 'static, S: Loader> JsonLdStore<'_, B, S> {
             &self.first,
             self.store.caps().clone(),
         )?;
-        let backend = self.store.backend();
+        let backend = self.store.versioned();
         let tx =
             !self.options.graph.owns_target() && backend.capabilities().interactive_transactions;
         if tx {

@@ -14,8 +14,9 @@ use oxilite_core::json::{
 };
 use oxilite_core::query::{compile_query, QueryJob};
 use oxilite_core::update::{explain_plan, plan_update_with, PlannedOp};
+use oxilite_core::version;
 use oxilite_core::{
-    ops, Capabilities, Error, QueryOptions, Request, Response, Stats, StoreOptions,
+    ops, Capabilities, CommitInfo, Error, QueryOptions, Request, Response, Stats, StoreOptions,
 };
 use oxrdf::{GraphName, NamedOrBlankNode, Quad, Term};
 use oxrdfio::{RdfFormat, RdfParser, RdfSerializer};
@@ -38,6 +39,27 @@ type Stepper = Box<dyn FnMut(Option<Response>) -> oxilite_core::Result<Step<Valu
 #[wasm_bindgen]
 pub struct Job {
     pub(crate) step: Stepper,
+    /// The engine's versioning state: when set, atomic writes of a versioned store open a tick
+    /// (see `oxilite_core::version`).
+    pub(crate) ctx: Option<VersionCtx>,
+    pending: bool,
+}
+
+/// What a job needs to open ticks: the store's level (in its statistics) and the commit info.
+#[derive(Clone)]
+pub(crate) struct VersionCtx {
+    stats: Rc<RefCell<Stats>>,
+    info: Rc<RefCell<CommitInfo>>,
+}
+
+impl Job {
+    pub(crate) fn new(step: Stepper) -> Self {
+        Self {
+            step,
+            ctx: None,
+            pending: false,
+        }
+    }
 }
 
 #[wasm_bindgen]
@@ -49,23 +71,38 @@ impl Job {
             .map(|r| serde_json::from_str::<Response>(&r))
             .transpose()
             .map_err(js)?;
+        let response = if std::mem::take(&mut self.pending) {
+            response.map(version::strip)
+        } else {
+            response
+        };
         Ok(match (self.step)(response).map_err(js)? {
-            Step::Execute(r) => json!({ "execute": r }).to_string(),
+            Step::Execute(r) => {
+                let prepared = self.ctx.as_ref().and_then(|c| {
+                    let level = c.stats.borrow().version.level;
+                    version::prepare(&r, level, &c.info.borrow())
+                });
+                match prepared {
+                    Some(p) => {
+                        self.pending = true;
+                        json!({ "execute": p }).to_string()
+                    }
+                    None => json!({ "execute": r }).to_string(),
+                }
+            }
             Step::Done(v) => json!({ "done": v }).to_string(),
         })
     }
 }
 
-fn wrap<J: CoreJob + 'static>(
+fn wrap_raw<J: CoreJob + 'static>(
     mut job: J,
     done: impl Fn(J::Output) -> oxilite_core::Result<Value> + 'static,
 ) -> Job {
-    Job {
-        step: Box::new(move |r| match job.step(r)? {
-            Step::Execute(req) => Ok(Step::Execute(req)),
-            Step::Done(o) => Ok(Step::Done(done(o)?)),
-        }),
-    }
+    Job::new(Box::new(move |r| match job.step(r)? {
+        Step::Execute(req) => Ok(Step::Execute(req)),
+        Step::Done(o) => Ok(Step::Done(done(o)?)),
+    }))
 }
 
 #[cfg(feature = "datalog")]
@@ -75,6 +112,15 @@ fn datalog_options(options: Option<String>) -> Result<oxilite_datalog::Options, 
         None => Value::Null,
     };
     oxilite_datalog::json::options_from_json(&value).map_err(js)
+}
+
+fn changes_to_json(changes: &[version::Change]) -> Value {
+    Value::Array(
+        changes
+            .iter()
+            .map(|c| json!({"tick": c.tick, "added": c.added, "quad": quad_to_json(&c.quad)}))
+            .collect(),
+    )
 }
 
 fn ok() -> oxilite_core::Result<Value> {
@@ -90,9 +136,39 @@ fn format(name: &str) -> Result<RdfFormat, JsError> {
 /// The oxilite engine for one database.
 #[wasm_bindgen]
 pub struct Engine {
-    caps: Capabilities,
+    /// The backend's capabilities; jobs get [`Engine::caps`], adjusted to the store's level.
+    base_caps: Capabilities,
     options: StoreOptions,
     stats: Rc<RefCell<Stats>>,
+    info: Rc<RefCell<CommitInfo>>,
+}
+
+impl Engine {
+    /// The capabilities jobs see: writers stamp quads, and a statement is kept for the tick.
+    fn caps(&self) -> Capabilities {
+        version::effective_caps(&self.base_caps, self.stats.borrow().version.level)
+    }
+
+    fn version_ctx(&self) -> VersionCtx {
+        VersionCtx {
+            stats: Rc::clone(&self.stats),
+            info: Rc::clone(&self.info),
+        }
+    }
+
+    /// Makes `job` open a tick for its writes when the store is versioned.
+    fn bind(&self, mut job: Job) -> Job {
+        job.ctx = Some(self.version_ctx());
+        job
+    }
+
+    fn wrap<J: CoreJob + 'static>(
+        &self,
+        job: J,
+        done: impl Fn(J::Output) -> oxilite_core::Result<Value> + 'static,
+    ) -> Job {
+        self.bind(wrap_raw(job, done))
+    }
 }
 
 #[wasm_bindgen]
@@ -110,9 +186,10 @@ impl Engine {
             None => StoreOptions::default(),
         };
         Ok(Self {
-            caps,
+            base_caps: caps,
             options,
             stats: Rc::default(),
+            info: Rc::default(),
         })
     }
 
@@ -128,7 +205,9 @@ impl Engine {
             Some(o) => serde_json::from_str(&o).map_err(js)?,
             None => Value::Null,
         };
-        jsonld::jsonld_job(op, &args, &opts, &self.caps).map_err(js)
+        jsonld::jsonld_job(op, &args, &opts, &self.caps())
+            .map(|j| self.bind(j))
+            .map_err(js)
     }
 
     /// The schema with the JSON-LD tables, as a SQL script; `indexes` (JSON) picks the
@@ -151,7 +230,7 @@ impl Engine {
 
     fn stats_job<J: CoreJob<Output = Stats> + 'static>(&self, job: J) -> Job {
         let stats = Rc::clone(&self.stats);
-        wrap(job, move |s| {
+        self.wrap(job, move |s| {
             *stats.borrow_mut() = s;
             ok()
         })
@@ -163,11 +242,14 @@ impl Engine {
             return job;
         }
         let stats = Rc::clone(&self.stats);
-        let caps = self.caps.clone();
+        let caps = self.caps();
+        let ctx = job.ctx.clone();
         let mut inner = job.step;
         let mut value: Option<Value> = None;
         let mut reloader: Option<oxilite_core::job::OneShot<Stats>> = None;
         Job {
+            ctx,
+            pending: false,
             step: Box::new(move |r| {
                 let r = match reloader.as_mut() {
                     Some(j) => j.step(r)?,
@@ -193,7 +275,7 @@ impl Engine {
     /// Computes the OWL 2 RL closure into the inference table (one batch per rule round);
     /// the result is `{"kind": "number"}`, the number of inferred triples.
     pub fn materialize(&self) -> Job {
-        wrap(ops::materialize_job(1000, &self.caps), |n| {
+        self.wrap(ops::materialize_job(1000, &self.caps()), |n| {
             Ok(json!({"kind": "number", "value": n}))
         })
     }
@@ -201,23 +283,23 @@ impl Engine {
     /// Removes every materialized inference.
     #[wasm_bindgen(js_name = clearInferences)]
     pub fn clear_inferences(&self) -> Job {
-        wrap(ops::clear_inferences_job(), |_| ok())
+        self.wrap(ops::clear_inferences_job(), |_| ok())
     }
 
     /// Creates the schema if needed and loads planner statistics.
     pub fn open(&self) -> Job {
-        self.stats_job(ops::open_job(&self.options, &self.caps))
+        self.stats_job(ops::open_job(&self.options, &self.caps()))
     }
 
     /// Loads planner statistics only (schema applied by a migration).
     #[wasm_bindgen(js_name = openExisting)]
     pub fn open_existing(&self) -> Job {
-        self.stats_job(ops::stats_job(&self.caps))
+        self.stats_job(ops::stats_job(&self.caps()))
     }
 
     /// Recomputes planner statistics.
     pub fn optimize(&self) -> Job {
-        self.stats_job(ops::optimize_job(&self.caps))
+        self.stats_job(ops::optimize_job(&self.caps()))
     }
 
     fn compiled(
@@ -233,7 +315,7 @@ impl Engine {
         compile_query(
             &q,
             &self.stats.borrow(),
-            &self.caps,
+            &self.caps(),
             &options.to_options().map_err(js)?,
         )
         .map_err(js)
@@ -248,22 +330,36 @@ impl Engine {
             Some(o) => serde_json::from_str(&o).map_err(js)?,
             None => JsQueryOptions::default(),
         };
-        let c = self.compiled(sparql, &options)?;
         let format = options.results_format.clone();
-        Ok(wrap(
-            QueryJob::new(c, self.caps.clone()),
-            move |o| match &format {
-                Some(f) => Ok(json!({"kind": "text", "value": output_to_format(&o, f)?})),
-                None => Ok(output_to_json(&o)),
-            },
-        ))
+        let done = move |o: oxilite_core::QueryOutput| match &format {
+            Some(f) => Ok(json!({"kind": "text", "value": output_to_format(&o, f)?})),
+            None => Ok(output_to_json(&o)),
+        };
+        let mut parser = SparqlParser::new();
+        if let Some(b) = &options.base_iri {
+            parser = parser.with_base_iri(b).map_err(js)?;
+        }
+        let q = parser.parse_query(sparql).map_err(js)?;
+        let core_options = options.to_options().map_err(js)?;
+        let refs = version::query_version_refs(&q, &core_options);
+        if refs.is_empty() {
+            let c = self.compiled(sparql, &options)?;
+            return Ok(self.wrap(QueryJob::new(c, self.caps()), done));
+        }
+        // Resolve the versions the query names, then compile against their ticks.
+        let (stats, caps) = (self.stats.borrow().clone(), self.caps());
+        let resolve = version::resolve_query_job(refs, stats.version, core_options).map_err(js)?;
+        let job = oxilite_core::job::Then::new(resolve, move |o| {
+            Ok(QueryJob::new(compile_query(&q, &stats, &caps, &o)?, caps))
+        });
+        Ok(self.wrap(job, done))
     }
 
     /// A SPARQL query whose result is SPARQL 1.1 JSON results (`{"kind": "text", "value"}`).
     #[wasm_bindgen(js_name = queryJson)]
     pub fn query_json(&self, sparql: &str) -> Result<Job, JsError> {
         let c = self.compiled(sparql, &JsQueryOptions::default())?;
-        Ok(wrap(QueryJob::new(c, self.caps.clone()), |o| {
+        Ok(self.wrap(QueryJob::new(c, self.caps()), |o| {
             Ok(json!({"kind": "text", "value": output_to_sparql_json(&o)?}))
         }))
     }
@@ -275,7 +371,7 @@ impl Engine {
             match compile_query(
                 &q,
                 &self.stats.borrow(),
-                &self.caps,
+                &self.caps(),
                 &QueryOptions::default(),
             ) {
                 Ok(c) => c.explain(),
@@ -295,7 +391,7 @@ impl Engine {
         for p in plan_update_with(
             &u,
             &self.stats.borrow(),
-            &self.caps,
+            &self.caps(),
             &QueryOptions::default(),
         )
         .map_err(js)?
@@ -307,7 +403,7 @@ impl Engine {
                 }
             }
         }
-        let job = wrap(
+        let job = self.wrap(
             Sequence::new(if stmts.is_empty() {
                 Vec::new()
             } else {
@@ -333,14 +429,16 @@ impl Engine {
         let mut sql = oxilite_cypher::SqlCypherJob::new(
             job,
             self.stats.borrow().clone(),
-            self.caps.clone(),
+            self.caps(),
             opts.query.clone(),
         );
         let stats = Rc::clone(&self.stats);
-        let caps = self.caps.clone();
+        let caps = self.caps();
         let mut value: Option<Value> = None;
         let mut reloader: Option<oxilite_core::job::OneShot<Stats>> = None;
         Ok(Job {
+            ctx: Some(self.version_ctx()),
+            pending: false,
             step: Box::new(move |r| {
                 if let Some(j) = reloader.as_mut() {
                     return match j.step(r)? {
@@ -391,9 +489,41 @@ impl Engine {
     /// A program whose recursion is linear is two requests; a component that has to be
     /// iterated adds one request per round, which `rounds` reports.
     pub fn datalog(&self, program: &str, options: Option<String>) -> Result<Job, JsError> {
-        let options = datalog_options(options)?;
-        let job = oxilite_datalog::prepare(program, &self.caps, &options).map_err(js)?;
-        Ok(wrap(job, |r| Ok(oxilite_datalog::json::result_to_json(&r))))
+        let mut options = datalog_options(options)?;
+        options.history = Some(self.stats.borrow().version);
+        let done =
+            |r: oxilite_datalog::DatalogResult| Ok(oxilite_datalog::json::result_to_json(&r));
+        let (whole, atoms) = oxilite_datalog::version_refs(program, &options).map_err(js)?;
+        if whole.is_none() && atoms.is_empty() {
+            let job = oxilite_datalog::prepare(program, &self.caps(), &options).map_err(js)?;
+            return Ok(self.wrap(job, done));
+        }
+        if options.include_inferred {
+            return Err(js(
+                "inferences describe the current state only; they cannot be combined with a version",
+            ));
+        }
+        // Resolve the versions first (the program's, then its atoms'), then compile.
+        let mut refs: Vec<String> = whole.iter().cloned().collect();
+        refs.extend(atoms.iter().cloned());
+        let parsed = refs
+            .iter()
+            .map(|r| r.parse())
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(js)?;
+        let resolve = version::resolve_job(parsed, self.stats.borrow().version);
+        let (program, caps) = (program.to_owned(), self.caps());
+        let has_whole = whole.is_some();
+        let job = oxilite_core::job::Then::new(resolve, move |ticks: Vec<i64>| {
+            let mut o = options;
+            let mut it = refs.into_iter().zip(ticks);
+            if has_whole {
+                o.as_of_tick = it.next().map(|(_, t)| t);
+            }
+            o.versions.extend(it);
+            oxilite_datalog::prepare(&program, &caps, &o).map_err(|e| Error::Other(e.to_string()))
+        });
+        Ok(self.wrap(job, done))
     }
 
     #[cfg(feature = "datalog")]
@@ -405,10 +535,11 @@ impl Engine {
         program: &str,
         options: Option<String>,
     ) -> Result<Job, JsError> {
-        let options = datalog_options(options)?;
+        let mut options = datalog_options(options)?;
+        options.history = Some(self.stats.borrow().version);
         let job =
-            oxilite_datalog::MaterializeJob::new(program, &self.caps, &options).map_err(js)?;
-        Ok(wrap(job, |s| Ok(oxilite_datalog::json::stats_to_json(&s))))
+            oxilite_datalog::MaterializeJob::new(program, &self.caps(), &options).map_err(js)?;
+        Ok(self.wrap(job, |s| Ok(oxilite_datalog::json::stats_to_json(&s))))
     }
 
     #[cfg(feature = "datalog")]
@@ -420,7 +551,7 @@ impl Engine {
         options: Option<String>,
     ) -> Result<String, JsError> {
         let options = datalog_options(options)?;
-        oxilite_datalog::explain(program, &self.caps, &options).map_err(js)
+        oxilite_datalog::explain(program, &self.caps(), &options).map_err(js)
     }
 
     #[cfg(feature = "cypher-lite")]
@@ -438,7 +569,17 @@ impl Engine {
             Some(o) => oxilite_cypher::json::options_from_json(&o).map_err(js)?,
             None => oxilite_cypher::CypherOptions::default(),
         };
-        let job = oxilite_cypher::prepare_for(query, &params, &opts, &self.caps).map_err(js)?;
+        if opts.query.as_of.is_some() && opts.query.as_of_tick.is_none() {
+            return Err(js(
+                "resolve the version first (resolveVersion) and pass its tick as asOfTick",
+            ));
+        }
+        let job = oxilite_cypher::prepare_for(query, &params, &opts, &self.caps()).map_err(js)?;
+        if job.writes() && opts.query.as_of_tick.is_some() {
+            return Err(js(
+                "a writing statement cannot run at a past version: writes apply to the current state",
+            ));
+        }
         Ok((job, opts))
     }
 
@@ -455,7 +596,7 @@ impl Engine {
         let mut out = job.explain();
         let _ = &opts;
         for (q, o) in job.queries() {
-            match compile_query(q, &self.stats.borrow(), &self.caps, &o) {
+            match compile_query(q, &self.stats.borrow(), &self.caps(), &o) {
                 Ok(c) => out.push_str(&c.explain()),
                 Err(e) => out.push_str(&format!("-- oxilite: unsupported on this backend: {e}")),
             }
@@ -471,7 +612,7 @@ impl Engine {
         let plan = plan_update_with(
             &u,
             &self.stats.borrow(),
-            &self.caps,
+            &self.caps(),
             &QueryOptions::default(),
         )
         .map_err(js)?;
@@ -509,20 +650,20 @@ impl Engine {
         graph: Option<String>,
     ) -> Result<Job, JsError> {
         let quads = self.parse(data, format_name, base, graph)?;
-        let mut req = ops::insert_request(quads.iter().map(Quad::as_ref), &self.caps);
+        let mut req = ops::insert_request(quads.iter().map(Quad::as_ref), &self.caps());
         let schema = quads
             .iter()
             .any(|q| oxilite_core::reason::is_schema_quad(q.as_ref()));
         req.statements
             .extend(ops::schema_refresh_for(quads.iter().map(Quad::as_ref)));
-        if req.statements.len() > self.caps.max_statements {
+        if req.statements.len() > self.caps().max_statements {
             return Err(js(format!(
                 "the document needs {} statements, more than one D1 batch allows ({}); use bulkLoad",
                 req.statements.len(),
-                self.caps.max_statements
+                self.caps().max_statements
             )));
         }
-        Ok(self.reloading(wrap(Sequence::new(vec![req]), |_| ok()), schema))
+        Ok(self.reloading(self.wrap(Sequence::new(vec![req]), |_| ok()), schema))
     }
 
     /// Loads a document in several batches (not atomic), then refreshes statistics.
@@ -540,8 +681,8 @@ impl Engine {
         let mut start = 0;
         while start < quads.len() {
             let end = (start + chunk).min(quads.len());
-            let req = ops::insert_request(quads[start..end].iter().map(Quad::as_ref), &self.caps);
-            if req.statements.len() > self.caps.max_statements && chunk > 1 {
+            let req = ops::insert_request(quads[start..end].iter().map(Quad::as_ref), &self.caps());
+            if req.statements.len() > self.caps().max_statements && chunk > 1 {
                 chunk /= 2;
                 continue;
             }
@@ -550,10 +691,12 @@ impl Engine {
         }
         let mut load = Sequence::new(requests);
         let mut optimize: Option<Box<dyn CoreJob<Output = Stats>>> = None;
-        let caps = self.caps.clone();
+        let caps = self.caps();
         let stats = Rc::clone(&self.stats);
         let mut loading = true;
         Ok(Job {
+            ctx: Some(self.version_ctx()),
+            pending: false,
             step: Box::new(move |r| {
                 if loading {
                     match load.step(r)? {
@@ -588,8 +731,8 @@ impl Engine {
         let schema = quads
             .iter()
             .any(|q| oxilite_core::reason::is_schema_quad(q.as_ref()));
-        let job = wrap(
-            ops::insert_job(quads.iter().map(Quad::as_ref), &self.caps),
+        let job = self.wrap(
+            ops::insert_job(quads.iter().map(Quad::as_ref), &self.caps()),
             |n| Ok(json!({"kind": "number", "value": n})),
         );
         Ok(self.reloading(job, schema))
@@ -601,8 +744,8 @@ impl Engine {
         let schema = quads
             .iter()
             .any(|q| oxilite_core::reason::is_schema_quad(q.as_ref()));
-        let job = wrap(
-            ops::remove_job(quads.iter().map(Quad::as_ref), &self.caps),
+        let job = self.wrap(
+            ops::remove_job(quads.iter().map(Quad::as_ref), &self.caps()),
             |n| Ok(json!({"kind": "number", "value": n})),
         );
         Ok(self.reloading(job, schema))
@@ -611,7 +754,7 @@ impl Engine {
     /// Does the store contain a quad (JSON RDF/JS quad)?
     pub fn has(&self, quad: &str) -> Result<Job, JsError> {
         let q = json_to_quad(&serde_json::from_str(quad).map_err(js)?).map_err(js)?;
-        Ok(wrap(ops::contains_job(q.as_ref()), |b| {
+        Ok(self.wrap(ops::contains_job(q.as_ref()), |b| {
             Ok(json!({"kind": "boolean", "value": b}))
         }))
     }
@@ -634,7 +777,7 @@ impl Engine {
             Some(Term::NamedNode(n)) => Some(NamedOrBlankNode::from(n)),
             Some(Term::BlankNode(b)) => Some(NamedOrBlankNode::from(b)),
             Some(_) => {
-                return Ok(wrap(Sequence::new(Vec::new()), |_| {
+                return Ok(self.wrap(Sequence::new(Vec::new()), |_| {
                     Ok(json!({"kind": "quads", "quads": []}))
                 }))
             }
@@ -643,7 +786,7 @@ impl Engine {
             None => None,
             Some(Term::NamedNode(n)) => Some(n),
             Some(_) => {
-                return Ok(wrap(Sequence::new(Vec::new()), |_| {
+                return Ok(self.wrap(Sequence::new(Vec::new()), |_| {
                     Ok(json!({"kind": "quads", "quads": []}))
                 }))
             }
@@ -652,13 +795,13 @@ impl Engine {
         let g: Option<GraphName> = graph
             .map(|g| json_to_graph(&serde_json::from_str(&g).map_err(js)?).map_err(js))
             .transpose()?;
-        Ok(wrap(
+        Ok(self.wrap(
             ops::scan_job(
                 s.as_ref().map(Into::into),
                 p.as_ref().map(Into::into),
                 o.as_ref().map(Into::into),
                 g.as_ref().map(Into::into),
-                &self.caps,
+                &self.caps(),
             ),
             |quads| {
                 Ok(
@@ -670,7 +813,7 @@ impl Engine {
 
     /// Number of quads.
     pub fn size(&self) -> Job {
-        wrap(ops::len_job(), |n| {
+        self.wrap(ops::len_job(), |n| {
             Ok(json!({"kind": "number", "value": n}))
         })
     }
@@ -682,8 +825,8 @@ impl Engine {
             .map(|g| json_to_graph(&serde_json::from_str(&g).map_err(js)?).map_err(js))
             .transpose()?;
         let dataset_format = format.supports_datasets();
-        Ok(wrap(
-            ops::scan_job(None, None, None, g.as_ref().map(Into::into), &self.caps),
+        Ok(self.wrap(
+            ops::scan_job(None, None, None, g.as_ref().map(Into::into), &self.caps()),
             move |quads| {
                 let mut s = RdfSerializer::from_format(format).for_writer(Vec::new());
                 for q in &quads {
@@ -699,8 +842,161 @@ impl Engine {
     }
 
     /// Removes everything.
+    /// The versioning level and where the clock and history stand (`oxilite_core::version`).
+    pub fn versioning(&self) -> Job {
+        self.wrap(version::status_job(self.stats.borrow().version), |s| {
+            serde_json::to_value(s).map_err(Error::backend)
+        })
+    }
+
+    /// Changes the versioning level (`off`, `stamped`, `log`); `change` (JSON) holds
+    /// `asOfIndex`, `stampIndex`, `allowLoss`, `author`, `message`. The result is the new
+    /// status. On D1, prefer a migration (`levelChangeSql`).
+    #[wasm_bindgen(js_name = setVersioning)]
+    pub fn set_versioning(&self, level: &str, change: Option<String>) -> Result<Job, JsError> {
+        let change: version::LevelChange = match change {
+            Some(c) => serde_json::from_str(&c).map_err(js)?,
+            None => Default::default(),
+        };
+        let state = self.stats.borrow().version;
+        let job =
+            version::level_change_job(&state, level.parse().map_err(js)?, &change, &self.base_caps)
+                .map_err(js)?;
+        let stats = Rc::clone(&self.stats);
+        let job = oxilite_core::job::Then::new(job, move |s: Stats| {
+            let state = s.version;
+            *stats.borrow_mut() = s;
+            Ok(version::status_job(state))
+        });
+        // A level change must not open a write tick of its own.
+        Ok(wrap_raw(job, |s| {
+            serde_json::to_value(s).map_err(Error::backend)
+        }))
+    }
+
+    /// The SQL changing a store from level `from` to `to` (a D1 migration). `state` (JSON,
+    /// optional) describes the current store: `stampColumn`, `history` (`none`, `frozen`).
+    #[wasm_bindgen(js_name = levelChangeSql)]
+    pub fn level_change_sql(
+        &self,
+        from: &str,
+        to: &str,
+        change: Option<String>,
+        state: Option<String>,
+    ) -> Result<String, JsError> {
+        let mut st: version::VersionState = match state {
+            Some(s) => serde_json::from_str(&s).map_err(js)?,
+            None => Default::default(),
+        };
+        st.level = from.parse().map_err(js)?;
+        if st.level >= version::Versioning::Stamped {
+            st.stamp_column = true;
+        }
+        if st.level == version::Versioning::Log {
+            st.history = version::History::Live;
+        }
+        let change: version::LevelChange = match change {
+            Some(c) => serde_json::from_str(&c).map_err(js)?,
+            None => Default::default(),
+        };
+        let mut out = String::new();
+        for s in version::change_statements(&st, to.parse().map_err(js)?, &change).map_err(js)? {
+            out.push_str(&s.sql);
+            out.push_str(";\n");
+        }
+        Ok(out)
+    }
+
+    /// Author and message (JSON `{"author", "message"}`) recorded on the ticks of later writes.
+    #[wasm_bindgen(js_name = setCommitInfo)]
+    pub fn set_commit_info(&self, info: Option<String>) -> Result<(), JsError> {
+        *self.info.borrow_mut() = match info {
+            Some(i) => serde_json::from_str(&i).map_err(js)?,
+            None => CommitInfo::default(),
+        };
+        Ok(())
+    }
+
+    /// The tick a version reference designates: `{"kind": "number", "value": tick}`.
+    #[wasm_bindgen(js_name = resolveVersion)]
+    pub fn resolve_version(&self, version: &str) -> Result<Job, JsError> {
+        let job = version::resolve_job(
+            vec![version.parse().map_err(js)?],
+            self.stats.borrow().version,
+        );
+        Ok(wrap_raw(job, |t| {
+            Ok(json!({"kind": "number", "value": t[0]}))
+        }))
+    }
+
+    /// The latest `limit` commits and level changes, newest first.
+    pub fn history(&self, limit: usize) -> Result<Job, JsError> {
+        let job = version::log_job(self.stats.borrow().version, limit).map_err(js)?;
+        Ok(self.wrap(job, |log| serde_json::to_value(log).map_err(Error::backend)))
+    }
+
+    /// The changes after tick `after` (up to `until`): `[{"tick", "added", "quad"}]`.
+    pub fn changes(&self, after: f64, until: Option<f64>) -> Result<Job, JsError> {
+        let job = version::changes_job(
+            self.stats.borrow().version,
+            after as i64,
+            until.map(|u| u as i64),
+            &self.caps(),
+        )
+        .map_err(js)?;
+        Ok(self.wrap(job, |c| Ok(changes_to_json(&c))))
+    }
+
+    /// The net difference between two versions: `[{"tick", "added", "quad"}]`.
+    pub fn diff(&self, from: &str, to: &str) -> Result<Job, JsError> {
+        let state = self.stats.borrow().version;
+        let refs = vec![from.parse().map_err(js)?, to.parse().map_err(js)?];
+        let caps = self.caps();
+        let job =
+            oxilite_core::job::Then::new(version::resolve_job(refs, state), move |t: Vec<i64>| {
+                version::diff_job(state, t[0], t[1], &caps)
+            });
+        Ok(self.wrap(job, |c| Ok(changes_to_json(&c))))
+    }
+
+    /// Removes the quads matching `pattern` (JSON `{"subject", "predicate", "object",
+    /// "graph"}` of JSON terms, each optional) from the store and from its whole history,
+    /// recording a purge that names no removed content.
+    pub fn purge(&self, pattern: &str, reason: Option<String>) -> Result<Job, JsError> {
+        let v: Value = serde_json::from_str(pattern).map_err(js)?;
+        let term = |k: &str| -> Result<Option<i64>, JsError> {
+            match v.get(k) {
+                None | Some(Value::Null) => Ok(None),
+                Some(t) if k == "graph" => Ok(Some(match json_to_graph(t).map_err(js)? {
+                    GraphName::DefaultGraph => oxilite_core::encoding::DEFAULT_GRAPH_ID,
+                    g => oxilite_core::encoding::graph_id(g.as_ref()),
+                })),
+                Some(t) => Ok(Some(oxilite_core::encoding::term_id(
+                    json_to_term(t).map_err(js)?.as_ref(),
+                ))),
+            }
+        };
+        let pattern = [
+            term("subject")?,
+            term("predicate")?,
+            term("object")?,
+            term("graph")?,
+        ];
+        let author = self.info.borrow().author.clone();
+        let request = version::purge_request(
+            self.stats.borrow().version,
+            pattern,
+            author.as_deref(),
+            reason.as_deref(),
+        );
+        Ok(wrap_raw(
+            oxilite_core::job::OneShot::new(request, |_| Ok(())),
+            |()| ok(),
+        ))
+    }
+
     pub fn clear(&self) -> Job {
-        self.reloading(wrap(ops::clear_job(), |_| ok()), true)
+        self.reloading(self.wrap(ops::clear_job(), |_| ok()), true)
     }
 }
 

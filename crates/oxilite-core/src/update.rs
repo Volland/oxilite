@@ -359,7 +359,14 @@ fn delete_insert(
         "DELETE FROM quads WHERE (s, p, o, g) IN (SELECT s, p, o, g FROM update_buffer WHERE op = 0)",
     ));
     out.push(Statement::new(
-        "INSERT OR IGNORE INTO quads(s, p, o, g) SELECT s, p, o, g FROM update_buffer WHERE op = 1",
+        if caps.versioning >= crate::version::Versioning::Stamped {
+            format!(
+                "INSERT OR IGNORE INTO quads(s, p, o, g, t) SELECT s, p, o, g, {} FROM update_buffer WHERE op = 1",
+                crate::version::CURRENT_TICK
+            )
+        } else {
+            "INSERT OR IGNORE INTO quads(s, p, o, g) SELECT s, p, o, g FROM update_buffer WHERE op = 1".to_owned()
+        },
     ));
     out.push(Statement::new(
         "INSERT OR IGNORE INTO graphs(id) SELECT DISTINCT g FROM update_buffer WHERE op = 1 AND g <> 0",

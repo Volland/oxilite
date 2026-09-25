@@ -483,6 +483,96 @@ impl NativeStore {
         Ok(v.to_string())
     }
 
+    /// The versioning level and where the clock and history stand, as JSON.
+    #[napi]
+    pub fn versioning(&self) -> Result<String> {
+        let s = with_store!(self, s => s.versioning()).map_err(err)?;
+        serde_json::to_string(&s).map_err(err)
+    }
+
+    /// Changes the versioning level (`off`, `stamped`, `log`); `change` is JSON
+    /// (`asOfIndex`, `stampIndex`, `allowLoss`, `author`, `message`). Returns the status JSON.
+    #[napi]
+    pub fn set_versioning(&self, level: String, change: Option<String>) -> Result<String> {
+        let change: oxilite::version::LevelChange = change
+            .as_deref()
+            .map(parse)
+            .transpose()?
+            .unwrap_or_default();
+        let level = level.parse().map_err(err)?;
+        let s = with_store!(self, s => s.set_versioning(level, change.clone())).map_err(err)?;
+        serde_json::to_string(&s).map_err(err)
+    }
+
+    /// Author and message (JSON) recorded on the commits of later writes.
+    #[napi]
+    pub fn set_commit_info(&self, info: Option<String>) -> Result<()> {
+        let info: oxilite::version::CommitInfo =
+            info.as_deref().map(parse).transpose()?.unwrap_or_default();
+        with_store!(self, s => s.set_commit_info(info.clone()));
+        Ok(())
+    }
+
+    /// The latest `limit` commits and level changes, newest first, as JSON.
+    #[napi]
+    pub fn history(&self, limit: u32) -> Result<String> {
+        let log = with_store!(self, s => s.history(limit as usize)).map_err(err)?;
+        serde_json::to_string(&log).map_err(err)
+    }
+
+    /// The changes after tick `after` (up to `until`): `[{"tick", "added", "quad"}]`.
+    #[napi]
+    pub fn changes(&self, after: f64, until: Option<f64>) -> Result<String> {
+        let c = with_store!(self, s => s.changes(after as i64, until.map(|u| u as i64)))
+            .map_err(err)?;
+        Ok(changes_json(&c).to_string())
+    }
+
+    /// The net difference between two versions: `[{"tick", "added", "quad"}]`.
+    #[napi]
+    pub fn diff(&self, from: String, to: String) -> Result<String> {
+        let c = with_store!(self, s => s.diff(&from, &to)).map_err(err)?;
+        Ok(changes_json(&c).to_string())
+    }
+
+    /// Removes the quads matching `pattern` (JSON terms `subject`, `predicate`, `object`,
+    /// `graph`, each optional) from the store and its whole history.
+    #[napi]
+    pub fn purge(&self, pattern: String, reason: Option<String>) -> Result<()> {
+        let v: Value = parse(&pattern)?;
+        let term = |k: &str| -> Result<Option<oxrdf::Term>> {
+            v.get(k)
+                .filter(|t| !t.is_null())
+                .map(|t| json_to_term(t).map_err(err))
+                .transpose()
+        };
+        let subject = match term("subject")? {
+            None => None,
+            Some(oxrdf::Term::NamedNode(n)) => Some(oxrdf::NamedOrBlankNode::NamedNode(n)),
+            Some(oxrdf::Term::BlankNode(b)) => Some(oxrdf::NamedOrBlankNode::BlankNode(b)),
+            Some(_) => return Err(err("a purge subject is an IRI or a blank node")),
+        };
+        let predicate = match term("predicate")? {
+            None => None,
+            Some(oxrdf::Term::NamedNode(n)) => Some(n),
+            Some(_) => return Err(err("a purge predicate is an IRI")),
+        };
+        let object = term("object")?;
+        let graph = v
+            .get("graph")
+            .filter(|t| !t.is_null())
+            .map(|g| json_to_graph(g).map_err(err))
+            .transpose()?;
+        with_store!(self, s => s.purge(
+            subject.as_ref().map(Into::into),
+            predicate.as_ref().map(Into::into),
+            object.as_ref().map(Into::into),
+            graph.as_ref().map(Into::into),
+            reason.as_deref(),
+        ))
+        .map_err(err)
+    }
+
     /// Writes a consistent copy of the database to `path` (`VACUUM INTO`).
     #[napi]
     pub fn backup(&self, path: String) -> Result<()> {
@@ -499,4 +589,13 @@ pub fn schema_sql(options: Option<String>) -> Result<String> {
         .transpose()?
         .unwrap_or_default();
     Ok(oxilite_core::schema::schema_sql(&options))
+}
+
+fn changes_json(changes: &[oxilite::version::Change]) -> Value {
+    Value::Array(
+        changes
+            .iter()
+            .map(|c| json!({"tick": c.tick, "added": c.added, "quad": quad_to_json(&c.quad)}))
+            .collect(),
+    )
 }

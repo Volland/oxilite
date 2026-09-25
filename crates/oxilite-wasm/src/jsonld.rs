@@ -25,6 +25,8 @@ fn job<J: CoreJob + 'static>(
     done: impl Fn(J::Output) -> Result<Value, JsonLdError> + 'static,
 ) -> Job {
     Job {
+        ctx: None,
+        pending: false,
         step: Box::new(move |r| match j.step(r) {
             Ok(Step::Execute(req)) => Ok(Step::Execute(req)),
             Ok(Step::Done(o)) => done(o).map(Step::Done).map_err(wire),

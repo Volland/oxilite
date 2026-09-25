@@ -20,6 +20,51 @@ pub enum Pred {
     Idb(String),
     /// `triple(?s, ?p, ?o)` over the default graph, or `triple(?s, ?p, ?o, ?g)`.
     Triple { graph: bool },
+    /// The history of a versioned store: `commit`, `added`, `removed`, `branch`.
+    History(HistoryRel),
+}
+
+/// The built-in relations over a versioned store's history.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum HistoryRel {
+    /// `commit(?c, ?parent, ?time, ?author)`: a commit (its tick, an integer), the commit before
+    /// it, its time and its author.
+    Commit,
+    /// `added(?s, ?p, ?o, ?g, ?c)`: a quad commit `?c` added.
+    Added,
+    /// `removed(?s, ?p, ?o, ?g, ?c)`: a quad commit `?c` removed.
+    Removed,
+    /// `branch(?name, ?c)`: a branch and its head commit (`"main"` until branches exist).
+    Branch,
+}
+
+impl HistoryRel {
+    pub fn from_name(name: &str) -> Option<Self> {
+        Some(match name {
+            "commit" => Self::Commit,
+            "added" => Self::Added,
+            "removed" => Self::Removed,
+            "branch" => Self::Branch,
+            _ => return None,
+        })
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Commit => "commit",
+            Self::Added => "added",
+            Self::Removed => "removed",
+            Self::Branch => "branch",
+        }
+    }
+
+    pub fn arity(self) -> usize {
+        match self {
+            Self::Commit => 4,
+            Self::Added | Self::Removed => 5,
+            Self::Branch => 2,
+        }
+    }
 }
 
 impl Pred {
@@ -28,6 +73,7 @@ impl Pred {
         match self {
             Self::Triple { graph: false } => Some(3),
             Self::Triple { graph: true } => Some(4),
+            Self::History(h) => Some(h.arity()),
             // An IRI atom takes one argument or two, and a derived relation takes whatever
             // its rules give it, so neither has a fixed arity.
             Self::Edb(_) | Self::Idb(_) => None,
@@ -47,6 +93,7 @@ impl std::fmt::Display for Pred {
             Self::Idb(n) => f.write_str(n),
             Self::Triple { graph: false } => f.write_str("triple/3"),
             Self::Triple { graph: true } => f.write_str("triple/4"),
+            Self::History(h) => write!(f, "{}/{}", h.name(), h.arity()),
         }
     }
 }
@@ -66,6 +113,17 @@ pub struct Atom {
     pub pred: Pred,
     pub args: Vec<Arg>,
     pub span: Span,
+    /// `… at "HEAD~1"` or `… at ?c`: read the store at that version.
+    pub at: Option<At>,
+}
+
+/// The version an atom reads.
+#[derive(Debug, Clone, PartialEq)]
+pub enum At {
+    /// A version reference, resolved by the store (`"HEAD~1"`, `"#42"`, `"@2026-09-01"`).
+    Version(String),
+    /// The commit a variable is bound to (by a positive `commit` or `added` atom).
+    Var(String),
 }
 
 /// Aggregate functions allowed in a rule head.
@@ -223,6 +281,9 @@ pub struct Goal {
 pub struct Program {
     pub rules: Vec<Rule>,
     pub goal: Option<Goal>,
+    /// The version of the store the program reads (`@version "HEAD~1" .`); see
+    /// `oxilite_core::version`.
+    pub version: Option<String>,
 }
 
 impl Program {

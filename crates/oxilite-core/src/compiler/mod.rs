@@ -50,7 +50,27 @@ pub struct QueryOptions {
     /// one typed comparison instead of a comparison per possible type. A value of another
     /// type then compares as unknown (false in a filter).
     pub var_types: BTreeMap<String, ValueType>,
+    /// Read the store as it was at this version (`HEAD~2`, `#42`, `@2026-09-01T00:00:00Z`; see
+    /// `version::VersionRef`). Needs a store with a change log; the store resolves it to
+    /// [`Self::as_of_tick`] before compiling.
+    pub as_of: Option<String>,
+    /// The resolved tick of [`Self::as_of`].
+    pub as_of_tick: Option<i64>,
+    /// Resolved ticks of the versions named by `SERVICE <oxilite:version/REF>` (by `REF`).
+    pub versions: BTreeMap<String, i64>,
 }
+
+/// The IRI prefix naming a version of the store in `SERVICE <oxilite:version/REF> { … }`.
+pub const VERSION_SERVICE: &str = "oxilite:version/";
+
+/// The id offset of inline integers (a tick `t` is the integer id `t + expr_int_base()`).
+pub fn expr_int_base() -> i64 {
+    expr::INT_BASE
+}
+
+/// The graph of the store's history: commits (PROV-O activities, identified by their tick as an
+/// `xsd:integer`) and their changes (`oxl:added` / `oxl:removed` triple terms).
+pub const HISTORY_GRAPH: &str = "oxilite:history";
 
 impl Default for QueryOptions {
     fn default() -> Self {
@@ -64,6 +84,9 @@ impl Default for QueryOptions {
             // The dataset is the dataset: schema graphs are matched unless asked otherwise.
             include_schema_graphs: true,
             var_types: BTreeMap::new(),
+            as_of: None,
+            as_of_tick: None,
+            versions: BTreeMap::new(),
         }
     }
 }
@@ -320,6 +343,8 @@ enum GraphScope {
     Default,
     Fixed(i64),
     Var(usize),
+    /// `GRAPH <oxilite:history>`: the store's commits and changes (see `version::history_sql`).
+    History,
 }
 
 /// The SPARQL → SQL compiler state for one query or update.
@@ -347,6 +372,9 @@ pub(crate) struct Compiler<'a> {
     /// Variables bound by an enclosing join (e.g. the left side of OPTIONAL): the planner
     /// orders patterns as if they were bound, since SQLite evaluates the right side per row.
     pub(crate) plan_hint: Vec<HashSet<usize>>,
+    /// The tick the quads are read at (`as_of`, or the version of an enclosing
+    /// `SERVICE <oxilite:version/…>`); `None` reads the current store.
+    pub(crate) as_of: Option<i64>,
 }
 
 impl<'a> Compiler<'a> {
@@ -403,6 +431,7 @@ impl<'a> Compiler<'a> {
             notes: Vec::new(),
             pending_triples: Vec::new(),
             plan_hint: Vec::new(),
+            as_of: options.as_of_tick,
         }
     }
 
@@ -725,6 +754,9 @@ impl<'a> Compiler<'a> {
             GraphPattern::Graph { name, inner } => {
                 let saved = self.scope;
                 self.scope = match name {
+                    NamedNodePattern::NamedNode(n) if n.as_str() == HISTORY_GRAPH => {
+                        GraphScope::History
+                    }
                     NamedNodePattern::NamedNode(n) => {
                         let id = self.constant_id(&n.clone().into())?;
                         GraphScope::Fixed(id)
@@ -752,7 +784,7 @@ impl<'a> Compiler<'a> {
                                 .push(format!("EXISTS (SELECT 1 FROM graphs WHERE id = {id})"));
                         }
                     }
-                    GraphScope::Default => {}
+                    GraphScope::Default | GraphScope::History => {}
                 }
                 Ok(b)
             }
@@ -1077,7 +1109,53 @@ impl<'a> Compiler<'a> {
                 }
                 self.bind_pos(b, &format!("{q}.g"), Pos::Var(v))?;
             }
+            GraphScope::History => {}
         }
+        Ok(())
+    }
+
+    /// `?c oxl:added <<( s p o )>>` / `oxl:removed` in the history graph: one row of the change
+    /// log, the commit bound to its tick and the changed triple to the logged columns.
+    fn change_access(&mut self, b: &mut Block, tp: &TriplePattern, added: bool) -> Result<()> {
+        if self.stats.version.history == crate::version::History::None {
+            return Err(Error::Other(
+                "this store keeps no change log: raise its versioning level to `log` to read changes".into(),
+            ));
+        }
+        let TermPattern::Triple(inner) = &tp.object else {
+            return Err(Error::Other(
+                "oxl:added and oxl:removed take a triple term: ?c oxl:added <<( ?s ?p ?o )>>"
+                    .into(),
+            ));
+        };
+        if matches!(inner.subject, TermPattern::Triple(_))
+            || matches!(inner.object, TermPattern::Triple(_))
+        {
+            return Err(Error::unsupported(
+                "nested triple terms in a change pattern",
+            ));
+        }
+        let mut bnodes = HashMap::new();
+        let c = self.pos(&tp.subject, &mut bnodes)?;
+        let (s, p, o) = (
+            self.pos(&inner.subject, &mut bnodes)?,
+            self.pos_nn(&inner.predicate)?,
+            self.pos(&inner.object, &mut bnodes)?,
+        );
+        let l = self.alias("hl");
+        b.from.push(FromItem {
+            join: if b.from.is_empty() {
+                Join::First
+            } else {
+                Join::Inner
+            },
+            item: format!("quad_log {l}"),
+        });
+        b.wheres.push(format!("{l}.op = {}", u8::from(added)));
+        self.bind_pos(b, &format!("({l}.tx + {})", expr::INT_BASE), c)?;
+        self.bind_pos(b, &format!("{l}.s"), s)?;
+        self.bind_pos(b, &format!("{l}.p"), p)?;
+        self.bind_pos(b, &format!("{l}.o"), o)?;
         Ok(())
     }
 
@@ -1089,6 +1167,7 @@ impl<'a> Compiler<'a> {
             hide_schema: !self.options.include_schema_graphs,
             transitive: &self.stats.transitive,
             max_compound: self.caps.max_compound_select,
+            as_of: self.as_of,
         }
     }
 
@@ -1119,7 +1198,9 @@ impl<'a> Compiler<'a> {
             }
             _ => None,
         };
-        let source = if ent.active() {
+        let source = if matches!(self.scope, GraphScope::History) {
+            crate::version::history_sql(&self.stats.version)?
+        } else if ent.active() {
             let c = |p: Pos| match p {
                 Pos::Const(id) => Some(id),
                 Pos::Var(_) => None,
@@ -1149,6 +1230,31 @@ impl<'a> Compiler<'a> {
     fn bgp(&mut self, patterns: &[TriplePattern]) -> Result<Block> {
         if patterns.is_empty() {
             return Ok(Block::default());
+        }
+        if matches!(self.scope, GraphScope::History) {
+            let change = |tp: &TriplePattern| match &tp.predicate {
+                NamedNodePattern::NamedNode(n) if n.as_str() == crate::version::vocab::ADDED => {
+                    Some(true)
+                }
+                NamedNodePattern::NamedNode(n) if n.as_str() == crate::version::vocab::REMOVED => {
+                    Some(false)
+                }
+                _ => None,
+            };
+            if patterns.iter().any(|tp| change(tp).is_some()) {
+                let rest: Vec<TriplePattern> = patterns
+                    .iter()
+                    .filter(|tp| change(tp).is_none())
+                    .cloned()
+                    .collect();
+                let mut b = self.bgp(&rest)?;
+                for tp in patterns {
+                    if let Some(added) = change(tp) {
+                        self.change_access(&mut b, tp, added)?;
+                    }
+                }
+                return Ok(b);
+            }
         }
         let mut bnodes = HashMap::new();
         let mut enc = Vec::with_capacity(patterns.len());

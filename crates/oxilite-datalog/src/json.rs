@@ -37,6 +37,12 @@ pub fn options_from_json(v: &Value) -> Result<Options> {
     if let Some(p) = map.get("producer").and_then(Value::as_str) {
         out.producer = p.to_owned();
     }
+    if let Some(v) = map.get("asOf").and_then(Value::as_str) {
+        out.as_of = Some(v.to_owned());
+    }
+    if let Some(t) = map.get("asOfTick").and_then(Value::as_i64) {
+        out.as_of_tick = Some(t);
+    }
     Ok(out)
 }
 

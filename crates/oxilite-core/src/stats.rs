@@ -38,6 +38,8 @@ pub struct Stats {
     pub text_index: bool,
     /// Transitive properties (from `tbox_closure`), for query-time reasoning.
     pub transitive: BTreeSet<i64>,
+    /// The versioning level and history of the store (see `version`).
+    pub version: crate::version::VersionState,
 }
 
 fn id_col(caps: &Capabilities, c: &str) -> String {
@@ -79,6 +81,9 @@ impl Stats {
             match key {
                 "graph_index" => stats.graph_index = value == "1",
                 "text_index" => stats.text_index = value == "1",
+                k @ ("versioning" | "history" | "stamp_column" | "stamp_index" | "as_of_index") => {
+                    stats.version.absorb(k, &value)
+                }
                 "total" => {
                     stats.total = value.parse().unwrap_or(0.0);
                     stats.available = true;

@@ -275,6 +275,11 @@ export interface QueryOptions {
   reasoning?: "none" | "rdfs" | "owl-ql";
   /** Also match inferences stored by `materialize()` (oxilite extension). */
   include_inferred?: boolean;
+  /**
+   * Read the store as it was at this version (oxilite extension, versioning `log`):
+   * `"HEAD~2"`, `"#42"` (a tick) or `"@2026-09-01T12:00:00Z"`.
+   */
+  as_of?: string;
 }
 
 /** Load options (Oxigraph's JS option names). */
@@ -372,6 +377,8 @@ export interface DatalogOptions {
   includeInferred?: boolean;
   /** Rounds a component evaluated by iteration may take (default 100). */
   maxIterations?: number;
+  /** Run the program on this version of the store (like an `@version` directive). */
+  asOf?: string;
 }
 
 /** What the native side returns for a Datalog program. */
@@ -427,6 +434,11 @@ export interface CypherOptions {
   shortestPathCap?: number;
   /** Check writes against the SHACL shapes of the dataset (default true). */
   shapes?: boolean;
+  /**
+   * Match the store as it was at this version (versioning `log`): `"HEAD~1"`, `"#42"` or
+   * `"@2026-09-01T12:00:00Z"`. Writing statements are refused with a version.
+   */
+  asOf?: string;
   /** Give created nodes an `rdf:type rdfs:Resource` triple (default true). */
   nodeMarker?: boolean;
   /** Entailment for matching: `"rdfs"` or `"owl-ql"` make labels follow class hierarchies. */
@@ -588,4 +600,71 @@ export function filterJson(f: DocumentFilter): Record<string, unknown> {
 /** A document argument: JSON text is stored verbatim, objects are serialized. */
 export function documentText(doc: string | object): string {
   return typeof doc === "string" ? doc : JSON.stringify(doc);
+}
+
+// ------------------------------------------------------------------------------ versioning
+
+/** How much history a store keeps. */
+export type Versioning = "off" | "stamped" | "log";
+
+/** The versioning level of a store and where its clock and history stand. */
+export interface VersionStatus {
+  level: Versioning;
+  history: "none" | "live" | "frozen";
+  stampColumn: boolean;
+  stampIndex: boolean;
+  asOfIndex: boolean;
+  /** The latest tick. */
+  head: number | null;
+  /** Wall time of the latest tick, in seconds since the epoch. */
+  headTime: number | null;
+  /** Where the recorded history (re)starts. */
+  genesis: number | null;
+  /** The latest freeze, while the history is frozen. */
+  frozenAt: number | null;
+  commits: number | null;
+}
+
+/** One entry of the history: a commit or a level change. */
+export interface CommitRecord {
+  tick: number;
+  /** Seconds since the epoch. */
+  time: number;
+  kind: "write" | "genesis" | "freeze" | "resume" | "dropped" | "level" | "purge";
+  author: string | null;
+  message: string | null;
+  added: number | null;
+  removed: number | null;
+}
+
+/** A quad added or removed at a tick. */
+export interface Change {
+  tick: number;
+  added: boolean;
+  quad: Quad;
+}
+
+/** Options of a level change. */
+export interface LevelChange {
+  asOfIndex?: boolean;
+  stampIndex?: boolean;
+  /** Allow a downgrade to delete the history, the ticks and the stamp column. */
+  allowLoss?: boolean;
+  author?: string;
+  message?: string;
+}
+
+/** Author and message recorded on the commits of later writes. */
+export interface CommitInfo {
+  author?: string;
+  message?: string;
+}
+
+/** Changes from their JSON form (`{tick, added, quad}`). */
+export function toChanges(v: unknown): Change[] {
+  return (v as { tick: number; added: boolean; quad: TermJson }[]).map((c) => ({
+    tick: c.tick,
+    added: c.added,
+    quad: fromJson(c.quad) as Quad,
+  }));
 }

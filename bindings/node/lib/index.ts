@@ -37,6 +37,13 @@ import {
   type QueryResult,
   type TermJson,
   type TermLike,
+  type Change,
+  type CommitInfo,
+  type CommitRecord,
+  type LevelChange,
+  type Versioning,
+  type VersionStatus,
+  toChanges,
   loadDataToString,
   outputToResult,
   toJson,
@@ -67,6 +74,13 @@ interface NativeStoreInstance {
   clear(): void;
   backup(path: string): void;
   jsonld(op: string, args: string, options?: string | null): string;
+  versioning(): string;
+  setVersioning(level: string, change?: string | null): string;
+  setCommitInfo(info?: string | null): void;
+  history(limit: number): string;
+  changes(after: number, until?: number | null): string;
+  diff(from: string, to: string): string;
+  purge(pattern: string, reason?: string | null): void;
 }
 interface Native {
   NativeStore: new (path?: string | null, library?: string | null, options?: string | null) => NativeStoreInstance;
@@ -101,6 +115,16 @@ export interface StoreOptions {
   graphIndex?: boolean;
   /** Create the FTS5 full-text index over string literals (for `oxl:textMatch`). */
   textIndex?: boolean;
+  /**
+   * Versioning of a new store: `"off"` (default), `"stamped"` (a store clock and the tick that
+   * added each quad) or `"log"` (an immutable change log: history and time travel). An existing
+   * store keeps its level: change it with `setVersioning`.
+   */
+  versioning?: Versioning;
+  /** With `"log"`: index the change log by predicate and object (faster as-of queries). */
+  asOfIndex?: boolean;
+  /** With `"stamped"` or `"log"`: index the tick that added each quad. */
+  stampIndex?: boolean;
 }
 
 const j = (t?: TermLike | null) => (t ? JSON.stringify(toJson(t)) : null);
@@ -119,9 +143,66 @@ export class Store {
     this.native = new native.NativeStore(
       opts.path ?? null,
       opts.library ?? null,
-      JSON.stringify({ graphIndex: opts.graphIndex ?? true, textIndex: opts.textIndex ?? false }),
+      JSON.stringify({
+        graphIndex: opts.graphIndex ?? true,
+        textIndex: opts.textIndex ?? false,
+        versioning: opts.versioning ?? "off",
+        asOfIndex: opts.asOfIndex ?? false,
+        stampIndex: opts.stampIndex ?? false,
+      }),
     );
     if (init && typeof init !== "string" && isIterable(init)) this.addAll(init);
+  }
+
+  /** The versioning level of the store and where its clock and history stand. */
+  versioning(): VersionStatus {
+    return JSON.parse(this.native.versioning()) as VersionStatus;
+  }
+
+  /**
+   * Changes the versioning level. Upgrades keep every quad (the upgrade to `"log"` records the
+   * whole store as its genesis commit); a downgrade freezes the history and stops the clock,
+   * and deletes them only with `allowLoss`.
+   */
+  setVersioning(level: Versioning, change: LevelChange = {}): VersionStatus {
+    return JSON.parse(this.native.setVersioning(level, JSON.stringify(change))) as VersionStatus;
+  }
+
+  /** Author and message recorded on the commits of the following writes (until changed). */
+  setCommitInfo(info: CommitInfo = {}): void {
+    this.native.setCommitInfo(JSON.stringify(info));
+  }
+
+  /** Runs `f` with `info` recorded on its writes. */
+  withCommit<T>(info: CommitInfo, f: (store: this) => T): T {
+    this.setCommitInfo(info);
+    try {
+      return f(this);
+    } finally {
+      this.setCommitInfo({});
+    }
+  }
+
+  /** The latest commits and level changes, newest first. */
+  history(limit = 20): CommitRecord[] {
+    return JSON.parse(this.native.history(limit)) as CommitRecord[];
+  }
+
+  /** The changes after tick `after` (up to `until`), in order. */
+  changes(after = 0, until?: number): Change[] {
+    return toChanges(JSON.parse(this.native.changes(after, until ?? null)));
+  }
+
+  /** The net difference between two versions (`"HEAD~1"`, `"#42"`, `"@2026-09-01T00:00:00Z"`). */
+  diff(from: string, to = "HEAD"): Change[] {
+    return toChanges(JSON.parse(this.native.diff(from, to)));
+  }
+
+  /** Removes the quads matching the pattern from the store and from its whole history. */
+  purge(pattern: { subject?: TermLike; predicate?: TermLike; object?: TermLike; graph?: TermLike }, reason?: string): void {
+    const json: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(pattern)) if (v) json[k] = toJson(v as TermLike);
+    this.native.purge(JSON.stringify(json), reason ?? null);
   }
 
   /** Number of quads. */

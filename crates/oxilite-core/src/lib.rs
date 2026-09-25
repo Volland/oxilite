@@ -22,6 +22,7 @@ pub mod sql;
 pub mod stats;
 pub mod text;
 pub mod update;
+pub mod version;
 pub mod writer;
 
 pub use compiler::{QueryOptions, ValueType};
@@ -33,3 +34,4 @@ pub use schema::StoreOptions;
 pub use shapes::{PropertyShape, ShapeIndex};
 pub use sql::{Capabilities, Mode, Request, Response, ResultSet, SqlValue, Statement};
 pub use stats::Stats;
+pub use version::{CommitInfo, LevelChange, VersionRef, VersionState, Versioning};

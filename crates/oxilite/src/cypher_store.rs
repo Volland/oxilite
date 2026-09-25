@@ -35,8 +35,22 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
         params: &Params,
         options: &CypherOptions,
     ) -> Result<CypherResult, CypherError> {
+        // A version option is resolved once: every read of the statement sees that tick.
+        let resolved;
+        let options = match &options.query.as_of {
+            Some(v) if options.query.as_of_tick.is_none() => {
+                let mut o = options.clone();
+                o.query.as_of_tick = Some(self.resolve_version(v)?);
+                resolved = o;
+                &resolved
+            }
+            _ => options,
+        };
         let mut job = prepare_for(query, params, options, self.caps())?;
-        let backend = self.backend();
+        if job.writes() && options.query.as_of.is_some() {
+            return Err(versioned_write());
+        }
+        let backend = self.versioned();
         let tx = job.writes() && self.caps().interactive_transactions;
         if tx {
             backend.begin()?;
@@ -117,7 +131,20 @@ impl<B: AsyncBackend> AsyncStore<B> {
         params: &Params,
         options: &CypherOptions,
     ) -> Result<CypherResult, CypherError> {
+        let resolved;
+        let options = match &options.query.as_of {
+            Some(v) if options.query.as_of_tick.is_none() => {
+                let mut o = options.clone();
+                o.query.as_of_tick = Some(self.resolve_version(v).await?);
+                resolved = o;
+                &resolved
+            }
+            _ => options,
+        };
         let job = prepare_for(query, params, options, self.caps())?;
+        if job.writes() && options.query.as_of.is_some() {
+            return Err(versioned_write());
+        }
         let stats = self.stats.borrow().clone();
         let mut sql = SqlCypherJob::new(job, stats, self.caps().clone(), options.query.clone());
         let mut response = None;
@@ -136,4 +163,12 @@ impl<B: AsyncBackend> AsyncStore<B> {
         }
         Ok(r)
     }
+}
+
+/// A writing statement with a version option: writes apply to the current state.
+fn versioned_write() -> CypherError {
+    CypherError::Unsupported(
+        "a writing statement cannot run at a past version: writes apply to the current state"
+            .into(),
+    )
 }

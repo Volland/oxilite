@@ -672,6 +672,15 @@ impl CypherJob {
         self.drive_fetch(None)
     }
 
+    /// The quad table reads come from: the store, or the store at the statement's version
+    /// (`QueryOptions::as_of`, resolved by the store before the statement runs).
+    fn quads_src(&self) -> String {
+        match self.opts.query.as_of_tick {
+            Some(t) => oxilite_core::version::as_of_sql(&t.to_string()),
+            None => "quads".to_owned(),
+        }
+    }
+
     fn graph_cond(&self, t: &str) -> String {
         format!(
             "{t}.g = {}",
@@ -778,17 +787,18 @@ impl CypherJob {
         };
         let cols = spo_cols(&self.caps, "q");
         let g = self.read_graph_cond("q");
+        let src = self.quads_src();
         let mut stmts = Vec::new();
         for chunk in frontier.chunks(CHUNK) {
             let l = id_list(chunk);
             if spec.dir != Direction::Left {
                 stmts.push(Statement::new(format!(
-                    "SELECT {cols} FROM quads q WHERE {g} AND q.s IN ({l}) AND {preds}"
+                    "SELECT {cols} FROM {src} q WHERE {g} AND q.s IN ({l}) AND {preds}"
                 )));
             }
             if spec.dir != Direction::Right {
                 stmts.push(Statement::new(format!(
-                    "SELECT {cols} FROM quads q WHERE {g} AND q.o IN ({l}) AND {preds}"
+                    "SELECT {cols} FROM {src} q WHERE {g} AND q.o IN ({l}) AND {preds}"
                 )));
             }
         }
@@ -939,18 +949,19 @@ impl CypherJob {
         let mut stmts = Vec::new();
         let (cols, joins) = with_terms(&self.caps, "q");
         let g = self.read_graph_cond("q");
+        let src = self.quads_src();
         let nodes: Vec<i64> = nodes.into_iter().collect();
         let rels: Vec<i64> = rels.into_iter().collect();
         // Labels and literal properties (objects that are not IRIs, blank nodes or triples).
         for chunk in nodes.chunks(CHUNK) {
             stmts.push(Statement::new(format!(
-                "SELECT {cols} FROM quads q{joins} WHERE q.s IN ({}) AND {g} AND (q.p = {type_id} OR (q.o >> 59) NOT IN (1, 2, 9))",
+                "SELECT {cols} FROM {src} q{joins} WHERE q.s IN ({}) AND {g} AND (q.p = {type_id} OR (q.o >> 59) NOT IN (1, 2, 9))",
                 id_list(chunk)
             )));
         }
         for chunk in rels.chunks(CHUNK) {
             stmts.push(Statement::new(format!(
-                "SELECT {cols} FROM quads q{joins} WHERE q.s IN ({}) AND {g} AND q.p <> {reifies_id} AND (q.o >> 59) NOT IN (1, 2, 9)",
+                "SELECT {cols} FROM {src} q{joins} WHERE q.s IN ({}) AND {g} AND q.p <> {reifies_id} AND (q.o >> 59) NOT IN (1, 2, 9)",
                 id_list(chunk)
             )));
         }

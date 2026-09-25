@@ -44,6 +44,7 @@ pub use parser::parse;
 pub use program::{Analysis, Shape, Stratum};
 pub use sql::{Compiled, Fixpoint, FixpointPhase, Options};
 
+use ast::{At, Atom, BodyItem};
 use oxilite_core::sql::Capabilities;
 
 /// Parses, checks and compiles a program.
@@ -51,6 +52,40 @@ pub fn compile(src: &str, caps: &Capabilities, options: &Options) -> Result<Comp
     let program = parse(src)?;
     let analysis = program::analyse(&program)?;
     sql::compile(&program, &analysis, caps, options)
+}
+
+/// The version a program reads: the `as_of` option, else its `@version` directive.
+pub fn version_of(src: &str, options: &Options) -> Result<Option<String>> {
+    if options.as_of.is_some() {
+        return Ok(options.as_of.clone());
+    }
+    Ok(parse(src)?.version)
+}
+
+/// Every version a program names: its `as_of` / `@version` first (if any), then the `at "REF"`
+/// of its atoms, deduplicated.
+pub fn version_refs(src: &str, options: &Options) -> Result<(Option<String>, Vec<String>)> {
+    let program = parse(src)?;
+    let whole = options.as_of.clone().or(program.version.clone());
+    let mut refs: Vec<String> = Vec::new();
+    let mut push = |a: &Atom| {
+        if let Some(At::Version(r)) = &a.at {
+            if !refs.contains(r) {
+                refs.push(r.clone());
+            }
+        }
+    };
+    for rule in &program.rules {
+        for item in &rule.body {
+            if let BodyItem::Atom(a) | BodyItem::Negated(a) = item {
+                push(a);
+            }
+        }
+    }
+    if let Some(g) = &program.goal {
+        push(&g.atom);
+    }
+    Ok((whole, refs))
 }
 
 /// Prepares a program for execution.

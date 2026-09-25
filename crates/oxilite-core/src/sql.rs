@@ -234,6 +234,9 @@ pub struct Capabilities {
     pub compound_recursive_cte: bool,
     /// Name of the backend, for `explain()`.
     pub name: String,
+    /// The versioning level of the store (set by the store at open, not by the backend):
+    /// from `stamped` on, writers record the current tick in `quads.t`.
+    pub versioning: crate::version::Versioning,
 }
 
 impl Default for Capabilities {
@@ -255,6 +258,7 @@ impl Capabilities {
             // rusqlite bundles a current SQLite, and a dlopen'ed library is probed on open.
             compound_recursive_cte: true,
             name: "sqlite".into(),
+            versioning: crate::version::Versioning::Off,
         }
     }
 
@@ -270,6 +274,7 @@ impl Capabilities {
             // D1's SQLite version is not ours to assume.
             compound_recursive_cte: false,
             name: "d1".into(),
+            versioning: crate::version::Versioning::Off,
         }
     }
 }

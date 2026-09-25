@@ -154,6 +154,9 @@ impl DatalogJob {
                         None => v.as_str().and_then(|s| s.parse::<i64>().ok()),
                     },
                 };
+                // Id 0 is the default graph (a `quad/4` or `added/5` graph column), not a
+                // term: it reads as unbound.
+                let id = id.filter(|&id| id != oxilite_core::encoding::DEFAULT_GRAPH_ID);
                 if let Some(id) = id {
                     self.resolver.want(id);
                 }
