@@ -872,6 +872,10 @@ A prefix known only from a workspace file completes with an edit adding its decl
 
 SPARQL errors land on the reported line, updates are accepted, Turtle reports every broken statement, and an unused predicate gets a warning.
 
+### Attaching without activating
+
+`oxilite/attach` with `activate: false` adds the connection but leaves the active one alone; requests naming it reach it, and unnamed requests keep using the active one.
+
 ### Hover and definition across files
 
 Hovering an IRI in a query shows its label and where it is defined; definition jumps to the subject line in another file, and references find every mention.

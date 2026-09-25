@@ -430,7 +430,10 @@ impl Server<'_> {
                 let id = attached.id.clone();
                 self.attached.retain(|a| a.id != id);
                 self.attached.push(attached);
-                self.active = id;
+                // A pinned document or a notebook attaches without switching everyone else.
+                if p["activate"].as_bool().unwrap_or(true) {
+                    self.active = id;
+                }
                 self.connections_changed()?;
                 self.connections()
             }
@@ -449,7 +452,10 @@ impl Server<'_> {
                 let id = attached.id.clone();
                 self.attached.retain(|a| a.id != id);
                 self.attached.push(attached);
-                self.active = id;
+                // A pinned document or a notebook attaches without switching everyone else.
+                if p["activate"].as_bool().unwrap_or(true) {
+                    self.active = id;
+                }
                 self.connections_changed()?;
                 self.connections()
             }

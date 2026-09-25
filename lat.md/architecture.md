@@ -245,7 +245,7 @@ Definitions are subject occurrences; references are all occurrences; `triple_loc
 
 A request runs against the active connection or a named one: the Project store, or an attached SQLite store whose updates persist. See [[crates/oxilite-cli/src/studio/conn.rs#Target]].
 
-`oxilite/query` runs a query, or an update when the text is one; an update on an attached store fails with code 1001 until it is re-sent with `confirmed`, and an update on the Project store is marked ephemeral. `oxilite/explain`, `oxilite/describe`, `oxilite/connections`, `oxilite/attach`, `oxilite/detach` and `oxilite/activate` complete the set, and `oxilite/connectionsChanged` reports changes. Each connection's vocabulary (predicates and classes by frequency, labels, comments) is computed on first use and dropped when the store changes.
+`oxilite/query` runs a query, or an update when the text is one; an update on an attached store fails with code 1001 until it is re-sent with `confirmed`, and an update on the Project store is marked ephemeral. `oxilite/explain`, `oxilite/describe`, `oxilite/connections`, `oxilite/attach` (with `activate: false` to add a connection without switching to it, for pinned documents and notebooks), `oxilite/detach` and `oxilite/activate` complete the set, and `oxilite/connectionsChanged` reports changes. Each connection's vocabulary (predicates and classes by frequency, labels, comments) is computed on first use and dropped when the store changes.
 
 ### Rules, Cypher and files
 

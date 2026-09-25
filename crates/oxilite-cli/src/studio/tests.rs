@@ -1097,3 +1097,29 @@ fn why_picks_the_rule_whose_premises_hold() {
     assert_eq!(premises[1]["status"], "inferred");
     assert_eq!(premises[1]["premises"][0]["status"], "asserted");
 }
+
+// @lat: [[tests#Studio server#Attaching without activating]]
+#[test]
+fn attaching_without_activating() {
+    let mut c = Client::start(workspace(&[("people.ttl", PEOPLE)]));
+    let db = c.dir.join("side.sqlite").display().to_string();
+    let list = c.ok(
+        "oxilite/attach",
+        json!({"path": db, "readOnly": false, "activate": false}),
+    );
+    assert_eq!(list[0]["active"], true, "the Project store stays active");
+    assert_eq!(list[1]["active"], false);
+    // A request naming the attached connection still reaches it.
+    let id = format!("attached:{db}");
+    let r = c.ok(
+        "oxilite/query",
+        json!({"query": "SELECT * { ?s ?p ?o }", "connection": id}),
+    );
+    assert_eq!(r["rows"].as_array().unwrap().len(), 0);
+    let r = c.ok("oxilite/query", json!({"query": "SELECT * { ?s ?p ?o }"}));
+    assert_eq!(
+        r["rows"].as_array().unwrap().len(),
+        2,
+        "unnamed requests use the active one"
+    );
+}
