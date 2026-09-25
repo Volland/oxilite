@@ -11,6 +11,8 @@ struct Client {
     dir: PathBuf,
     /// Notifications received while waiting for responses.
     inbox: Vec<Notification>,
+    /// The server's answer to `initialize`.
+    initialized: Value,
 }
 
 fn workspace(files: &[(&str, &str)]) -> PathBuf {
@@ -46,9 +48,10 @@ impl Client {
             next_id: 0,
             dir,
             inbox: Vec::new(),
+            initialized: Value::Null,
         };
         let root = url::Url::from_file_path(&client.dir).unwrap().to_string();
-        client.call(
+        client.initialized = client.ok(
             "initialize",
             json!({"capabilities": {}, "workspaceFolders": [{"uri": root, "name": "w"}]}),
         );
@@ -235,6 +238,67 @@ fn hover_and_definition_across_files() {
     params["context"] = json!({"includeDeclaration": true});
     let refs = c.ok("textDocument/references", params);
     assert_eq!(refs.as_array().unwrap().len(), 2);
+}
+
+// @lat: [[tests#Studio server#Initialize announces its capabilities]]
+#[test]
+fn initialize_announces_its_capabilities() {
+    let c = Client::start(workspace(&[]));
+    // Nested one level too deep, a client sees no capabilities and never syncs documents.
+    let caps = &c.initialized["capabilities"];
+    assert_eq!(caps["textDocumentSync"], 1);
+    assert!(caps["completionProvider"]["triggerCharacters"].is_array());
+    assert_eq!(caps["hoverProvider"], true);
+    assert_eq!(c.initialized["serverInfo"]["name"], "oxilite studio-server");
+}
+
+// @lat: [[tests#Studio server#Completion follows the document's connection]]
+#[test]
+fn completion_follows_the_documents_connection() {
+    let mut c = Client::start(workspace(&[("people.ttl", PEOPLE)]));
+    let db = c.dir.join("side.sqlite").display().to_string();
+    c.ok(
+        "oxilite/attach",
+        json!({"path": db, "readOnly": false, "activate": false}),
+    );
+    let id = format!("attached:{db}");
+    c.ok(
+        "oxilite/query",
+        json!({"query": "INSERT DATA { <http://ex.org/a> <http://ex.org/salary> 1 }", "connection": id, "confirmed": true}),
+    );
+    let q = c.open(
+        "q.rq",
+        "sparql",
+        "PREFIX ex: <http://ex.org/>\nSELECT * { ?x ex:",
+    );
+    let labels = |c: &mut Client| -> Vec<String> {
+        let items = c.ok("textDocument/completion", at(&q, 1, 17));
+        items
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|i| i["label"].as_str().unwrap().to_string())
+            .collect()
+    };
+    // Terms written in workspace files are offered on any connection; the store's own come first.
+    assert_eq!(labels(&mut c), ["ex:name"], "the active Project store");
+    let pin = |c: &Client, connection: Value| {
+        c.send(
+            Notification::new(
+                "oxilite/documentConnection".into(),
+                json!({"uri": q, "connection": connection}),
+            )
+            .into(),
+        );
+    };
+    pin(&c, json!(id));
+    assert_eq!(
+        labels(&mut c),
+        ["ex:salary", "ex:name"],
+        "the pinned side database"
+    );
+    pin(&c, Value::Null);
+    assert_eq!(labels(&mut c), ["ex:name"], "unpinned again");
 }
 
 // @lat: [[tests#Studio server#Completion over LSP uses the store]]
