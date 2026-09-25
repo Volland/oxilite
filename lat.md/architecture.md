@@ -247,6 +247,12 @@ A request runs against the active connection or a named one: the Project store, 
 
 `oxilite/query` runs a query, or an update when the text is one; an update on an attached store fails with code 1001 until it is re-sent with `confirmed`, and an update on the Project store is marked ephemeral. `oxilite/explain`, `oxilite/describe`, `oxilite/connections`, `oxilite/attach` (with `activate: false` to add a connection without switching to it, for pinned documents and notebooks), `oxilite/detach` and `oxilite/activate` complete the set, and `oxilite/connectionsChanged` reports changes. Each connection's vocabulary (predicates and classes by frequency, labels, comments) is computed on first use and dropped when the store changes.
 
+### Document connections
+
+The `oxilite/documentConnection` notification (`uri`, `connection` or null) names the connection a pinned document or notebook cell runs on; its completion, hover and vocabulary warnings use that connection's vocabulary.
+
+The name is dropped when the document closes. A name whose connection is no longer open falls back to the active connection. See [[crates/oxilite-cli/src/studio/mod.rs]].
+
 ### Rules, Cypher and files
 
 `oxilite/datalog` runs a program's goal and `oxilite/cypher` a Cypher statement on the active connection; explain takes a `language`; `oxilite/import` and `oxilite/export` load and dump files. See [[crates/oxilite-cli/src/studio/conn.rs#Target#cypher]].

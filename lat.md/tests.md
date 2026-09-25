@@ -880,6 +880,14 @@ SPARQL errors land on the reported line, updates are accepted, Turtle reports ev
 
 Hovering an IRI in a query shows its label and where it is defined; definition jumps to the subject line in another file, and references find every mention.
 
+### Initialize announces its capabilities
+
+The `initialize` result carries the capabilities at the top level; nested one level deeper, a client would see none and never sync documents.
+
+### Completion follows the document's connection
+
+A document named for an attached connection completes from that store's vocabulary, and falls back to the active one when the name is cleared.
+
 ### Completion over LSP uses the store
 
 An opened query document gets store-driven completion and its own diagnostics.

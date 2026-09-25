@@ -81,10 +81,16 @@ fn capabilities() -> ServerCapabilities {
 
 /// Serves one client on `connection`. `store` overrides the scratch store location.
 pub fn serve(connection: &Connection, store: Option<String>) -> Result<()> {
-    let params: InitializeParams = serde_json::from_value(connection.initialize(json!({
-        "capabilities": serde_json::to_value(capabilities())?,
-        "serverInfo": {"name": "oxilite studio-server", "version": env!("CARGO_PKG_VERSION")},
-    }))?)?;
+    // `Connection::initialize` wraps its argument in `capabilities`, so the result goes out as is.
+    let (id, params) = connection.initialize_start()?;
+    connection.initialize_finish(
+        id,
+        json!({
+            "capabilities": serde_json::to_value(capabilities())?,
+            "serverInfo": {"name": "oxilite studio-server", "version": env!("CARGO_PKG_VERSION")},
+        }),
+    )?;
+    let params: InitializeParams = serde_json::from_value(params)?;
     let root = root_of(&params);
     let location = store.unwrap_or_else(|| match &root {
         Some(r) => r
@@ -101,6 +107,7 @@ pub fn serve(connection: &Connection, store: Option<String>) -> Result<()> {
         attached: Vec::new(),
         active: PROJECT.into(),
         docs: HashMap::new(),
+        document_connections: HashMap::new(),
         vocab: HashMap::new(),
         diagnostics: HashMap::new(),
         jobs,
@@ -144,6 +151,8 @@ struct Server<'a> {
     attached: Vec<Attached>,
     active: String,
     docs: HashMap<String, Doc>,
+    /// The connection a pinned document or a notebook cell runs on, by uri; others use the active one.
+    document_connections: HashMap<String, String>,
     /// Vocabulary per connection, computed on first use and dropped when the store changes.
     vocab: HashMap<String, Vocab>,
     /// Published diagnostics per file and source (`load`, `syntax`, …), merged on publish.
@@ -210,15 +219,16 @@ impl Server<'_> {
             };
             if is_read {
                 // Cypher names resolve against the vocabulary's main namespace: compute it first.
+                let named = p["connection"].as_str().unwrap_or(&self.active).to_string();
                 if language == "cypher" {
-                    let _ = self.active_vocab();
+                    let _ = self.vocab_of(&named);
                 }
-                let target = self.target(p["connection"].as_str())?;
+                let target = self.target(Some(&named))?;
                 let limit = p["limit"]
                     .as_u64()
                     .map_or(DEFAULT_ROW_LIMIT, |l| l as usize);
                 let method = request.method.clone();
-                let cypher = self.cypher_options(&target)?;
+                let cypher = self.cypher_options(&named, &target)?;
                 let sender = self.connection.sender.clone();
                 std::thread::spawn(move || {
                     let result = match (method.as_str(), language.as_str()) {
@@ -263,13 +273,14 @@ impl Server<'_> {
                 let text = p["query"]
                     .as_str()
                     .ok_or("oxilite/cypher needs a `query` string")?;
-                let _ = self.active_vocab();
                 let limit = p["limit"]
                     .as_u64()
                     .map_or(DEFAULT_ROW_LIMIT, |l| l as usize);
                 let id = p["connection"].as_str().map(str::to_string);
-                let target = self.target(id.as_deref())?;
-                let options = self.cypher_options(&target)?;
+                let named = id.clone().unwrap_or_else(|| self.active.clone());
+                let _ = self.vocab_of(&named);
+                let target = self.target(Some(&named))?;
+                let options = self.cypher_options(&named, &target)?;
                 let out = target.cypher(
                     text,
                     limit,
@@ -509,8 +520,11 @@ impl Server<'_> {
                     return Ok(Value::Null);
                 };
                 let (lang, text) = (doc.lang, doc.text.clone());
-                let vocab = self.active_vocab().ok().cloned();
-                let cypher = self.cypher_options(&self.target(None)?)?.vocabulary;
+                let id = self.connection_of(&uri);
+                let vocab = self.vocab_of(&id).ok().cloned();
+                let cypher = self
+                    .cypher_options(&id, &self.target(Some(&id))?)?
+                    .vocabulary;
                 let ctx = CompletionContext {
                     vocab: vocab.as_ref(),
                     index: self.project.index(),
@@ -592,13 +606,13 @@ impl Server<'_> {
 
     /// Cypher options for a connection: its query options, the workspace's prefixes, and a base
     /// namespace for unprefixed names (the manifest's, else the store's most used namespace).
-    fn cypher_options(&self, target: &Target) -> Result<oxilite::cypher::CypherOptions> {
+    fn cypher_options(&self, id: &str, target: &Target) -> Result<oxilite::cypher::CypherOptions> {
         let base = self
             .project
             .manifest()
             .and_then(|m| m.cypher.base.clone())
             .or_else(|| {
-                let v = self.vocab.get(&self.active)?;
+                let v = self.vocab.get(id)?;
                 let mut counts: BTreeMap<String, u64> = BTreeMap::new();
                 for (iri, n) in &v.predicates {
                     let ns = &iri[..iri.rfind(['#', '/']).map_or(0, |i| i + 1)];
@@ -738,7 +752,19 @@ impl Server<'_> {
                 let p: DidCloseTextDocumentParams = param(n.params)?;
                 let uri = p.text_document.uri.as_str().to_string();
                 self.docs.remove(&uri);
+                self.document_connections.remove(&uri);
                 self.set_diagnostics(&uri, "syntax", Vec::new())?;
+            }
+            // The client resolves pins and notebook kernels; `connection: null` falls back to active.
+            "oxilite/documentConnection" => {
+                let uri = n.params["uri"].as_str().ok_or("needs a `uri`")?.to_string();
+                match n.params["connection"].as_str() {
+                    Some(id) => self
+                        .document_connections
+                        .insert(uri.clone(), id.to_string()),
+                    None => self.document_connections.remove(&uri),
+                };
+                self.check_document(&uri)?;
             }
             m if m == DidChangeWatchedFiles::METHOD => {
                 let p: lsp_types::DidChangeWatchedFilesParams = param(n.params)?;
@@ -779,11 +805,26 @@ impl Server<'_> {
     }
 
     fn active_vocab(&mut self) -> Result<&Vocab> {
-        if !self.vocab.contains_key(&self.active) {
-            let v = self.target(None)?.vocab()?;
-            self.vocab.insert(self.active.clone(), v);
+        let id = self.active.clone();
+        self.vocab_of(&id)
+    }
+
+    /// The vocabulary of connection `id`, computed on first use.
+    fn vocab_of(&mut self, id: &str) -> Result<&Vocab> {
+        if !self.vocab.contains_key(id) {
+            let v = self.target(Some(id))?.vocab()?;
+            self.vocab.insert(id.to_string(), v);
         }
-        Ok(&self.vocab[&self.active])
+        Ok(&self.vocab[id])
+    }
+
+    /// The connection a document runs on: the one the client named for it while that connection
+    /// is open, else the active one.
+    fn connection_of(&self, uri: &str) -> String {
+        match self.document_connections.get(uri) {
+            Some(id) if id == PROJECT || self.attached.iter().any(|a| &a.id == id) => id.clone(),
+            _ => self.active.clone(),
+        }
     }
 
     fn iri_at(&self, uri: &str, at: Position) -> Option<(String, Range)> {
@@ -798,7 +839,8 @@ impl Server<'_> {
         let Some((iri, range)) = self.iri_at(uri, at) else {
             return Ok(Value::Null);
         };
-        let vocab = self.active_vocab().ok().cloned().unwrap_or_default();
+        let id = self.connection_of(uri);
+        let vocab = self.vocab_of(&id).ok().cloned().unwrap_or_default();
         let mut md = String::new();
         if let Some(l) = vocab.labels.get(&iri) {
             md.push_str(&format!("**{l}**\n\n"));
@@ -807,7 +849,7 @@ impl Server<'_> {
         if let Some(c) = vocab.comments.get(&iri) {
             md.push_str(&format!("{c}\n\n"));
         }
-        if let Ok(d) = self.target(None)?.describe(&iri, 50) {
+        if let Ok(d) = self.target(Some(&id))?.describe(&iri, 50) {
             let types: Vec<String> = d["outgoing"]
                 .as_array()
                 .into_iter()
@@ -854,14 +896,15 @@ impl Server<'_> {
         let (lang, text) = (doc.lang, doc.text.clone());
         let mut diagnostics = lang::syntax_diagnostics(lang, &text, uri);
         if lang == Lang::Sparql && diagnostics.is_empty() {
-            if let Ok(v) = self.active_vocab() {
+            let id = self.connection_of(uri);
+            if let Ok(v) = self.vocab_of(&id) {
                 diagnostics.extend(lang::vocabulary_warnings(&text, uri, v));
             }
         }
         self.set_diagnostics(uri, "syntax", diagnostics)
     }
 
-    /// Re-checks open documents, whose warnings depend on the active connection.
+    /// Re-checks open documents, whose warnings depend on their connection.
     fn refresh_open_documents(&mut self) -> Result<()> {
         let uris: Vec<String> = self.docs.keys().cloned().collect();
         for uri in uris {
