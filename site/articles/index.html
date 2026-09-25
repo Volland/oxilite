@@ -49,11 +49,40 @@
           </a>
         </div>
 
+        <h2 class="group">Versioning<span class="dot">.</span></h2>
+        <p class="sub">A store that remembers: every write a commit, any past version a query away.</p>
+        <div class="articles">
+          <a class="article-card" href="versioning-knowledge-graph-memory.html">
+            <span class="kicker">Versioning · Overview · Use cases · New</span>
+            <h3>A knowledge graph with a memory</h3>
+            <p>What versioning records, what you can ask of the past, and the use cases it was built for: agent memory, curated graphs, audit, change feeds and reproducible analysis.</p>
+            <span class="more">Read the overview →</span>
+          </a>
+          <a class="article-card" href="versioning-benchmarks.html">
+            <span class="kicker">Versioning · Benchmarks · New</span>
+            <h3>How much does versioning slow oxilite down?</h3>
+            <p>Write cost, commit latency, storage, and queries on the present and the past at three sizes: the present costs the same, the past from 1× to 200×, and why.</p>
+            <span class="more">See the numbers →</span>
+          </a>
+          <a class="article-card" href="time-travel.html">
+            <span class="kicker">Versioning · Time travel</span>
+            <h3>Time travel for your knowledge graph</h3>
+            <p>Turn on versioning per store: commits with authors and messages, SPARQL and Datalog on any past version, versions compared in one query, diffs, level changes and purges.</p>
+            <span class="more">Read the walkthrough →</span>
+          </a>
+          <a class="article-card" href="versioning-on-d1.html">
+            <span class="kicker">Versioning · Cloudflare D1 · Design</span>
+            <h3>What history costs on D1</h3>
+            <p>Triggers, a clock with no coordination, a genesis snapshot, and the measured bill: zero extra rows per triple for a store clock, two for a full change log.</p>
+            <span class="more">Read the design notes →</span>
+          </a>
+        </div>
+
         <h2 class="group">Tooling<span class="dot">.</span></h2>
         <p class="sub">Work on a knowledge graph the way you work on code.</p>
         <div class="articles">
           <a class="article-card" href="oxilite-studio.html">
-            <span class="kicker">VS Code · Tooling · New</span>
+            <span class="kicker">VS Code · Tooling</span>
             <h3>oxilite studio: a workbench for knowledge graphs</h3>
             <p>Install the VS Code extension and tour it: completion from your own data, reasoning that explains itself, SHACL on the line that broke it, tests in CI, D1 and MCP.</p>
             <span class="more">Take the tour →</span>

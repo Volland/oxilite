@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Time travel for your knowledge graph – oxilite</title>
+  <meta name="description" content="oxilite keeps the history of a knowledge graph in SQLite and Cloudflare D1: an immutable change log, commits with authors and messages, and SPARQL and Datalog queries on any past version.">
+  <meta property="og:title" content="Time travel for your knowledge graph">
+  <meta property="og:description" content="An immutable change log inside SQLite: query any past version with SPARQL or Datalog, diff two versions, and see who changed what.">
+  <meta property="og:image" content="../assets/logo.png">
+  <meta name="theme-color" content="#0a0a0a">
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg">
+  <link rel="icon" type="image/png" href="../assets/logo.png">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt=""><span>oxi<b>lite</b></span></a>
+      <nav class="nav" aria-label="Main">
+        <a href="../">Home</a>
+        <a href="./">Articles</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="article">
+    <article class="wrap">
+      <span class="kicker">Versioning · Time travel · History</span>
+      <h1>Time travel for your knowledge graph</h1>
+      <p class="standfirst">A knowledge graph that forgets is hard to trust. What did the agent believe on Monday? Who closed this ticket? Which import broke the ontology? oxilite can now keep a store's whole history inside the same SQLite file or D1 database, and answer SPARQL and Datalog queries about any past version.</p>
+      <p class="meta">A walkthrough · The behaviour on this page is asserted by the test suite: <a href="https://github.com/Volland/oxilite/blob/main/crates/oxilite/tests/versioning.rs"><code>versioning.rs</code></a> (bundled SQLite, system SQLite, the D1 code path and Miniflare D1), <a href="https://github.com/Volland/oxilite/blob/main/packages/d1/test/versioning.test.ts"><code>versioning.test.ts</code></a> and <a href="https://github.com/Volland/oxilite/blob/main/crates/oxilite-datalog/tests/versions.rs"><code>versions.rs</code></a></p>
+
+      <h2><span class="step">1</span>Off by default, three levels when you want it</h2>
+      <p>Most stores do not need history, and on Cloudflare D1 every row written is billed. So versioning is a per-store choice, and a store without it is exactly the store you had before: the same tables, the same SQL and the same bill. When you do want history, pick a level:</p>
+      <table>
+        <thead><tr><th>Level</th><th>What the store keeps</th><th>Rows written per triple on D1</th></tr></thead>
+        <tbody>
+          <tr><td><code>off</code> (default)</td><td>The current state only</td><td>4.81</td></tr>
+          <tr><td><code>stamped</code></td><td>A store clock. Every write is a <em>tick</em> with a time, an author and a message, and every quad records the tick that added it.</td><td>4.82, no extra row per triple (three per batch)</td></tr>
+          <tr><td><code>log</code></td><td>An immutable change log: every addition and removal, so any past version can be queried</td><td>6.82</td></tr>
+        </tbody>
+      </table>
+      <p>The levels nest. <code>log</code> keeps everything <code>stamped</code> keeps, and you can raise or lower a live store's level later. The costs are measured, not estimated. The <a href="versioning-on-d1.html">design article</a> explains where each row comes from, and <a href="versioning-benchmarks.html">the benchmarks</a> show what reading the past costs. Every option is listed in the <a href="https://github.com/Volland/oxilite/blob/main/docs/versioning.md">reference</a>.</p>
+
+      <h2><span class="step">2</span>Create a versioned store</h2>
+<pre><code><span class="c"># the CLI: any write creates the file; --versioning applies to a new store</span>
+oxilite update -l kb.sqlite --versioning log --author ada -m <span class="s">"seed tickets"</span> \
+  -u <span class="s">'PREFIX ex: &lt;http://example.com/&gt; INSERT DATA { ex:t1 ex:status "open" . ex:t2 ex:status "open" }'</span>
+
+oxilite update -l kb.sqlite --author bob -m <span class="s">"close t1"</span> \
+  -u <span class="s">'PREFIX ex: &lt;http://example.com/&gt; DELETE { ex:t1 ex:status ?s } INSERT { ex:t1 ex:status "done" } WHERE { ex:t1 ex:status ?s }'</span></code></pre>
+      <p>The same from Rust, where one call is one commit:</p>
+<pre><code><span class="k">use</span> oxilite::version::{CommitInfo, Versioning};
+
+<span class="k">let</span> store = Store::open_with_options(<span class="s">"kb.sqlite"</span>, StoreOptions {
+    versioning: Versioning::Log,
+    ..Default::default()
+})?;
+store.with_commit(
+    CommitInfo { author: Some(<span class="s">"ada"</span>.into()), message: Some(<span class="s">"seed tickets"</span>.into()) },
+    |s| s.update(SEED),
+)?;
+store.update(CLOSE_T1)?;</code></pre>
+      <p>From JavaScript, on Node.js or on D1:</p>
+<pre><code><span class="k">const</span> store = <span class="k">await</span> D1Store.open(env.DB, { wasm, versioning: <span class="s">"log"</span> });
+<span class="k">await</span> store.withCommit({ author: <span class="s">"ada"</span>, message: <span class="s">"seed tickets"</span> }, (s) =&gt; s.update(SEED));</code></pre>
+      <p>Every atomic write is one commit: a SPARQL update, a load batch, a Cypher write, a JSON-LD document. The history is recorded by triggers underneath the store, so no write path can skip it. Writes that change nothing are not recorded, such as re-adding a quad that is already there. A quad that one update removes and then re-adds leaves no trace either.</p>
+
+      <h2><span class="step">3</span>Read the history</h2>
+<pre><code>$ oxilite versioning log -l kb.sqlite
+#4  2026-09-25T06:59:35.839Z  +1 -1  close t1  (bob)
+#3  2026-09-25T06:59:35.829Z  +2 -0  seed tickets  (ada)
+#2  2026-09-25T06:59:35.827Z  [genesis]  history starts
+#1  2026-09-25T06:59:35.826Z  [level]  versioning: stamped</code></pre>
+      <p>Each entry is a tick: a number that only grows, its wall time, what it added and removed, the message and the author. Level changes are ticks too. Genesis is where the recorded history starts, and it holds the whole store at that moment, so every later version can be rebuilt from the log alone.</p>
+
+      <h2><span class="step">4</span>Query the past</h2>
+      <p>Any query can run against any version. A version is <code>HEAD</code>, <code>HEAD~n</code> (<em>n</em> commits back), a tick such as <code>#3</code>, or an instant such as <code>@2026-09-25T06:59:35.830Z</code>:</p>
+<pre><code>$ oxilite query -l kb.sqlite --results-format tsv -q <span class="s">'SELECT ?t ?s { ?t &lt;http://example.com/status&gt; ?s }'</span>
+?t                        ?s
+&lt;http://example.com/t2&gt;   "open"
+&lt;http://example.com/t1&gt;   "done"
+
+$ oxilite query -l kb.sqlite --as-of HEAD~1 --results-format tsv -q <span class="s">'SELECT ?t ?s { ?t &lt;http://example.com/status&gt; ?s }'</span>
+?t                        ?s
+&lt;http://example.com/t1&gt;   "open"
+&lt;http://example.com/t2&gt;   "open"</code></pre>
+      <p>Past versions are read from the log. With a subject bound, they take about 3× as long as the present. Other patterns need the optional as-of index: with it, they stay within 1–3.6× (see <a href="versioning-on-d1.html">the numbers</a>). In code, the option is <code>as_of</code> (<code>QueryOptions::as_of</code> in Rust, <code>{ as_of: "HEAD~1" }</code> in JavaScript), and <code>oxilite serve</code> accepts <code>/query?version=HEAD~1</code>. The whole query sees that version: patterns, property paths, <code>OPTIONAL</code>, <code>GRAPH</code> and <code>DESCRIBE</code>. It still compiles to one SQL statement. Asking for a version the store never recorded is an error: a version before the history began, or one inside a gap left by a freeze (see step 7). You never get a silently wrong answer.</p>
+
+      <h2><span class="step">5</span>Compare two versions in one query</h2>
+      <p>SPARQL already has syntax for reading another dataset inside a query: <code>SERVICE</code>. oxilite treats <code>&lt;oxilite:version/REF&gt;</code> as another version of the same store, so a single query can join the present with the past:</p>
+<pre><code>SELECT ?t ?old ?new WHERE {
+  ?t &lt;http://example.com/status&gt; ?new
+  SERVICE &lt;oxilite:version/HEAD~1&gt; { ?t &lt;http://example.com/status&gt; ?old }
+  FILTER(?old != ?new)
+}</code></pre>
+<pre><code>?t                        ?old    ?new
+&lt;http://example.com/t1&gt;   "open"  "done"</code></pre>
+      <p>This is ordinary SPARQL 1.1, so any parser accepts it, and it still compiles to one SQL statement. For the raw difference there is <code>diff</code>, printed as <a href="https://afs.github.io/rdf-patch/">RDF Patch</a> lines:</p>
+<pre><code>$ oxilite versioning diff -l kb.sqlite HEAD~1
+# #4
+A &lt;http://example.com/t1&gt; &lt;http://example.com/status&gt; "done" .
+D &lt;http://example.com/t1&gt; &lt;http://example.com/status&gt; "open" .</code></pre>
+      <p><code>changes --since 40</code> prints every change after tick 40 in order: a change feed for incremental exports, search indexes or caches. A <code>stamped</code> store has no log but can still answer "what was added since tick 40", with no extra cost per write.</p>
+
+      <h2><span class="step">6</span>Rules over the past</h2>
+      <p>Datalog programs read a version with one directive:</p>
+<pre><code>@version "HEAD~1" .
+@prefix ex: &lt;http://example.org/&gt; .
+anc(?x, ?y) :- ex:parent(?x, ?y).
+anc(?x, ?z) :- ex:parent(?x, ?y), anc(?y, ?z).
+?- anc(ex:ada, ?y).</code></pre>
+      <p>Or pass it as an option (<code>asOf</code> in JavaScript, <code>--as-of</code> on the CLI). Recursion, negation and aggregation work as usual. Materialized inferences describe only the present, so combining them with a version is refused, and so is materializing from the past.</p>
+      <p>A single atom can read another version too. <code>at "HEAD~1"</code> compares values across versions. <code>at ?c</code> reads the version of a commit that another atom binds, which gives the value a fact had at every commit:</p>
+<pre><code>changed(?t, ?old, ?new) :- ex:status(?t, ?new), ex:status(?t, ?old) at "HEAD~1", ?old != ?new.
+status_at(?c, ?v)       :- commit(?c, _, _, _), ex:status(ex:t1, ?v) at ?c.</code></pre>
+      <p>Cypher takes the same option, so a property-graph query can read the past as well: <code>store.cypher("MATCH (t:Ticket) RETURN t.status", {}, { asOf: "HEAD~1" })</code>. A writing statement with a version is refused.</p>
+
+      <h2><span class="step">7</span>Ask the history itself</h2>
+      <p>The history is data too. In SPARQL it is a graph, <code>&lt;oxilite:history&gt;</code>. Each commit is described with <a href="https://www.w3.org/TR/prov-o/">PROV-O</a>: its time, its author, its message and the commit before it. Each change is a triple term:</p>
+<pre><code>PREFIX prov: &lt;http://www.w3.org/ns/prov#&gt;
+PREFIX oxl:  &lt;https://oxilite.dev/ns#&gt;
+SELECT ?who ?when WHERE { GRAPH &lt;oxilite:history&gt; {
+  ?c oxl:removed &lt;&lt;( ex:alice ex:role ex:admin )&gt;&gt; ;
+     prov:wasAssociatedWith ?who ;
+     prov:startedAtTime ?when } }</code></pre>
+      <p>That asks who revoked Alice's admin role, and when. Replace the constants with variables, <code>&lt;&lt;( ?s ?p ?o )&gt;&gt;</code>, and you get every change with its author. A commit is identified by its tick, an integer, the same number as <code>#42</code>. Datalog reads the same history as relations: <code>commit(?c, ?parent, ?time, ?author)</code>, <code>added(?s, ?p, ?o, ?g, ?c)</code>, <code>removed(…)</code> and <code>branch(?name, ?c)</code>:</p>
+<pre><code>removed_by(?t, ?v, ?who) :- removed(?t, ex:status, ?v, _, ?c), commit(?c, _, _, ?who).</code></pre>
+
+      <h2><span class="step">8</span>Change the level later</h2>
+<pre><code>oxilite versioning set -l kb.sqlite log        <span class="c"># raise: the store becomes the genesis commit</span>
+oxilite versioning set -l kb.sqlite stamped    <span class="c"># lower: history freezes, still queryable up to the freeze</span>
+oxilite versioning set -l kb.sqlite log        <span class="c"># raise again: the gap is recorded as one commit</span>
+oxilite versioning set -l kb.sqlite off --allow-loss   <span class="c"># delete the history, the ticks and the stamp column</span></code></pre>
+      <p>Opening a store never changes its level. A configuration file that says <code>--versioning log</code> will not quietly start billing a production database for a snapshot. Only an explicit level change, or a migration on D1, raises or lowers it. Upgrades never lose a quad. Downgrades keep the history frozen and read-only unless you pass <code>--allow-loss</code>. When you raise the level again, the net changes made during the gap are recorded as one commit. The history stays exact, and queries inside the gap fail and name it.</p>
+
+      <h2><span class="step">9</span>When history must forget</h2>
+      <p>An immutable log conflicts with an erasure request. oxilite has one operation that rewrites history, and it is deliberately explicit:</p>
+<pre><code>oxilite versioning purge -l kb.sqlite --subject http://example.com/alice \
+  --reason <span class="s">"erasure request #1142"</span> --yes</code></pre>
+      <p>The matching quads disappear from the store, from every past version and from the change feed. The purge itself is recorded with its reason and author, but without the removed content. The log is otherwise immutable. Updating or deleting its rows fails with <code>history is immutable</code>, and that is enforced by the database, not by the library.</p>
+
+      <h2>Where it helps</h2>
+      <ul>
+        <li><strong>Agent memory.</strong> Ask what the agent believed before a bad ingestion, diff it, and check the commit messages to see which tool wrote what.</li>
+        <li><strong>Curated knowledge graphs.</strong> Reviewers see exactly which triples a change added and removed, with its author and reason.</li>
+        <li><strong>Audit.</strong> Answer "what did we know at the time of this decision" with a query, not by restoring a backup.</li>
+        <li><strong>Incremental sync.</strong> Feed search indexes and caches from <code>changes</code> instead of re-scanning the store.</li>
+      </ul>
+
+      <h2>Not yet</h2>
+      <ul>
+        <li>Branches and merge, and pushing or pulling history between stores, are planned as <a href="https://github.com/Volland/oxilite/tree/main/openspec/changes/version-branches"><code>version-branches</code></a> and <a href="https://github.com/Volland/oxilite/tree/main/openspec/changes/version-sync"><code>version-sync</code></a>. The design and its measured costs are in the <a href="https://github.com/Volland/oxilite/tree/main/openspec/changes/archive/2026-09-25-versioned-store">archived first phase</a>.</li>
+      </ul>
+
+      <div class="callout">
+        <p><strong>The takeaway.</strong> Turn versioning on per store, and every write becomes a commit you can query, diff and attribute, in the same SQLite file or D1 database. With it off, nothing changes.</p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt="" width="28" height="28"><span>oxilite</span></a>
+      <span>MIT or Apache-2.0</span>
+      <nav aria-label="Rechtliches">
+        <a href="../impressum.html">Impressum</a>
+        <a href="../datenschutz.html">Datenschutz</a>
+        <a href="../agb.html">AGB</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>

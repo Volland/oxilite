@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How much does versioning slow oxilite down? – oxilite</title>
+  <meta name="description">Benchmarks of oxilite's versioning: write cost, commit latency, bulk loads, storage, and query latency on the present and on past versions, with and without the as-of index, at three store and history sizes.">
+  <meta property="og:title" content="How much does versioning slow oxilite down?">
+  <meta property="og:description">The present costs the same; writes cost a little more; the past costs from 1× to 200×, depending on the query and one index. Measured, explained, and matched to the use cases.">
+  <meta property="og:image" content="../assets/logo.png">
+  <meta name="theme-color" content="#0a0a0a">
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg">
+  <link rel="icon" type="image/png" href="../assets/logo.png">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt=""><span>oxi<b>lite</b></span></a>
+      <nav class="nav" aria-label="Main">
+        <a href="../">Home</a>
+        <a href="./">Articles</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="article">
+    <article class="wrap">
+      <span class="kicker">Versioning · Benchmarks · Use cases</span>
+      <h1>How much does versioning slow oxilite down?</h1>
+      <p class="standfirst">oxilite can keep a store's history: commits with authors and messages, and SPARQL and Datalog on any past version. That memory has a price, and this article measures it. Queries on the present cost the same. Writes cost a little more. Reading the past costs from about 1× to over 100× the present, depending on the query and on one index.</p>
+      <p class="meta">Benchmarks · Apple M2 Max, bundled SQLite in memory, median of 15 runs after a warm-up · D1 write costs on a local D1 (Miniflare) · Reproduce with <a href="https://github.com/Volland/oxilite/blob/main/bench/src/bin/as-of-latency.rs"><code>as-of-latency</code></a> and <a href="https://github.com/Volland/oxilite/blob/main/bench/src/bin/write-cost.rs"><code>write-cost</code></a>; raw results in <a href="https://github.com/Volland/oxilite/tree/main/bench/results"><code>bench/results</code></a></p>
+
+      <h2>What versioning does, in one paragraph</h2>
+      <p>A store chooses a level, and the choice is recorded in the database:</p>
+      <ul>
+        <li><code>off</code>, the default, changes nothing.</li>
+        <li><code>stamped</code> adds a store clock. Every write becomes a tick with a time, an author and a message, and every quad records the tick that added it.</li>
+        <li><code>log</code> adds an immutable change log, written by triggers under the quad table. Queries can then read any past version (<code>as_of: "HEAD~3"</code>, <code>"#42"</code>, <code>"@2026-09-01T12:00:00Z"</code>), compare two versions in one query (<code>SERVICE &lt;oxilite:version/HEAD~1&gt;</code>), and list, diff and stream changes.</li>
+      </ul>
+      <p>The walkthrough is <a href="time-travel.html">Time travel for your knowledge graph</a>, the overview <a href="versioning-knowledge-graph-memory.html">A knowledge graph with a memory</a>, and the design <a href="versioning-on-d1.html">What history costs on D1</a>.</p>
+
+      <h2>The use cases being measured</h2>
+      <p>The benchmark is shaped by what versioning is for:</p>
+      <ul>
+        <li><strong>Agent memory.</strong> What did the agent believe at 14:02, which tool wrote it, and what did that ingestion change? The queries are selective lookups and joins at a past time.</li>
+        <li><strong>Curated graphs and ontologies.</strong> Review diffs and attribution per commit. These are diffs and lookups a few commits back.</li>
+        <li><strong>Audit.</strong> What did we know when the decision was made? These are the same queries, far back in time.</li>
+        <li><strong>Change feeds.</strong> Search indexes, caches and exports want what changed since the last sync. That needs <code>stamped</code> or <code>log</code>, and it is a read by tick.</li>
+        <li><strong>Reproducible analysis.</strong> Pin a report to a tick. This is the heaviest case: aggregates over the store as it was.</li>
+      </ul>
+
+      <h2>The setup</h2>
+      <p>The data is a synthetic ticket tracker, built the same way at four levels:</p>
+      <ul>
+        <li><strong>Tickets</strong> with a type, an owner, a priority and a status, four triples each, bulk-loaded.</li>
+        <li><strong>Commits</strong> after the load. Each is one SPARQL update that moves the status of 20 random tickets and adds a two-triple comment. That is the shape of an application's history: a big import, then many small writes.</li>
+      </ul>
+      <p>Four queries are timed on the present, on the latest version read through the log (<code>HEAD</code>), and at several depths:</p>
+      <table>
+        <thead><tr><th>Query</th><th>Shape</th><th>Stands for</th></tr></thead>
+        <tbody>
+          <tr><td>subject lookup</td><td><code>&lt;t123&gt; ?p ?o</code></td><td>"what did we know about this entity"</td></tr>
+          <tr><td>value lookup</td><td><code>?t :status "blocked"</code></td><td>"which entities had this value"</td></tr>
+          <tr><td>star join</td><td>four patterns on one ticket, counted</td><td>a typical selective query</td></tr>
+          <tr><td>group by</td><td>count tickets per status</td><td>an aggregate over a whole predicate: reports, dashboards</td></tr>
+        </tbody>
+      </table>
+      <p>The main configuration is 20,000 tickets (80,000 triples) and 500 commits, which gives 95,724 log rows. It is repeated at 2,000 commits (143,502 log rows) and at 100,000 tickets (400,000 triples, 415,656 log rows). Three repeated runs of the main configuration agree within about 5&nbsp;%.</p>
+
+      <h2>Writes: a little more</h2>
+      <p>On D1, writes are billed per row written, index entries included. <code>write-cost</code> loads 5,000 triples into a local D1 at each level:</p>
+      <table>
+        <thead><tr><th>Level</th><th>Rows written per triple</th><th>vs. off</th></tr></thead>
+        <tbody>
+          <tr><td><code>off</code></td><td>4.81</td><td>—</td></tr>
+          <tr><td><code>stamped</code></td><td>4.82</td><td>+0.2&nbsp;% (three rows per batch: the tick and its time term; none per triple)</td></tr>
+          <tr><td><code>log</code></td><td>6.82</td><td>+42&nbsp;%</td></tr>
+          <tr><td><code>log</code> + as-of index</td><td>8.82</td><td>+83&nbsp;%</td></tr>
+        </tbody>
+      </table>
+      <p>Wall time and size on the bundled SQLite, for the main configuration:</p>
+      <table>
+        <thead><tr><th>Level</th><th>Bulk load, 80k triples</th><th>One commit</th><th>Database size</th></tr></thead>
+        <tbody>
+          <tr><td><code>off</code></td><td>347 ms</td><td>15.8 ms</td><td>12.8 MB</td></tr>
+          <tr><td><code>stamped</code></td><td>362 ms</td><td>15.9 ms</td><td>13.0 MB (+2&nbsp;%)</td></tr>
+          <tr><td><code>log</code></td><td>685 ms (2.0×)</td><td>16.6 ms (+5&nbsp;%)</td><td>20.2 MB (+58&nbsp;%)</td></tr>
+          <tr><td><code>log</code> + as-of index</td><td>792 ms (2.3×)</td><td>17.2 ms (+9&nbsp;%)</td><td>27.2 MB (+113&nbsp;%)</td></tr>
+        </tbody>
+      </table>
+      <p>A commit is dominated by evaluating the update's <code>WHERE</code>. The triggers that append to the log add a few percent. A bulk load writes every triple twice, into the store and into the log, so it takes about twice as long. The log also grows with the history: at 2,000 commits the plain log store is 24.3 MB against 13.3 MB without versioning. <code>stamped</code> is close to free everywhere. Its stamp lives in the quad row itself, and D1 bills rows, not bytes.</p>
+
+      <h2>The present: unchanged</h2>
+      <p>Queries without a version read the quad table, exactly as an unversioned store does. In every configuration measured, their time is the same as <code>off</code> within noise. A golden test pins their SQL for the W3C query corpus to the SQL of the release before versioning. If you only query the present, versioning costs you nothing at read time.</p>
+
+      <h2>The past: it depends on one index</h2>
+      <p>A past version is computed from the log: the quads whose latest change at or before the tick is an addition. That is a log scan with one probe per candidate row. The main configuration, 250 commits back:</p>
+      <table>
+        <thead><tr><th>Query</th><th>Present</th><th>Past, plain log</th><th>Past, log + as-of index</th></tr></thead>
+        <tbody>
+          <tr><td>subject lookup</td><td>0.02 ms</td><td>0.06 ms (3.0×)</td><td>0.07 ms (3.1×)</td></tr>
+          <tr><td>value lookup</td><td>1.86 ms</td><td>19.0 ms (10×)</td><td>2.12 ms (1.2×)</td></tr>
+          <tr><td>star join</td><td>0.18 ms</td><td>17.6 ms (99×)</td><td>0.60 ms (3.4×)</td></tr>
+          <tr><td>group by</td><td>0.91 ms</td><td>25.0 ms (27×)</td><td>15.2 ms (16.5×)</td></tr>
+        </tbody>
+      </table>
+      <ul>
+        <li><strong>The subject is bound: about 3×, index or not.</strong> The log's key starts with the subject, so the version is read from a handful of log rows. The factor is the extra probe per row.</li>
+        <li><strong>Only the predicate or object is bound: 10–100× without the as-of index, 1–3.4× with it.</strong> Without it, nothing leads to the matching rows, so the whole log is scanned. The as-of index adds predicate-first and object-first orders, so the past is read the way the present is.</li>
+        <li><strong>Aggregating a whole predicate: about 16× even with the index.</strong> The query has to consider every historical row of <code>:status</code>, not just the current ones, and each pays a probe. The index narrows the scan, but it cannot avoid it.</li>
+      </ul>
+
+      <h2>How the cost grows</h2>
+      <p><strong>With the store.</strong> At 400,000 triples and 500 commits, 250 commits back:</p>
+      <table>
+        <thead><tr><th>Query</th><th>Present</th><th>Plain log</th><th>+ as-of index</th></tr></thead>
+        <tbody>
+          <tr><td>value lookup</td><td>2.35 ms</td><td>82.3 ms (35×)</td><td>2.57 ms (1.1×)</td></tr>
+          <tr><td>star join</td><td>0.96 ms</td><td>82.7 ms (86×)</td><td>2.85 ms (3.0×)</td></tr>
+          <tr><td>group by</td><td>4.40 ms</td><td>116 ms (26×)</td><td>59.8 ms (13×)</td></tr>
+        </tbody>
+      </table>
+      <p>Without the index the cost follows the size of the log, so it grows with the store. With the index, selective queries keep their factor as the store grows five-fold.</p>
+      <p><strong>With the history.</strong> At 2,000 commits instead of 500 (143,502 log rows), 1,000 commits back:</p>
+      <table>
+        <thead><tr><th>Query</th><th>Present</th><th>Plain log</th><th>+ as-of index</th></tr></thead>
+        <tbody>
+          <tr><td>subject lookup</td><td>0.02 ms</td><td>0.12 ms (5.7×)</td><td>0.12 ms (5.8×)</td></tr>
+          <tr><td>value lookup</td><td>4.58 ms</td><td>31.1 ms (6.8×)</td><td>8.08 ms (1.8×)</td></tr>
+          <tr><td>star join</td><td>0.14 ms</td><td>27.1 ms (200×)</td><td>0.63 ms (4.8×)</td></tr>
+          <tr><td>group by</td><td>0.88 ms</td><td>38.7 ms (44×)</td><td>30.8 ms (34×)</td></tr>
+        </tbody>
+      </table>
+      <p>A longer history hurts in two ways:</p>
+      <ul>
+        <li><strong>Frequently changed quads.</strong> Each has more log rows to skip over, so even the subject lookup rises from 3× to about 6×.</li>
+        <li><strong>Whole-history aggregates.</strong> They grow with the history, from 16× to 34× here.</li>
+      </ul>
+      <p>Selective queries with the index stay within 5× of the present.</p>
+      <p><strong>With depth.</strong> Reading further back is <em>cheaper</em>: fewer log rows are visible at an older tick. In the main configuration with the index, the value lookup costs 3.4 ms at <code>HEAD</code>, 2.0 ms 250 commits back and 0.7 ms at the oldest commit. Without the index the same query goes from 22 ms to 15 ms. Asking for the present through the log (<code>as_of: "HEAD"</code>) is the most expensive way to read it, so don't: omit the version.</p>
+
+      <h2>What this means for each use case</h2>
+      <table>
+        <thead><tr><th>Use case</th><th>Choose</th><th>What to expect</th></tr></thead>
+        <tbody>
+          <tr><td>Change feeds, incremental export</td><td><code>stamped</code> (additions) or <code>log</code> (with removals)</td><td>No read slowdown for the present. The feed reads by tick. <code>stamped</code> costs no extra rows per triple.</td></tr>
+          <tr><td>Agent memory: "what did it believe then"</td><td><code>log</code> + as-of index</td><td>Lookups and joins at a past time at 1–5× the present.</td></tr>
+          <tr><td>Curated graphs: review a commit</td><td><code>log</code></td><td><code>diff</code> and <code>changes</code> read the commit's rows by tick. Add the index if reviewers also query the past.</td></tr>
+          <tr><td>Audit: "what did we know then"</td><td><code>log</code>, plus the index if queried often</td><td>Subject lookups at about 3× without it. Other patterns need it.</td></tr>
+          <tr><td>Reproducible reports over the past</td><td><code>log</code> + as-of index</td><td>Aggregates over whole predicates run 13–34× slower than on the present. Fine for a report, not for a dashboard.</td></tr>
+          <tr><td>Caches, derived stores</td><td><code>off</code></td><td>Nothing.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>What will make the slow cases faster</h2>
+      <p>The one case that stays expensive is an aggregate over a predicate's whole history, and it grows with the history. The fix is <strong>checkpoints</strong>: materialize a version every <em>n</em> commits, then read a past version as the nearest checkpoint plus the changes after it. That bounds the scan by <em>n</em> instead of by the whole history. It is the first design question for branches and merge, because they read every branch that is not checked out through the log. It will be settled with a run of <a href="https://aic.ai.wu.ac.at/qadlod/bear.html">BEAR</a>, the benchmark for versioned RDF archives, before branches are built.</p>
+
+      <h2>Reproduce it</h2>
+<pre><code>cargo run --release -p oxilite-bench --bin as-of-latency                <span class="c"># 20,000 tickets, 500 commits</span>
+cargo run --release -p oxilite-bench --bin as-of-latency -- 20000 2000   <span class="c"># a longer history</span>
+cargo run --release -p oxilite-bench --bin as-of-latency -- 100000 500   <span class="c"># a bigger store</span>
+node testsuite/d1-sidecar/server.mjs &amp;                                  <span class="c"># a local D1</span>
+cargo run --release -p oxilite-bench --bin write-cost -- http://localhost:8787</code></pre>
+
+      <div class="callout">
+        <p><strong>The takeaway.</strong> Versioning never slows down the present. A store clock is close to free, and a full log costs 42&nbsp;% more rows written and about 5&nbsp;% more time per commit. The past is where the cost lives. It is about 3× for lookups by entity, and 1–5× for selective queries once you add the as-of index. Aggregates over a whole history remain the expensive case, and checkpoints are next.</p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt="" width="28" height="28"><span>oxilite</span></a>
+      <span>MIT or Apache-2.0</span>
+      <nav aria-label="Rechtliches">
+        <a href="../impressum.html">Impressum</a>
+        <a href="../datenschutz.html">Datenschutz</a>
+        <a href="../agb.html">AGB</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>

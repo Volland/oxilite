@@ -22,6 +22,7 @@
         <a href="#features" class="hide-sm">Features</a>
         <a href="#start" class="hide-sm">Get started</a>
         <a href="#d1" class="hide-sm">Cloudflare D1</a>
+        <a href="#versioning" class="hide-sm">Versioning</a>
         <a href="#datalog" class="hide-sm">Datalog</a>
         <a href="#credentials" class="hide-sm">Credentials</a>
         <a href="#studio" class="hide-sm">Studio</a>
@@ -71,6 +72,7 @@
           <div class="card"><h3>Covering indexes</h3><p><code>WITHOUT ROWID</code> quads clustered on <code>spog</code> plus <code>posg</code> and <code>ospg</code>. Every scan is index-only.</p></div>
           <div class="card"><h3>Its own planner</h3><p>Per-predicate and per-class statistics drive join order, enforced with <code>CROSS JOIN</code>. <code>explain()</code> shows the SQL.</p></div>
           <div class="card"><h3>Atomic writes</h3><p>Every update, including <code>DELETE/INSERT … WHERE</code>, is one self-reading batch. That fits D1, where <code>batch()</code> is the only transaction.</p></div>
+          <div class="card"><h3>Time travel, opt-in</h3><p>Turn versioning on per store, and every write becomes a commit you can query, diff and attribute. With it off, the store is unchanged. <a href="#versioning">Versioning →</a></p></div>
         </div>
       </div>
     </section>
@@ -129,6 +131,39 @@ oxilite query   -l data.sqlite -q <span class="s">'SELECT * WHERE { ?s ?p ?o } L
 oxilite explain -l data.sqlite -q <span class="s">'…'</span>              <span class="c"># the SQL and the join order</span>
 oxilite serve   -l data.sqlite -b 127.0.0.1:7879     <span class="c"># /query, /update, /store</span></code></pre>
         </div>
+      </div>
+    </section>
+
+    <section id="versioning" class="band-soft">
+      <div class="wrap">
+        <span class="eyebrow">New · Versioning</span>
+        <h2>Every write, remembered<span class="dot">.</span></h2>
+        <p class="sub">Turn on versioning per store and oxilite keeps its history in the same SQLite file or D1 database: an immutable change log, commits with author and message, and SPARQL and Datalog queries on any past version. Off by default, and a store without it is exactly the store you had.</p>
+<pre><code>oxilite update -l kb.sqlite --versioning log -m <span class="s">"close t1"</span> -u <span class="s">'…'</span>     <span class="c"># every write is a commit</span>
+oxilite query  -l kb.sqlite --as-of HEAD~1 -q <span class="s">'SELECT …'</span>           <span class="c"># the store one commit ago</span>
+oxilite versioning diff -l kb.sqlite HEAD~1                    <span class="c"># A / D lines, RDF Patch style</span>
+
+SELECT ?t ?old ?new WHERE {                                     <span class="c"># compare versions in one query</span>
+  ?t ex:status ?new
+  SERVICE &lt;oxilite:version/HEAD~1&gt; { ?t ex:status ?old }
+  FILTER(?old != ?new)
+}</code></pre>
+        <div class="table-wrap" style="margin:24px 0">
+          <table>
+            <thead><tr><th>Level</th><th>What the store keeps</th><th>Rows written per triple on D1 (measured)</th></tr></thead>
+            <tbody>
+              <tr><td><code>off</code> (default)</td><td>the present</td><td>4.81</td></tr>
+              <tr><td><code>stamped</code></td><td>a store clock: each write is a tick, each quad records the tick that added it</td><td>4.82</td></tr>
+              <tr><td><code>log</code></td><td>an immutable change log: every addition and removal, any past version on request</td><td>6.82</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="grid">
+          <div class="card"><h3>Immutable history, as data</h3><p>Triggers record every change, whoever writes it, and no one can edit the log. <code>GRAPH &lt;oxilite:history&gt;</code> answers "who changed this, and when" in SPARQL. Datalog and Cypher read the past too.</p></div>
+          <div class="card"><h3>The present stays fast</h3><p>Current-state queries keep their SQL and their plans; only a query that names a past version reads the log. On D1 a batch is one commit, and the clock needs no coordination.</p></div>
+          <div class="card"><h3>Explicit levels</h3><p>Opening a store never changes its level. Raise or lower it with a command or a D1 migration. Upgrades keep every quad, and downgrades freeze history unless you allow the loss.</p></div>
+        </div>
+        <p style="margin-top:20px"><a href="articles/versioning-knowledge-graph-memory.html">Overview and use cases →</a> · <a href="articles/time-travel.html">Walkthrough →</a> · <a href="articles/versioning-benchmarks.html">Benchmarks →</a> · <a href="articles/versioning-on-d1.html">Design on D1 →</a></p>
       </div>
     </section>
 
@@ -260,8 +295,32 @@ code --install-extension pavlyshyn.oxilite-studio
         <h2>Articles<span class="dot">.</span></h2>
         <p class="sub">Guides and design notes: what you can build with oxilite and how it works inside. <a href="articles/">All articles →</a></p>
         <div class="articles">
+          <a class="article-card" href="articles/versioning-knowledge-graph-memory.html">
+            <span class="kicker">Versioning · Overview · Use cases · New</span>
+            <h3>A knowledge graph with a memory</h3>
+            <p>What versioning records, what you can ask of the past, and the use cases it was built for: agent memory, curated graphs, audit, change feeds and reproducible analysis.</p>
+            <span class="more">Read the overview →</span>
+          </a>
+          <a class="article-card" href="articles/versioning-benchmarks.html">
+            <span class="kicker">Versioning · Benchmarks · New</span>
+            <h3>How much does versioning slow oxilite down?</h3>
+            <p>Write cost, commit latency, storage, and queries on the present and the past at three sizes: the present costs the same, the past from 1× to 200×, and why.</p>
+            <span class="more">See the numbers →</span>
+          </a>
+          <a class="article-card" href="articles/time-travel.html">
+            <span class="kicker">Versioning · Time travel</span>
+            <h3>Time travel for your knowledge graph</h3>
+            <p>Turn on versioning per store: commits with authors and messages, SPARQL and Datalog on any past version, versions compared in one query, diffs, level changes and purges.</p>
+            <span class="more">Read the walkthrough →</span>
+          </a>
+          <a class="article-card" href="articles/versioning-on-d1.html">
+            <span class="kicker">Versioning · Cloudflare D1 · Design</span>
+            <h3>What history costs on D1</h3>
+            <p>Triggers, a clock with no coordination, a genesis snapshot, and the measured bill: zero extra rows per triple for a store clock, two for a full change log.</p>
+            <span class="more">Read the design notes →</span>
+          </a>
           <a class="article-card" href="articles/oxilite-studio.html">
-            <span class="kicker">VS Code · Tooling · New</span>
+            <span class="kicker">VS Code · Tooling</span>
             <h3>oxilite studio: a workbench for knowledge graphs</h3>
             <p>Install the VS Code extension and tour it: completion from your own data, reasoning that explains itself, SHACL on the line that broke it, tests in CI, D1 and MCP.</p>
             <span class="more">Take the tour →</span>

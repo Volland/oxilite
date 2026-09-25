@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What history costs on D1 – oxilite</title>
+  <meta name="description" content="How oxilite keeps an immutable history of an RDF store on Cloudflare D1: triggers, a store clock with no coordination, a genesis snapshot, and the measured cost in rows written per triple.">
+  <meta property="og:title" content="What history costs on D1">
+  <meta property="og:description" content="A store clock for zero extra rows per triple, a full change log for two: the design behind oxilite's versioning, measured on D1.">
+  <meta property="og:image" content="../assets/logo.png">
+  <meta name="theme-color" content="#0a0a0a">
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg">
+  <link rel="icon" type="image/png" href="../assets/logo.png">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt=""><span>oxi<b>lite</b></span></a>
+      <nav class="nav" aria-label="Main">
+        <a href="../">Home</a>
+        <a href="./">Articles</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="article">
+    <article class="wrap">
+      <span class="kicker">Versioning · Cloudflare D1 · Design notes</span>
+      <h1>What history costs on D1</h1>
+      <p class="standfirst">On Cloudflare D1 every row written is billed, index entries included. So the question behind oxilite's versioning was never whether a store could keep its history. It was how many rows that history costs. The answer: nothing for a store clock, two rows per change for a full, immutable, queryable log, and nothing at all for stores that don't want history.</p>
+      <p class="meta">Design notes · Numbers from <a href="https://github.com/Volland/oxilite/blob/main/bench/src/bin/write-cost.rs"><code>bench write-cost</code></a> on a local D1 (Miniflare), 5,000 triples in batches of 500 · Decisions D29–D32 in <a href="https://github.com/Volland/oxilite/blob/main/lat.md/decisions.md"><code>lat.md/decisions.md</code></a> · The user-facing tour is <a href="time-travel.html">Time travel for your knowledge graph</a>; read latency at several sizes is in <a href="versioning-benchmarks.html">How much does versioning slow oxilite down?</a></p>
+
+      <h2>The constraints</h2>
+      <ul>
+        <li><strong>Rows are money.</strong> D1 bills rows written, and each index entry is a row. A plain oxilite store writes 4.81 rows per triple: the quad, its three permutation indexes, and the term dictionary amortised.</li>
+        <li><strong>A batch is the only transaction.</strong> <code>db.batch()</code> is D1's one atomic unit. oxilite already compiles every write, <code>DELETE/INSERT … WHERE</code> included, into one self-reading batch.</li>
+        <li><strong>One writer.</strong> A D1 database has a single primary that applies writes in order. That turned out to be the most useful property of all.</li>
+        <li><strong>No extensions, and limits.</strong> Only plain SQL, at most 50 statements per batch, and statements under about 100 KB.</li>
+      </ul>
+
+      <h2>Three ways to keep history</h2>
+      <table>
+        <thead><tr><th>Design</th><th>Present-state queries</th><th>Immutable?</th><th>Verdict</th></tr></thead>
+        <tbody>
+          <tr><td>Validity intervals on <code>quads</code> (<code>added</code>, <code>removed</code> columns)</td><td>Every pattern filters on validity</td><td>No: a delete updates a row</td><td>Rejected</td></tr>
+          <tr><td>The log is the store; every query reads it</td><td>Every pattern pays a log probe</td><td>Yes</td><td>Rejected</td></tr>
+          <tr><td><code>quads</code> stays the present; a log sits beside it</td><td>Unchanged: same SQL, same plans</td><td>Yes</td><td><strong>Chosen</strong></td></tr>
+        </tbody>
+      </table>
+      <p>Almost every query asks about now, so now must not get slower. With the log beside <code>quads</code>, a store only reads history when a query names a past version.</p>
+
+      <h2>The log writes itself</h2>
+      <p>oxilite has many writers: SPARQL updates, bulk loads, quad inserts, Cypher writes, JSON-LD documents and credentials, and the studio. Teaching each of them to log would be a bug waiting for the next writer. The log is written by triggers on <code>quads</code> instead, so it records what actually happened to the table, whoever did it.</p>
+      <p>Triggers also give no-op detection for free. <code>INSERT OR IGNORE</code> of a quad that is already present fires no <code>AFTER INSERT</code> trigger, and a <code>DELETE</code> that matches nothing fires no <code>AFTER DELETE</code>. Re-asserting what you already know costs zero log rows. A quad added and removed within the same batch deletes its own log row instead of adding a second, so each batch records its net effect.</p>
+      <p>The log is immutable because the database enforces it. <code>BEFORE UPDATE</code> and <code>BEFORE DELETE</code> triggers abort on any row older than the batch being written. The only exception is an explicit purge for erasure requests, which is itself recorded.</p>
+
+      <h2>A clock with no coordination</h2>
+      <p>Each atomic write gets a <em>tick</em>, and that tick is the commit. The store, not the writer, prepends two statements to every batch that writes <code>quads</code>. The first writes the tick's time, author and message as terms, so the history can be queried as RDF. The second opens the tick:</p>
+<pre><code>INSERT INTO ticks(t, time, kind, author, message)
+  SELECT coalesce(max(t), 0) + 1, <span class="c">/* now */</span> …, 0, 'ada', 'close t1' FROM ticks</code></pre>
+      <p>Because D1 has one writer, <code>max(t) + 1</code> never goes backwards. There are no client clocks to skew, no counter row to contend on, and no round trip to fetch a number. The tick carries its wall time for <code>@2026-09-01T…</code> queries, but ordering never depends on clocks. Triggers and inserts read the current tick with <code>(SELECT max(t) FROM ticks)</code>, which is one index probe.</p>
+      <p>The price is two statements: a versioned store's batches keep two of D1's 50 statements for the tick, so bulk loads chunk to 48. Stores without versioning keep all 50.</p>
+      <p>Why write terms at all? A term's id is a hash computed in Rust, so SQL can't mint an id for a new literal. The tick's time, author and message are known in Rust when the tick opens, so they are written then. A commit itself is identified by its tick as an integer, the one kind of id SQL can compute. That is what lets the history graph and Datalog's history relations be plain SQL over the log, with no stored copy.</p>
+
+      <h2>A timestamp that costs nothing</h2>
+      <p>The <code>stamped</code> level records on every quad the tick that added it. That sounds like an update per quad, but it isn't one. The stamp is a column, <code>quads.t</code>, filled by the insert itself (<code>… SELECT column1, …, (SELECT max(t) FROM ticks) FROM (VALUES …)</code>). D1 bills rows, not bytes, so a wider row costs nothing extra.</p>
+      <p>Adding the column to an existing store is an <code>ALTER TABLE … ADD COLUMN</code>, which SQLite does in its metadata without rewriting a row. The column is not part of any secondary index, so every triple-pattern scan stays index-only. Measured: <strong>4.82 rows per triple against 4.81 unversioned</strong>. The difference is three rows per batch (the tick, its time term and that term's index entry), and nothing per triple.</p>
+
+      <h2>Why genesis holds the whole store</h2>
+      <p>Raising a store to <code>log</code> copies every quad into the log as the genesis commit. The shortcut is tempting. A quad with no log entries must have been there since the log started, so why copy it?</p>
+      <p>Because the shortcut stops being true. Lower the level for a while (the log freezes), write, then raise it again. A quad added during the gap has no log entries either, and the shortcut would place it in versions from before it existed. We caught this case while designing the resume, and it decided the question. With a recorded genesis, the log alone describes every version. A freeze is a boundary. A resume records the gap's net changes as one commit against the frozen state, and a query that asks for a version inside the gap gets an error that names it. The genesis costs one log row per quad, once. For a store created versioned, it is free.</p>
+
+      <h2>Measured</h2>
+      <p><code>bench write-cost</code> loads the same 5,000 triples into a fresh local D1 for each configuration and sums D1's own <code>rows_written</code>:</p>
+      <table>
+        <thead><tr><th>Store</th><th>Rows written</th><th>Per triple</th><th>What the extra rows are</th></tr></thead>
+        <tbody>
+          <tr><td>No graph index</td><td>19,060</td><td>3.81</td><td>—</td></tr>
+          <tr><td>Default</td><td>24,060</td><td>4.81</td><td>—</td></tr>
+          <tr><td>Default + full-text index</td><td>25,060</td><td>5.01</td><td>FTS5 postings</td></tr>
+          <tr><td><code>stamped</code></td><td>24,090</td><td>4.82</td><td>three rows per batch (30): the tick and its time term</td></tr>
+          <tr><td><code>log</code></td><td>34,100</td><td>6.82</td><td>a log row and its <code>tx</code> index entry per change, plus the tick, its terms and a commit per batch</td></tr>
+          <tr><td><code>log</code> + as-of index</td><td>44,100</td><td>8.82</td><td>two more log index entries per change</td></tr>
+        </tbody>
+      </table>
+      <p>The <code>tx</code> index is what makes history browsable: it answers "what did commit 42 change" and "every change since 40" without scanning the log. The optional as-of index adds predicate-first and object-first orders, so as-of queries with an unbound subject use an index instead of scanning. Buy it if you query the past often. Otherwise the plain log answers the same questions with more reads.</p>
+
+      <h2>Choosing a level</h2>
+      <p>If you read the past often, add the as-of index (<code>asOfIndex: true</code>, <code>--as-of-index</code>). It costs 8.82 rows per triple instead of 6.82.</p>
+      <ul>
+        <li><strong><code>off</code></strong> if nothing needs to know what changed. Most caches and derived stores fall here.</li>
+        <li><strong><code>stamped</code></strong> if you need "what's new since" and who wrote it, but not "what did it look like". It fits incremental exports, search indexing and sync feeds, at no extra rows per triple.</li>
+        <li><strong><code>log</code></strong> if you need to answer questions about the past: audit, agent memory, curated graphs, undoing an import. It costs 42&nbsp;% more rows written. Reads of the present cost the same.</li>
+      </ul>
+
+      <h2>Levels change by migration</h2>
+      <p>Opening a store never changes its level. Starting history is a snapshot, billed once, and deleting history cannot be undone, so neither may happen because a flag in a config file changed. On D1, where schema changes go through migrations, the change is a migration file:</p>
+<pre><code>npx oxilite-d1 schema --versioning log &gt; migrations/0001_oxilite.sql            <span class="c"># a new database</span>
+npx oxilite-d1 versioning-migration --from off --to log &gt; migrations/0002_versioning.sql   <span class="c"># an existing one</span>
+npx wrangler d1 migrations apply my-graph --remote</code></pre>
+      <p>The Worker then opens the store with <code>{ migrated: true }</code> and picks up the level the database records. Lowering a level freezes the history and keeps it readable. Deleting it takes an explicit <code>--allow-loss</code>.</p>
+
+      <h2>A D1 detail worth knowing</h2>
+      <p>The first version of the capture triggers passed every test on the bundled SQLite and then failed on D1 with <code>near "AS": syntax error</code>. SQLite forbids an alias on the target table of a <code>DELETE</code> inside a trigger body. The bundled SQLite accepted it anyway, and D1 enforces the rule. The versioning suite now runs the same scenario on the bundled SQLite, the system SQLite, the D1 code path and a real local D1, so a difference like that fails a test instead of a deploy.</p>
+
+      <h2>What reading the past costs</h2>
+      <p>A version is the set of quads whose latest logged change at or before its tick is an addition: a log scan with one <code>NOT EXISTS</code> probe on the log's key. It compiles into the same single SQL statement as any other query. <a href="https://github.com/Volland/oxilite/blob/main/bench/src/bin/as-of-latency.rs"><code>bench as-of-latency</code></a> times the same queries on the present and on a version 250 commits back. The store has 80,000 triples, 500 commits and 95,724 log rows, on the bundled SQLite, and each figure is the median of 15 runs in ms:</p>
+      <table>
+        <thead><tr><th>Query</th><th>Present</th><th>Past, plain log</th><th>Past, as-of index</th></tr></thead>
+        <tbody>
+          <tr><td>Subject lookup</td><td>0.02</td><td>0.06 (3.2×)</td><td>0.06 (3.0×)</td></tr>
+          <tr><td>Value lookup (<code>?t :status "blocked"</code>)</td><td>1.93</td><td>18.92 (9.8×)</td><td>2.02 (1.0×)</td></tr>
+          <tr><td>Star join, four patterns</td><td>0.17</td><td>18.00 (104×)</td><td>0.64 (3.6×)</td></tr>
+          <tr><td>Group by status</td><td>0.94</td><td>25.17 (27×)</td><td>15.31 (17×)</td></tr>
+        </tbody>
+      </table>
+      <p>Three findings:</p>
+      <ul>
+        <li><strong>The present costs the same</strong> at every level. An unversioned store's queries also compile to exactly the SQL they compiled to before versioning existed, which a golden test pins for the W3C query and update corpus.</li>
+        <li><strong>The plain log is fast only when the subject is bound.</strong> Its key starts with the subject, so a pattern bound only by predicate or object scans the whole log. The as-of index fixes that, bringing selective patterns to 1–3.6×, for two more rows written per change.</li>
+        <li><strong>Aggregating a predicate's whole history stays slower, 17×</strong>, because every historical row pays a probe. Checkpoints, meaning materialized snapshots every <em>n</em> commits, would bound it. They are the first design question for branches, which read every non-checked-out branch through the log. A BEAR-B run will confirm these synthetic numbers before branches are built.</li>
+      </ul>
+
+      <div class="callout">
+        <p><strong>The takeaway.</strong> History on D1 is priced in rows. oxilite keeps the present untouched, records the past with triggers, and numbers commits with a clock that needs no coordination because D1 has one writer. A timestamp costs zero rows per triple, a complete log costs two, and a store that doesn't opt in costs nothing.</p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt="" width="28" height="28"><span>oxilite</span></a>
+      <span>MIT or Apache-2.0</span>
+      <nav aria-label="Rechtliches">
+        <a href="../impressum.html">Impressum</a>
+        <a href="../datenschutz.html">Datenschutz</a>
+        <a href="../agb.html">AGB</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>

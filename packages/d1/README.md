@@ -104,7 +104,22 @@ The same store runs on a Durable Object's embedded SQLite through a small adapte
 |---|---|
 | `@oxilite/d1` | Workers: pass the wasm module (`@oxilite/d1/oxilite.wasm`) to `D1Store.open` |
 | `@oxilite/d1/node` | Node.js, tests and Miniflare: the wasm core loads itself |
-| `npx oxilite-d1 schema [--jsonld]` | Print the schema as a D1 migration (with the JSON-LD tables) |
+| `npx oxilite-d1 schema [--jsonld] [--versioning log]` | Print the schema as a D1 migration (with the JSON-LD tables, with versioning) |
+| `npx oxilite-d1 versioning-migration --from off --to log` | Print the migration that changes an existing database's versioning level |
+
+### Versioning
+
+Open or create the store with `versioning: "stamped"` (a store clock) or `"log"` (an immutable change log). Every D1 batch is then one commit:
+
+```ts
+const store = await D1Store.open(env.DB, { wasm, versioning: "log" });
+await store.withCommit({ author: "ada", message: "close t1" }, (s) => s.update(closeTicket));
+const before = await store.query(sparql, { as_of: "HEAD~1" });     // or "#42", "@2026-09-01T12:00:00Z"
+const diff = await store.diff("HEAD~1");                            // [{ tick, added, quad }]
+const log = await store.history(20);                                // [{ tick, time, kind, author, message, added, removed }]
+```
+
+`versioning()`, `setVersioning(level, { allowLoss })`, `setCommitInfo`, `changes(after)`, `resolveVersion` and `purge(pattern, reason)` complete the API. `SERVICE <oxilite:version/HEAD~1> { … }` compares versions inside one query, `GRAPH <oxilite:history>` reads commits and changes as RDF, and `cypher(q, {}, { asOf: "HEAD~1" })` matches the past. Measured on D1: `stamped` writes 4.82 rows per triple against 4.81 for a plain store, `log` 6.82 and `log` with `asOfIndex` 8.82. A store keeps its level: change an existing database with a migration.
 
 ## Tips
 

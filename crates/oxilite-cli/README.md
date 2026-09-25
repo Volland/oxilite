@@ -54,6 +54,23 @@ oxilite serve    -l data.sqlite -b 127.0.0.1:7879                # /query, /upda
 oxilite serve    -l data.sqlite --library /usr/lib/libsqlite3.so # the same file on the system SQLite
 ```
 
+### Versioning
+
+```bash
+oxilite update -l kb.sqlite --versioning log -m "seed" --author ada -u 'INSERT DATA { … }'  # a new store at level log
+oxilite query  -l kb.sqlite --as-of HEAD~1 -q 'SELECT …'     # the store one commit ago (#42, @2026-09-01T12:00:00Z)
+oxilite versioning status -l kb.sqlite                       # level, head tick, genesis, commits
+oxilite versioning log    -l kb.sqlite -n 20                 # commits: tick, time, +added -removed, message, author
+oxilite versioning diff   -l kb.sqlite HEAD~3 HEAD           # net changes, as RDF Patch lines (A / D)
+oxilite versioning changes -l kb.sqlite --since 40           # every change after tick 40
+oxilite versioning set    -l kb.sqlite log                   # raise an existing store's level (off, stamped, log)
+oxilite versioning purge  -l kb.sqlite --subject http://ex/alice --reason "erasure request" --yes
+oxilite versioning migration --from off --to log             # the same change as SQL, for wrangler d1 migrations
+oxilite schema --versioning log                              # the whole schema of a new versioned store
+```
+
+A store keeps its level: opening never changes it. Lowering a level freezes the history (queryable up to the freeze) and deletes it only with `--allow-loss`. `serve` answers `/query?version=HEAD~1`.
+
 `serve` speaks the SPARQL 1.1 Protocol and Graph Store Protocol at `/query`, `/update` and `/store`, so clients and tools written for `oxigraph serve` work unchanged. Query results come as JSON, XML, CSV or TSV, graph results in any RDF format. Run `oxilite help <command>` for every option.
 
 The database is an ordinary SQLite file: open it from Rust with [`oxilite`](https://crates.io/crates/oxilite), from Node.js with [`@oxilite/node`](https://www.npmjs.com/package/@oxilite/node), or with any SQLite tool.

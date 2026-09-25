@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>A knowledge graph with a memory – oxilite</title>
+  <meta name="description" content="Versioning in oxilite: commits with authors and messages, SPARQL and Datalog on any past version, diffs and change feeds, in SQLite and Cloudflare D1. What it does and the use cases it is for.">
+  <meta property="og:title" content="A knowledge graph with a memory">
+  <meta property="og:description" content="oxilite's versioning: what it records, how you query the past, and the use cases it was built for — agent memory, curated graphs, audit, change feeds and reproducible analysis.">
+  <meta property="og:image" content="../assets/logo.png">
+  <meta name="theme-color" content="#0a0a0a">
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg">
+  <link rel="icon" type="image/png" href="../assets/logo.png">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt=""><span>oxi<b>lite</b></span></a>
+      <nav class="nav" aria-label="Main">
+        <a href="../">Home</a>
+        <a href="./">Articles</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="article">
+    <article class="wrap">
+      <span class="kicker">Versioning · Overview · Use cases</span>
+      <h1>A knowledge graph with a memory</h1>
+      <p class="standfirst">Most databases hold the present and forget the rest. For a knowledge graph that is a real limit. The questions that matter are often about the past: what the agent believed, who changed a fact, which import broke the ontology. oxilite can now remember, inside the same SQLite file or D1 database, and answer those questions with SPARQL and Datalog.</p>
+      <p class="meta">An overview · For the step-by-step tour see <a href="time-travel.html">Time travel for your knowledge graph</a>; for the numbers, <a href="versioning-benchmarks.html">How much does versioning slow oxilite down?</a>; for every option, the <a href="https://github.com/Volland/oxilite/blob/main/docs/versioning.md">reference</a></p>
+
+      <h2>What versioning records</h2>
+      <p>Versioning is chosen per store, at one of three levels. A store without it is exactly the store it was before: the same tables and the same SQL, which a golden test holds to the last release, and the same bill.</p>
+      <table>
+        <thead><tr><th>Level</th><th>What the store remembers</th></tr></thead>
+        <tbody>
+          <tr><td><code>off</code> (default)</td><td>Nothing: the present only.</td></tr>
+          <tr><td><code>stamped</code></td><td>A store clock. Every write is a <em>tick</em> with a time, an author and a message, and every quad records the tick that added it.</td></tr>
+          <tr><td><code>log</code></td><td>Everything. An immutable change log of every addition and removal, so any past version can be queried and any two versions compared.</td></tr>
+        </tbody>
+      </table>
+      <p>A write is a commit: a SPARQL update, a load batch, a Cypher write or a JSON-LD document. Triggers under the quad table record it, so no write path can skip the history, and writes that change nothing record nothing. The log cannot be edited. The database itself refuses to update or delete recorded history, and the only exception is an audited purge for erasure requests.</p>
+
+      <h2>What you can ask</h2>
+      <ul>
+        <li><strong>Any query, at any version.</strong> <code>as_of: "HEAD~3"</code>, <code>"#42"</code> or <code>"@2026-09-01T12:00:00Z"</code> runs a SPARQL query against the store as it was, with paths, <code>OPTIONAL</code> and <code>GRAPH</code> included, still as one SQL statement. On the command line it is <code>--as-of</code>, and on the HTTP endpoint <code>?version=</code>.</li>
+        <li><strong>Two versions in one query.</strong> <code>SERVICE &lt;oxilite:version/HEAD~1&gt; { … }</code> reads a group at another version, so "what changed and from what" is a single query.</li>
+        <li><strong>Rules over the past.</strong> A Datalog program with <code>@version "HEAD~1" .</code> runs its recursion on that version. A single atom can read another version with <code>at "HEAD~1"</code>, or the version of a commit with <code>at ?c</code>.</li>
+        <li><strong>Property graphs too.</strong> Cypher takes the same <code>asOf</code> option.</li>
+        <li><strong>History as a graph.</strong> <code>GRAPH &lt;oxilite:history&gt;</code> describes every commit with PROV-O (time, author, message, the commit before) and every change as a triple term. "Who revoked Alice's admin role" is one SPARQL query. Datalog reads the same history as <code>commit</code>, <code>added</code> and <code>removed</code> relations.</li>
+        <li><strong>The history itself.</strong> <code>history()</code> lists commits with author, message and counts. <code>diff(from, to)</code> gives the net change between two versions. <code>changes(since)</code> is a change feed. The CLI prints diffs and changes as RDF Patch.</li>
+        <li><strong>Levels on demand.</strong> Raise a live store to <code>log</code> and its current state becomes the genesis commit. Lower it and the history freezes but stays readable. Raise it again and the gap becomes one commit. Nothing is deleted without <code>allow_loss</code>.</li>
+      </ul>
+      <p>It works the same on every surface: Rust, <code>@oxilite/node</code>, <code>@oxilite/d1</code> in a Worker, the CLI and the SPARQL endpoint. On D1 a batch is a commit, and level changes ship as migrations.</p>
+
+      <h2>The use cases</h2>
+
+      <h3>1. Agent memory you can audit and roll back</h3>
+      <p>An AI agent that stores what it learns in a knowledge graph needs more than the latest facts. When it gives a wrong answer, you want to know what it believed at that moment, which tool wrote the belief, and how to get rid of it. Give each tool its own author, and every belief is attributed:</p>
+<pre><code><span class="k">await</span> store.withCommit({ author: <span class="s">"web-search"</span>, message: <span class="s">`ingest ${url}`</span> }, (s) =&gt; s.update(facts));
+
+<span class="c">// What did the agent believe when it answered at 14:02?</span>
+<span class="k">const</span> then = <span class="k">await</span> store.query(question, { as_of: <span class="s">"@2026-09-25T14:02:00Z"</span> });
+
+<span class="c">// What did that ingestion change?</span>
+<span class="k">const</span> changed = <span class="k">await</span> store.diff(<span class="s">"#41"</span>, <span class="s">"#42"</span>);</code></pre>
+      <p>Level: <code>log</code>. The diff of a bad commit is exactly the set of triples to revert.</p>
+
+      <h3>2. Curated knowledge graphs and ontologies</h3>
+      <p>When several people, or people and scripts, edit an ontology or a reference graph, reviewers need to see what a change did, not just its message. <code>oxilite versioning log</code> shows who changed what and when, with counts. <code>oxilite versioning diff HEAD~1</code> shows the exact triples. A <code>SERVICE &lt;oxilite:version/…&gt;</code> query turns a review question into a query, such as "which classes lost their <code>rdfs:label</code> in the last ten commits".</p>
+      <p>Level: <code>log</code>. Branches and merge, the natural next step, are planned. See the end of this article.</p>
+
+      <h3>3. Audit: what did we know, and when?</h3>
+      <p>A decision made on the data should be explainable later, against the data as it was, not as it is now. With <code>log</code>, "what did we know at the time of the decision" is a query with <code>as_of</code> set to the decision's timestamp, not a backup to restore. When a person asks to be forgotten, <code>purge</code> removes their triples from the present and from every past version. It records that a purge happened, by whom and why, without recording what was removed.</p>
+
+      <h3>4. Change feeds: search indexes, caches, exports</h3>
+      <p>Many systems keep a derived copy of the graph: a search index, a cache, an analytics export. They need to know what changed since the last sync. At level <code>stamped</code> every quad carries the tick that added it, and the store's clock only moves forward. So "everything added since tick 1,204" is one call, <code>changes(1204)</code>, and it adds no rows per triple on D1. At <code>log</code> the same feed includes removals.</p>
+<pre><code>oxilite versioning changes -l kb.sqlite --since 1204      <span class="c"># A / D lines, grouped by tick</span></code></pre>
+
+      <h3>5. Reproducible analysis</h3>
+      <p>A report, a model's training set or a benchmark built from a live graph changes when the graph does. Record the tick it was built from and anyone can rebuild it exactly: the same query with <code>as_of: "#1204"</code> returns the same answer next month.</p>
+
+      <h3>6. Debugging data pipelines</h3>
+      <p>When something is wrong in the graph, the question is which import did it. The history names every batch, and <code>changes</code> shows what each one did. A Datalog rule with <code>at ?c</code> shows the value of a fact at every commit, so you can see exactly when a derived fact first appeared or disappeared.</p>
+
+      <h2>Which level for which job</h2>
+      <table>
+        <thead><tr><th>Use case</th><th>Level</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td>Change feeds, incremental export, "what's new"</td><td><code>stamped</code></td><td>Additions with their tick and author, no extra rows per triple</td></tr>
+          <tr><td>Agent memory, curated graphs, audit</td><td><code>log</code></td><td>Past versions, removals, diffs, attribution</td></tr>
+          <tr><td>The same, queried often</td><td><code>log</code> + as-of index</td><td>Selective queries on the past near the speed of the present</td></tr>
+          <tr><td>Caches, derived stores</td><td><code>off</code></td><td>Nothing to remember, nothing to pay</td></tr>
+        </tbody>
+      </table>
+
+      <h2>What it costs</h2>
+      <p>In brief:</p>
+      <ul>
+        <li><strong>Current-state queries cost the same</strong> at every level.</li>
+        <li><strong>Writes:</strong> a store clock adds no rows per triple on D1. A full log adds about 42&nbsp;%, and about 83&nbsp;% with the as-of index.</li>
+        <li><strong>Reading the past</strong> costs about 3× the present for subject lookups. With the as-of index, selective queries cost 1–3.5×. Aggregating a predicate's whole history stays much slower.</li>
+      </ul>
+      <p>The full measurements, and why they come out that way, are in <a href="versioning-benchmarks.html">How much does versioning slow oxilite down?</a>.</p>
+
+      <h2>Getting started</h2>
+<pre><code><span class="c"># a new store that keeps its history</span>
+oxilite update -l kb.sqlite --versioning log --author ada -m <span class="s">"seed"</span> -u <span class="s">'INSERT DATA { … }'</span>
+
+<span class="c"># an existing store: raise its level (its current state becomes the genesis commit)</span>
+oxilite versioning set -l kb.sqlite log
+
+<span class="c"># a D1 database: the same change as a migration</span>
+npx oxilite-d1 versioning-migration --from off --to log &gt; migrations/0002_versioning.sql</code></pre>
+
+      <h2>Not yet</h2>
+      <ul>
+        <li><strong>Branches and merge.</strong> Prepare changes apart, review them, validate them against SHACL, then merge. Planned, and gated on the read-latency work described in the benchmark article.</li>
+        <li><strong>Push and pull</strong> between stores, such as a laptop and D1.</li>
+      </ul>
+
+      <div class="callout">
+        <p><strong>The takeaway.</strong> Versioning turns "what is true" into "what was true, when, and who said so", for agents, curators, auditors and the systems that copy your graph. Opt in per store. If you don't, nothing changes.</p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt="" width="28" height="28"><span>oxilite</span></a>
+      <span>MIT or Apache-2.0</span>
+      <nav aria-label="Rechtliches">
+        <a href="../impressum.html">Impressum</a>
+        <a href="../datenschutz.html">Datenschutz</a>
+        <a href="../agb.html">AGB</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>
