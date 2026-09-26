@@ -698,7 +698,7 @@ export interface SchemaRegistration {
   version?: string;
   /** Digest of the document the graph was loaded from, for drift detection. */
   sha256?: string;
-  /** `owl:imports` targets, recorded but not resolved. */
+  /** Import targets (`oxl:imports`); those naming another active registered ontology are resolved. */
   imports?: string[];
   /**
    * The graphs the schema applies to (`oxl:appliesTo`): IRIs, or `DEFAULT_GRAPH_IRI`. Absent or

@@ -389,11 +389,11 @@ Each registered graph is a resource of `<oxilite:schema>` with the graph's IRI a
 | `oxl:OntologyGraph`, `oxl:ShapesGraph`, `oxl:ShExGraph` | The role, as `rdf:type` (subclasses of `oxl:SchemaGraph`); a graph may carry several |
 | `oxl:appliesTo` | A target graph, `oxl:DefaultGraph` or `oxl:AllGraphs`; oxilite writes `oxl:AllGraphs` for every graph, and none is read the same |
 | `oxl:active` | An `xsd:boolean` false (`false`, `"0"^^xsd:boolean`) keeps the graph registered and hidden but contributing nothing; other literals are ignored |
-| `oxl:ontologyIri`, `oxl:version`, `oxl:sha256`, `oxl:loadedAt`, `owl:imports` | What was recorded at registration; imports resolve against registered ontologies |
+| `oxl:ontologyIri`, `oxl:version`, `oxl:sha256`, `oxl:loadedAt`, `oxl:imports` | What was recorded at registration; imports resolve against registered ontologies (an `owl:imports` there, from vocabulary 2, is read too) |
 
-The vocabulary (version 2) ships as Turtle (`registry::VOCABULARY`, `crates/oxilite-core/vocab/oxl.ttl`) with the registry's own SHACL shapes (`oxl:RegistrationShape`), aligned to SD, Dublin Core, PROV and SPDX, and is documented with SPARQL recipes in `docs/schema-registry.md`. Graphs named by blank nodes cannot be registered, since another graph cannot name them.
+The vocabulary (version 2.1) ships as Turtle (`registry::VOCABULARY`, `crates/oxilite-core/vocab/oxl.ttl`) with the registry's own SHACL shapes (`oxl:RegistrationShape`), aligned to SD, Dublin Core, PROV and SPDX, and is documented with SPARQL recipes in `docs/schema-registry.md`. Graphs named by blank nodes cannot be registered, since another graph cannot name them.
 
-The Rust reader, the SQL scopes and the SPARQL recipes agree on every edge case: a graph with two roles is listed and scoped once per role, and only the two lexical forms of an `xsd:boolean` false deactivate. [[crates/oxilite-core/src/registry.rs#problems]] checks what the shapes check without a SHACL engine (`Store::registry_problems`, `oxilite registry check`); readers stay lenient and ignore what the shapes reject. See [[decisions#D35 Registry vocabulary 2: canonical, self-validating, import-aware]].
+The Rust reader, the SQL scopes and the SPARQL recipes agree on every edge case: a graph with two roles is listed and scoped once per role, and only the two lexical forms of an `xsd:boolean` false deactivate. [[crates/oxilite-core/src/registry.rs#problems]] checks what the shapes check without a SHACL engine (`Store::registry_problems`, `oxilite registry check`); readers stay lenient and ignore what the shapes reject. See [[decisions#D35 Registry vocabulary 2: canonical, self-validating, import-aware]] and [[decisions#D36 Registry vocabulary 2.1: consistent under OWL]].
 
 ### Registry operations
 
@@ -403,7 +403,7 @@ Registering replaces the whole description, roles included; remapping replaces o
 
 The stores run them through their ordinary update path ([[crates/oxilite/src/schema_store.rs]]), so they are atomic, versioned when versioning is on, and rebuild both derived caches in the same request. The same text runs on Oxigraph and leaves the same registry graph; a plain `INSERT DATA` into `<oxilite:schema>` registers a graph exactly as the API does. Registering a named graph creates it (`CREATE SILENT GRAPH`); `drop_schema_graph` removes the description and every quad of the graph in one update; removing a named graph also removes its description.
 
-Anything that can change the registry counts as a schema change for the writers and the update planner ([[crates/oxilite-core/src/registry.rs#is_registry_quad]], [[crates/oxilite-core/src/registry.rs#update_touches_registry]]): a quad of `<oxilite:schema>`, an update pattern on it, or a variable-graph pattern that could write a registry triple (a variable or `oxl:` predicate, `owl:imports`, `rdf:type` with a variable or `oxl:` class). Bulk typing through `GRAPH ?g` rebuilds nothing. `owl:imports` in any graph is also a schema-closure trigger.
+Anything that can change the registry counts as a schema change for the writers and the update planner ([[crates/oxilite-core/src/registry.rs#is_registry_quad]], [[crates/oxilite-core/src/registry.rs#update_touches_registry]]): a quad of `<oxilite:schema>`, an update pattern on it, or a variable-graph pattern that could write a registry triple (a variable or `oxl:` predicate, `oxl:imports` included, `owl:imports`, `rdf:type` with a variable or `oxl:` class). Bulk typing through `GRAPH ?g` rebuilds nothing. `owl:imports` in any graph is also a schema-closure trigger.
 
 ### System graphs
 

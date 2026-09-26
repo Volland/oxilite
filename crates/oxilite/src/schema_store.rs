@@ -25,7 +25,7 @@ pub struct Registration {
     pub version: Option<String>,
     /// Digest of the document the graph was loaded from, for drift detection.
     pub sha256: Option<String>,
-    /// `owl:imports` targets. Imports naming another active registered ontology bring its
+    /// Import targets (`oxl:imports`). Imports naming another active registered ontology bring its
     /// axioms into this one's reasoning scopes.
     pub imports: Vec<NamedNode>,
     /// The graphs the schema applies to (`oxl:appliesTo`); empty means every graph.
@@ -61,7 +61,7 @@ impl Registration {
         self
     }
 
-    /// Records `owl:imports` targets.
+    /// Records import targets (`oxl:imports`).
     pub fn with_imports(mut self, imports: impl IntoIterator<Item = NamedNode>) -> Self {
         self.imports = imports.into_iter().collect();
         self

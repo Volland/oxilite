@@ -270,6 +270,8 @@ With `system_graphs`, a new store holds `<oxilite:schema>` and `<oxilite:vocabul
 
 An ontology importing another registered one — recorded in the registry by graph name, or asserted in its graph by `oxl:ontologyIri` — gets its axioms; cycles end, and inactive ontologies are not imported.
 
+The registry records the import as `oxl:imports`, and an `owl:imports` written there by vocabulary 2 still resolves and lists.
+
 Deactivating every ontology then silences reasoning instead of falling back to every graph.
 
 ### The active flag reads alike everywhere
@@ -283,6 +285,10 @@ A graph typed with two roles is listed once per role; setting its targets keeps 
 ### Readers agree on edge cases
 
 Unit test of the reader: two role classes give two entries, only `xsd:boolean` false deactivates, and the SQL reads both lexical forms of false.
+
+### The vocabulary is consistent with the system graphs
+
+Unit test: under RDFS domains, `rdfs:subClassOf` and `owl:disjointWith` of the bundled vocabulary, no system graph described in `<oxilite:schema>` falls into two disjoint classes, and every registration property has the domain `oxl:RegisteredGraph`.
 
 ### Registry problems
 

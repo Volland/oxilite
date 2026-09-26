@@ -682,6 +682,37 @@ fn imports_bring_registered_ontologies_into_scope() {
         values(&store, animals, &rdfs()),
         ["<http://example.com/rex>", "<http://example.com/tom>"]
     );
+    // The registry records it as oxl:imports, never owl:imports (whose domain is owl:Ontology).
+    assert_eq!(
+        values(
+            &store,
+            "SELECT ?p WHERE { GRAPH <oxilite:schema> { ex:zoo ?p ex:core } }",
+            &QueryOptions::default()
+        ),
+        ["<https://oxilite.dev/ns#imports>"]
+    );
+
+    // An owl:imports in the registry, as vocabulary 2 wrote it, still resolves.
+    register("http://example.com/zoo", zoo());
+    load(
+        &store,
+        "GRAPH <oxilite:schema> { ex:zoo owl:imports ex:core }",
+    );
+    assert_eq!(
+        values(&store, animals, &rdfs()),
+        ["<http://example.com/rex>", "<http://example.com/tom>"]
+    );
+    assert_eq!(
+        store
+            .schema_graphs()
+            .unwrap()
+            .iter()
+            .find(|g| g.graph == graph("http://example.com/zoo"))
+            .unwrap()
+            .registration
+            .imports,
+        [NamedNode::new("http://example.com/core").unwrap()]
+    );
 
     // An import asserted in the ontology itself, naming the other's oxl:ontologyIri.
     register("http://example.com/zoo", zoo());
