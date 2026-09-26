@@ -21,7 +21,7 @@ path = "src/main.rs"
 [dependencies]
 oxilite = { workspace = true, features = ["rusqlite", "dylib", "datalog", "cypher"] }
 oxilite-core = { workspace = true, features = ["serde"] }
-oxilite-validate = { path = "../oxilite-validate", version = "0.4.0" }
+oxilite-validate = { path = "../oxilite-validate", version = "0.5.0" }
 oxrdf.workspace = true
 oxiri.workspace = true
 regex.workspace = true
