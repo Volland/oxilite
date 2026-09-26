@@ -6,8 +6,14 @@
 //! `oxl:` vocabulary ([`VOCABULARY`]). Registry operations are plain SPARQL updates built here,
 //! so they run unchanged on Oxigraph or any SPARQL store; the stores run them through their
 //! update path. The SQL fragments below read the same triples to scope the derived caches
-//! (`tbox_closure`, the shape index). While nothing is registered for a role, every graph may
-//! contribute to it, so a store that uses no registry behaves as it always did.
+//! (`tbox_closure`, the shape index). While nothing is registered for a role, every graph but
+//! the system graphs may contribute to it, so a store that uses no registry behaves as it
+//! always did.
+//!
+//! The Rust reader ([`entries_from_rows`]), the SQL fragments and the SPARQL recipes of
+//! `docs/schema-registry.md` agree on every edge case: a graph typed with several roles counts
+//! for each, and only an `xsd:boolean` false (`false` or `0`) deactivates. [`problems`] checks
+//! what the registry's own SHACL shapes (in [`VOCABULARY`]) check.
 //!
 // @lat: [[architecture#Schema registry]]
 
@@ -15,8 +21,8 @@ use crate::encoding::{named_node_id, term_id, DEFAULT_GRAPH_ID};
 use crate::error::{Error, Result};
 use crate::sql::Statement;
 use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{GraphName, GraphNameRef, Literal, NamedNode, QuadRef, Term, TermRef};
-use spargebra::term::{GraphNamePattern, NamedNodePattern};
+use oxrdf::{GraphName, GraphNameRef, Literal, NamedNode, NamedNodeRef, QuadRef, Term, TermRef};
+use spargebra::term::{GraphNamePattern, NamedNodePattern, TermPattern};
 use spargebra::{GraphUpdateOperation, Update};
 use std::collections::BTreeMap;
 
@@ -28,13 +34,13 @@ pub const VOCABULARY_GRAPH: &str = "oxilite:vocabulary";
 
 /// The version of the vocabulary that [`system_quads`] installs (`oxl:version` of
 /// `<oxilite:vocabulary>` in the registry).
-pub const VOCABULARY_VERSION: &str = "1";
+pub const VOCABULARY_VERSION: &str = "2";
 
 /// The oxilite namespace (`oxl:`).
 pub const NS: &str = "https://oxilite.dev/ns#";
 
-/// The oxilite vocabulary as Turtle: the registry's classes and properties, and the terms of
-/// the history graph.
+/// The oxilite vocabulary as Turtle: the registry's classes and properties, the SHACL shapes
+/// the registry must conform to, and the terms of the history graph.
 pub const VOCABULARY: &str = include_str!("../vocab/oxl.ttl");
 
 /// IRIs of the registry vocabulary.
@@ -54,6 +60,10 @@ pub mod vocab {
     pub const ALL_GRAPHS: &str = "https://oxilite.dev/ns#AllGraphs";
     pub const IMPORTS: &str = "http://www.w3.org/2002/07/owl#imports";
 }
+
+/// The graphs oxilite maintains itself. They never contribute axioms or shapes, whatever the
+/// registry says about them.
+pub const SYSTEM_GRAPHS: [&str; 2] = [SCHEMA_GRAPH, VOCABULARY_GRAPH];
 
 /// What a registered graph holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -124,9 +134,11 @@ pub struct SchemaGraph {
     pub version: Option<String>,
     /// Digest of the document the graph was loaded from, for drift detection.
     pub sha256: Option<String>,
-    /// `owl:imports` targets, recorded but not resolved.
+    /// `owl:imports` targets. An import naming another active registered ontology (by graph
+    /// name or `oxl:ontologyIri`) brings its axioms into this ontology's scopes.
     pub imports: Vec<NamedNode>,
-    /// The graphs the schema applies to; empty means every graph.
+    /// The graphs the schema applies to; empty means every graph (written as
+    /// `oxl:appliesTo oxl:AllGraphs`).
     pub applies_to: Vec<GraphName>,
     /// Inactive graphs stay registered (and hidden) but stop contributing.
     pub active: bool,
@@ -189,6 +201,19 @@ fn describe_delete(node: &NamedNode) -> String {
     )
 }
 
+/// Is this literal an `xsd:boolean` false? (`"0"^^xsd:boolean` too; a plain `"false"` is not.)
+fn is_false(l: &Literal) -> bool {
+    l.datatype() == xsd::BOOLEAN && matches!(l.value(), "false" | "0")
+}
+
+/// The `oxl:appliesTo` objects of a registration: its targets, or `oxl:AllGraphs`.
+fn targets_of(applies_to: &[GraphName]) -> Result<Vec<NamedNode>> {
+    if applies_to.is_empty() {
+        return Ok(vec![NamedNode::new_unchecked(vocab::ALL_GRAPHS)]);
+    }
+    applies_to.iter().map(|g| graph_node(g.as_ref())).collect()
+}
+
 /// The `xsd:dateTime` of now, where a clock is available.
 fn now() -> Option<String> {
     Some(oxsdatatypes::DateTime::now().to_string())
@@ -210,8 +235,8 @@ pub fn register_update(entry: &SchemaGraph) -> Result<String> {
     let mut triple = |p: &str, o: String| out.push_str(&format!("  {node} {} {o} .\n", iri(p)));
     triple(rdf::TYPE.as_str(), iri(entry.role.class()));
     triple(vocab::ACTIVE, Literal::from(entry.active).to_string());
-    for g in &entry.applies_to {
-        triple(vocab::APPLIES_TO, graph_node(g.as_ref())?.to_string());
+    for t in targets_of(&entry.applies_to)? {
+        triple(vocab::APPLIES_TO, t.to_string());
     }
     if let Some(i) = &entry.iri {
         triple(vocab::ONTOLOGY_IRI, i.to_string());
@@ -233,6 +258,22 @@ pub fn register_update(entry: &SchemaGraph) -> Result<String> {
     }
     out.push_str("} }");
     Ok(out)
+}
+
+/// SPARQL setting the graphs a registration applies to (empty: every graph), keeping the rest
+/// of its description. Nothing happens to an unregistered graph.
+pub fn remap_update(graph: GraphNameRef<'_>, applies_to: &[GraphName]) -> Result<String> {
+    let node = graph_node(graph)?;
+    let (g, a) = (iri(SCHEMA_GRAPH), iri(vocab::APPLIES_TO));
+    let insert = targets_of(applies_to)?
+        .iter()
+        .map(|t| format!("{node} {a} {t} ."))
+        .collect::<Vec<_>>()
+        .join(" ");
+    Ok(format!(
+        "DELETE {{ GRAPH {g} {{ {node} {a} ?t }} }} INSERT {{ GRAPH {g} {{ {insert} }} }} \
+         WHERE {{ GRAPH {g} {{ {node} a ?role OPTIONAL {{ {node} {a} ?t }} }} }}"
+    ))
 }
 
 /// SPARQL removing a registration (the graph's triples stay).
@@ -307,16 +348,25 @@ pub fn entries_from_rows(rows: &[Vec<Option<Term>>]) -> Vec<SchemaGraph> {
     }
     let mut out = Vec::new();
     for (_, (node, props)) in by {
-        let role = props.iter().find_map(|(p, o)| match o {
-            Term::NamedNode(c) if p == rdf::TYPE.as_str() => SchemaRole::from_class(c.as_str()),
-            _ => None,
-        });
-        let Some(role) = role else { continue };
-        let mut e = SchemaGraph::new(node_graph(&node), role);
+        // A graph may hold several roles (an ontology with its SHACL shapes): one entry each,
+        // as the SQL scopes count it once per role.
+        let mut roles: Vec<SchemaRole> = props
+            .iter()
+            .filter_map(|(p, o)| match o {
+                Term::NamedNode(c) if p == rdf::TYPE.as_str() => SchemaRole::from_class(c.as_str()),
+                _ => None,
+            })
+            .collect();
+        roles.sort();
+        roles.dedup();
+        let Some(&first) = roles.first() else {
+            continue;
+        };
+        let mut e = SchemaGraph::new(node_graph(&node), first);
         let mut all = false;
         for (p, o) in props {
             match (p.as_str(), o) {
-                (vocab::ACTIVE, Term::Literal(l)) if matches!(l.value(), "false" | "0") => {
+                (vocab::ACTIVE, Term::Literal(l)) if is_false(&l) => {
                     e.active = false;
                 }
                 (vocab::APPLIES_TO, Term::NamedNode(n)) if n.as_str() == vocab::ALL_GRAPHS => {
@@ -336,7 +386,9 @@ pub fn entries_from_rows(rows: &[Vec<Option<Term>>]) -> Vec<SchemaGraph> {
         }
         e.applies_to.sort_by_key(ToString::to_string);
         e.imports.sort();
-        out.push(e);
+        for role in roles {
+            out.push(SchemaGraph { role, ..e.clone() });
+        }
     }
     out.sort_by_key(|e| (e.role, e.graph.to_string()));
     out
@@ -353,17 +405,26 @@ pub fn is_registry_quad(q: QuadRef<'_>) -> bool {
     registry_graph(q.graph_name)
 }
 
-/// Can this update change the registry? (Conservative: a variable graph counts when the
-/// predicate is a variable or a registry predicate.)
+/// Can this update change the registry? Any triple written to `<oxilite:schema>` counts. With
+/// a variable graph (conservative), a triple counts when it could be a registry triple: a
+/// variable predicate, an `oxl:` predicate, `owl:imports`, or `rdf:type` with a variable or
+/// `oxl:` class — so a bulk `INSERT { GRAPH ?g { ?s a ex:Person } }` rebuilds nothing.
 pub fn update_touches_registry(update: &Update) -> bool {
-    let named = |g: &GraphNamePattern| match g {
+    let registry_triple = |p: &NamedNodePattern, o: &TermPattern| match p {
+        NamedNodePattern::Variable(_) => true,
+        NamedNodePattern::NamedNode(n) if n.as_ref() == rdf::TYPE => match o {
+            TermPattern::NamedNode(c) => c.as_str().starts_with(NS),
+            TermPattern::Variable(_) => true,
+            _ => false,
+        },
+        NamedNodePattern::NamedNode(n) => {
+            n.as_str().starts_with(NS) || n.as_str() == vocab::IMPORTS
+        }
+    };
+    let counts = |g: &GraphNamePattern, p: &NamedNodePattern, o: &TermPattern| match g {
         GraphNamePattern::NamedNode(n) => n.as_str() == SCHEMA_GRAPH,
         GraphNamePattern::DefaultGraph => false,
-        GraphNamePattern::Variable(_) => true,
-    };
-    let registry_predicate = |p: &NamedNodePattern| match p {
-        NamedNodePattern::Variable(_) => true,
-        NamedNodePattern::NamedNode(n) => n.as_str().starts_with(NS) || n.as_ref() == rdf::TYPE,
+        GraphNamePattern::Variable(_) => registry_triple(p, o),
     };
     update.operations.iter().any(|op| match op {
         GraphUpdateOperation::InsertData { data } => data.iter().any(|q| {
@@ -373,12 +434,12 @@ pub fn update_touches_registry(update: &Update) -> bool {
             matches!(&q.graph_name, spargebra::term::GraphName::NamedNode(n) if n.as_str() == SCHEMA_GRAPH)
         }),
         GraphUpdateOperation::DeleteInsert { delete, insert, .. } => {
-            delete
+            delete.iter().any(|q| {
+                let o: TermPattern = q.object.clone().into();
+                counts(&q.graph_name, &q.predicate, &o)
+            }) || insert
                 .iter()
-                .any(|q| named(&q.graph_name) && registry_predicate(&q.predicate))
-                || insert
-                    .iter()
-                    .any(|q| named(&q.graph_name) && registry_predicate(&q.predicate))
+                .any(|q| counts(&q.graph_name, &q.predicate, &q.object))
         }
         GraphUpdateOperation::Create { .. } => false,
         GraphUpdateOperation::Load { .. }
@@ -395,10 +456,13 @@ struct Ids {
     ty: i64,
     applies: i64,
     active: i64,
-    false_: i64,
+    /// `false` and `"0"^^xsd:boolean`, the two lexical forms of an `xsd:boolean` false.
+    falses: [i64; 2],
     dflt: i64,
     all: i64,
     system: i64,
+    imports: i64,
+    ontology_iri: i64,
 }
 
 fn ids() -> Ids {
@@ -407,10 +471,17 @@ fn ids() -> Ids {
         ty: named_node_id(rdf::TYPE.as_str()),
         applies: named_node_id(vocab::APPLIES_TO),
         active: named_node_id(vocab::ACTIVE),
-        false_: term_id(TermRef::Literal(Literal::from(false).as_ref())),
+        falses: [
+            term_id(TermRef::Literal(Literal::from(false).as_ref())),
+            term_id(TermRef::Literal(
+                Literal::new_typed_literal("0", xsd::BOOLEAN).as_ref(),
+            )),
+        ],
         dflt: named_node_id(vocab::DEFAULT_GRAPH),
         all: named_node_id(vocab::ALL_GRAPHS),
         system: named_node_id(vocab::SYSTEM_GRAPH),
+        imports: named_node_id(vocab::IMPORTS),
+        ontology_iri: named_node_id(vocab::ONTOLOGY_IRI),
     }
 }
 
@@ -433,6 +504,18 @@ fn graph_of(i: &Ids, col: &str) -> String {
 }
 
 /// SQL: the registry nodes (column `s`) of the active graphs of these roles.
+/// SQL: the registry nodes (column `s`) of the graphs registered with this role, active or
+/// not: the "every graph" fallback holds only while there are none, so deactivating the last
+/// ontology silences it instead of letting every graph back in.
+fn role_nodes(i: &Ids, role: SchemaRole) -> String {
+    format!(
+        "SELECT r.s AS s FROM quads r WHERE r.g = {} AND r.p = {} AND r.o = {}",
+        i.reg,
+        i.ty,
+        named_node_id(role.class())
+    )
+}
+
 fn active_nodes(i: &Ids, roles: &[SchemaRole]) -> String {
     let classes = roles
         .iter()
@@ -441,35 +524,36 @@ fn active_nodes(i: &Ids, roles: &[SchemaRole]) -> String {
         .join(", ");
     format!(
         "SELECT r.s AS s FROM quads r WHERE r.g = {reg} AND r.p = {ty} AND r.o IN ({classes}) \
-         AND NOT EXISTS (SELECT 1 FROM quads z WHERE z.g = {reg} AND z.s = r.s AND z.p = {active} AND z.o = {f})",
+         AND NOT EXISTS (SELECT 1 FROM quads z WHERE z.g = {reg} AND z.s = r.s AND z.p = {active} AND z.o IN ({f0}, {f1}))",
         reg = i.reg,
         ty = i.ty,
         active = i.active,
-        f = i.false_
+        f0 = i.falses[0],
+        f1 = i.falses[1]
     )
 }
 
-/// SQL: the ids of the system graphs (`oxl:SystemGraph` in the registry).
-fn system_graphs(i: &Ids) -> String {
-    format!(
-        "SELECT {} FROM quads y WHERE y.g = {} AND y.p = {} AND y.o = {}",
-        graph_of(i, "y.s"),
-        i.reg,
-        i.ty,
-        i.system
-    )
+/// SQL: the ids of the system graphs, a fixed list. Typing another graph `oxl:SystemGraph`
+/// hides it, but never takes it out of the "every graph" fallback.
+fn system_graphs() -> String {
+    SYSTEM_GRAPHS
+        .iter()
+        .map(|g| named_node_id(g).to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// SQL: the graphs that may contribute to `role` — the active registered ones, or every graph
-/// but the system graphs while none is registered for it.
+/// but the system graphs while none is registered for it (active or not).
 ///
 /// `column` is the graph column of the quad source being filtered (e.g. `"g"`, `"x.g"`).
 pub fn scope(role: SchemaRole, column: &str) -> String {
     let i = ids();
     let nodes = active_nodes(&i, &[role]);
     format!(
-        "((NOT EXISTS ({nodes}) AND {column} NOT IN ({})) OR {column} IN (SELECT {} FROM ({nodes}) an))",
-        system_graphs(&i),
+        "((NOT EXISTS ({}) AND {column} NOT IN ({})) OR {column} IN (SELECT {} FROM ({nodes}) an))",
+        role_nodes(&i, role),
+        system_graphs(),
         graph_of(&i, "an.s")
     )
 }
@@ -507,8 +591,8 @@ pub fn quads_without_schema_graphs() -> String {
 pub fn without_schema_graphs(source: &str) -> String {
     let i = ids();
     format!(
-        "(SELECT s, p, o, g FROM {source} WHERE g <> {} AND g NOT IN ({}))",
-        i.reg,
+        "(SELECT s, p, o, g FROM {source} WHERE g NOT IN ({}) AND g NOT IN ({}))",
+        system_graphs(),
         registered_graphs(&i)
     )
 }
@@ -517,8 +601,10 @@ pub fn without_schema_graphs(source: &str) -> String {
 ///
 /// The axioms of the active ontology graphs that apply to every graph come with the scope
 /// [`all_scope`] and again with every specific scope; those of an ontology mapped to graph G
-/// with scope G. While no ontology is registered, every graph's triples count, with scope
-/// [`all_scope`].
+/// with scope G. An ontology's `owl:imports` (recorded in the registry or asserted in its own
+/// graph) that name another active ontology — by graph name or `oxl:ontologyIri` — bring that
+/// ontology's axioms into the importer's scopes, transitively. While no ontology is
+/// registered, every graph's triples but the system graphs' count, with scope [`all_scope`].
 pub fn ontology_axioms(cond: &str) -> String {
     let i = ids();
     let act = active_nodes(&i, &[SchemaRole::Ontology]);
@@ -539,7 +625,7 @@ pub fn ontology_axioms(cond: &str) -> String {
         "SELECT ac.s AS s FROM ({act}) ac WHERE ac.s NOT IN (SELECT n FROM ({targets})) OR ac.s IN ({to_all})"
     );
     let specific = format!("SELECT st.n AS n, st.t AS t FROM ({targets}) st WHERE st.n IN ({act})");
-    let map = format!(
+    let direct = format!(
         "SELECT {g} AS g, {all} AS scope FROM ({global}) gl \
          UNION SELECT {g}, sp.t FROM ({global}) gl JOIN ({specific}) sp \
          UNION SELECT {n}, sp.t FROM ({specific}) sp",
@@ -547,11 +633,40 @@ pub fn ontology_axioms(cond: &str) -> String {
         n = graph_of(&i, "sp.n"),
         all = i.all
     );
+    // (importer graph, imported IRI): recorded in the registry, or asserted in the ontology.
+    let imports = format!(
+        "SELECT {gx} AS f, x.o AS iri FROM quads x WHERE x.g = {reg} AND x.p = {imp} \
+         UNION SELECT {gi}, y.o FROM ({act}) ia JOIN quads y ON y.p = {imp} AND y.g = {gi}",
+        gx = graph_of(&i, "x.s"),
+        gi = graph_of(&i, "ia.s"),
+        reg = i.reg,
+        imp = i.imports
+    );
+    // (IRI, graph) naming each active ontology: its graph name and its oxl:ontologyIri.
+    let named = format!(
+        "SELECT nb.s AS iri, {gn} AS t FROM ({act}) nb \
+         UNION SELECT oi.o, {go} FROM quads oi WHERE oi.g = {reg} AND oi.p = {oiri} AND oi.s IN ({act})",
+        gn = graph_of(&i, "nb.s"),
+        go = graph_of(&i, "oi.s"),
+        reg = i.reg,
+        oiri = i.ontology_iri
+    );
+    let edges = format!(
+        "SELECT io.f AS f, nm.t AS t FROM ({imports}) io JOIN ({named}) nm ON nm.iri = io.iri"
+    );
+    // UNION (not UNION ALL) ends the recursion on import cycles.
+    let map = format!(
+        "WITH RECURSIVE reg_direct(g, scope) AS ({direct}), \
+         reg_map(g, scope) AS (SELECT g, scope FROM reg_direct \
+           UNION SELECT ed.t, reg_map.scope FROM reg_map JOIN ({edges}) ed ON ed.f = reg_map.g) \
+         SELECT g, scope FROM reg_map"
+    );
     format!(
         "(SELECT q.s AS s, q.p AS p, q.o AS o, m.scope AS scope FROM quads q JOIN ({map}) m ON m.g = q.g WHERE {cond} \
-         UNION ALL SELECT q.s, q.p, q.o, {all} FROM quads q WHERE {cond} AND NOT EXISTS ({act}) AND q.g NOT IN ({sys}))",
+         UNION ALL SELECT q.s, q.p, q.o, {all} FROM quads q WHERE {cond} AND NOT EXISTS ({registered}) AND q.g NOT IN ({sys}))",
+        registered = role_nodes(&i, SchemaRole::Ontology),
         all = i.all,
-        sys = system_graphs(&i)
+        sys = system_graphs()
     )
 }
 
@@ -643,6 +758,112 @@ pub fn system_graphs_ready_query() -> String {
     )
 }
 
+// ------------------------------------------------------------------------------ validation
+
+/// What is wrong with the registry described by `?g ?p ?o` rows (see [`entries_query`]): the
+/// violations of the registry's SHACL shapes (`oxl:RegistrationShape` in [`VOCABULARY`]),
+/// found without a SHACL engine, one message per violation. Empty means valid.
+///
+/// A node is checked when it has a role class, `oxl:SystemGraph`, or a registration property.
+pub fn problems(rows: &[Vec<Option<Term>>]) -> Vec<String> {
+    const PROPS: [&str; 7] = [
+        vocab::APPLIES_TO,
+        vocab::ACTIVE,
+        vocab::ONTOLOGY_IRI,
+        vocab::VERSION,
+        vocab::SHA256,
+        vocab::LOADED_AT,
+        vocab::IMPORTS,
+    ];
+    let mut by: BTreeMap<String, Vec<(String, Term)>> = BTreeMap::new();
+    for row in rows {
+        let (Some(s), Some(Term::NamedNode(p)), Some(o)) = (
+            row.first().cloned().flatten(),
+            row.get(1).cloned().flatten(),
+            row.get(2).cloned().flatten(),
+        ) else {
+            continue;
+        };
+        by.entry(s.to_string())
+            .or_default()
+            .push((p.into_string(), o));
+    }
+    let mut out = Vec::new();
+    for (node, props) in by {
+        let values = |p: &'static str| props.iter().filter(move |(q, _)| q == p).map(|(_, o)| o);
+        let typed = values(rdf::TYPE.as_str()).any(|o| {
+            matches!(o, Term::NamedNode(c)
+                if SchemaRole::from_class(c.as_str()).is_some() || c.as_str() == vocab::SYSTEM_GRAPH)
+        });
+        let described = props.iter().any(|(p, _)| PROPS.contains(&p.as_str()));
+        if !typed && !described {
+            continue;
+        }
+        let mut bad = |m: String| out.push(format!("{node}: {m}"));
+        if node.starts_with("_:") {
+            bad("a blank node cannot name a graph".into());
+        }
+        if !typed {
+            bad("has registration properties but no role class (oxl:OntologyGraph, oxl:ShapesGraph, oxl:ShExGraph)".into());
+        }
+        for p in [
+            vocab::ACTIVE,
+            vocab::ONTOLOGY_IRI,
+            vocab::VERSION,
+            vocab::SHA256,
+            vocab::LOADED_AT,
+        ] {
+            let n = values(p).count();
+            if n > 1 {
+                bad(format!("<{p}> has {n} values, at most one is allowed"));
+            }
+        }
+        for p in [vocab::APPLIES_TO, vocab::ONTOLOGY_IRI, vocab::IMPORTS] {
+            for o in values(p).filter(|o| !matches!(o, Term::NamedNode(_))) {
+                bad(format!("<{p}> {o} is not an IRI"));
+            }
+        }
+        let literal = |p: &'static str, dt: NamedNodeRef<'static>| {
+            values(p)
+                .filter(move |o| !matches!(o, Term::Literal(l) if l.datatype() == dt))
+                .map(move |o| format!("<{p}> {o} is not an <{}>", dt.as_str()))
+                .collect::<Vec<_>>()
+        };
+        for m in literal(vocab::ACTIVE, xsd::BOOLEAN)
+            .into_iter()
+            .chain(literal(vocab::VERSION, xsd::STRING))
+            .chain(literal(vocab::SHA256, xsd::STRING))
+            .chain(literal(vocab::LOADED_AT, xsd::DATE_TIME))
+        {
+            bad(m);
+        }
+        for o in values(vocab::ACTIVE) {
+            if let Term::Literal(l) = o {
+                if l.datatype() == xsd::BOOLEAN
+                    && !matches!(l.value(), "true" | "false" | "1" | "0")
+                {
+                    bad(format!(
+                        "<{}> {o} is not a valid xsd:boolean",
+                        vocab::ACTIVE
+                    ));
+                }
+            }
+        }
+        for o in values(vocab::SHA256) {
+            if let Term::Literal(l) = o {
+                let v = l.value();
+                if v.len() != 64 || !v.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+                    bad(format!(
+                        "<{}> {o} is not 64 lowercase hex digits",
+                        vocab::SHA256
+                    ));
+                }
+            }
+        }
+    }
+    out
+}
+
 // -------------------------------------------------------------------------------- migration
 
 /// Schema version 1 kept registrations in a `schema_graphs` table: reads its rows with the
@@ -713,8 +934,8 @@ pub fn entry_quads(entry: &SchemaGraph) -> Result<Vec<oxrdf::Quad>> {
         ),
         q(vocab::ACTIVE, Literal::from(entry.active).into()),
     ];
-    for t in &entry.applies_to {
-        out.push(q(vocab::APPLIES_TO, graph_node(t.as_ref())?.into()));
+    for t in targets_of(&entry.applies_to)? {
+        out.push(q(vocab::APPLIES_TO, t.into()));
     }
     if let Some(i) = &entry.iri {
         out.push(q(vocab::ONTOLOGY_IRI, i.clone().into()));
@@ -779,5 +1000,112 @@ mod tests {
         let mut want = e.clone();
         want.applies_to.sort_by_key(ToString::to_string);
         assert_eq!(back, vec![want]);
+        assert_eq!(problems(&rows), Vec::<String>::new());
+        spargebra::SparqlParser::new()
+            .parse_update(&remap_update(e.graph.as_ref(), &[]).unwrap())
+            .unwrap();
+    }
+
+    fn row(s: &str, p: &str, o: Term) -> Vec<Option<Term>> {
+        vec![
+            Some(NamedNode::new_unchecked(s).into()),
+            Some(NamedNode::new_unchecked(p).into()),
+            Some(o),
+        ]
+    }
+
+    fn class(c: &str) -> Term {
+        NamedNode::new_unchecked(c).into()
+    }
+
+    // @lat: [[tests#Schema registry#Readers agree on edge cases]]
+    #[test]
+    fn readers_agree_on_booleans_and_roles() {
+        let g = "http://ex.org/g";
+        let ty = rdf::TYPE.as_str();
+        // A graph with two roles is listed once per role.
+        let rows = vec![
+            row(g, ty, class(vocab::ONTOLOGY_GRAPH)),
+            row(g, ty, class(vocab::SHAPES_GRAPH)),
+        ];
+        let roles: Vec<_> = entries_from_rows(&rows).iter().map(|e| e.role).collect();
+        assert_eq!(roles, vec![SchemaRole::Ontology, SchemaRole::Shacl]);
+        // Only an xsd:boolean false deactivates, in either lexical form.
+        for (o, active) in [
+            (Literal::from(false), false),
+            (Literal::new_typed_literal("0", xsd::BOOLEAN), false),
+            (Literal::new_simple_literal("false"), true),
+            (Literal::from(true), true),
+        ] {
+            let rows = vec![
+                row(g, ty, class(vocab::ONTOLOGY_GRAPH)),
+                row(g, vocab::ACTIVE, o.clone().into()),
+            ];
+            assert_eq!(entries_from_rows(&rows)[0].active, active, "{o}");
+        }
+        // The SQL reads both lexical forms of false.
+        let sql = active_nodes(&ids(), &[SchemaRole::Ontology]);
+        assert!(sql.contains(&ids().falses[1].to_string()));
+    }
+
+    // @lat: [[tests#Schema registry#Registry writes are detected narrowly]]
+    #[test]
+    fn registry_writes_are_detected_narrowly() {
+        let touches = |u: &str| {
+            let u =
+                format!("PREFIX oxl: <https://oxilite.dev/ns#> PREFIX ex: <http://ex.org/> {u}");
+            update_touches_registry(&spargebra::SparqlParser::new().parse_update(&u).unwrap())
+        };
+        // Bulk typing through a variable graph is not a registry write.
+        assert!(!touches(
+            "INSERT { GRAPH ?g { ?s a ex:Person } } WHERE { GRAPH ?g { ?s ex:p ?o } }"
+        ));
+        assert!(!touches(
+            "DELETE { GRAPH ?g { ?s ex:p ?o } } WHERE { GRAPH ?g { ?s ex:p ?o } }"
+        ));
+        // Anything that could be one is.
+        assert!(touches(
+            "INSERT { GRAPH ?g { ?s a oxl:OntologyGraph } } WHERE { GRAPH ?g { ?s ex:p ?o } }"
+        ));
+        assert!(touches(
+            "INSERT { GRAPH ?g { ?s a ?c } } WHERE { GRAPH ?g { ?s ex:p ?c } }"
+        ));
+        assert!(touches("DELETE { GRAPH ?g { ?s <http://www.w3.org/2002/07/owl#imports> ?o } } WHERE { GRAPH ?g { ?s ?p ?o } }"));
+        assert!(touches("DELETE { GRAPH <oxilite:schema> { ?s ex:p ?o } } WHERE { GRAPH <oxilite:schema> { ?s ex:p ?o } }"));
+        assert!(touches(
+            "INSERT DATA { GRAPH <oxilite:schema> { ex:a ex:b ex:c } }"
+        ));
+    }
+
+    // @lat: [[tests#Schema registry#Registry problems]]
+    #[test]
+    fn problems_mirror_the_registry_shapes() {
+        let g = "http://ex.org/g";
+        let ty = rdf::TYPE.as_str();
+        let rows = vec![
+            row(g, ty, class(vocab::ONTOLOGY_GRAPH)),
+            row(
+                g,
+                vocab::ACTIVE,
+                Literal::new_simple_literal("false").into(),
+            ),
+            row(g, vocab::ACTIVE, Literal::from(true).into()),
+            row(
+                g,
+                vocab::APPLIES_TO,
+                Literal::new_simple_literal("x").into(),
+            ),
+            row(g, vocab::SHA256, Literal::new_simple_literal("ABC").into()),
+            row(
+                "http://ex.org/h",
+                vocab::APPLIES_TO,
+                class(vocab::ALL_GRAPHS),
+            ),
+        ];
+        let p = problems(&rows);
+        assert_eq!(p.len(), 5, "{p:#?}");
+        assert!(p
+            .iter()
+            .any(|m| m.starts_with("<http://ex.org/h>") && m.contains("no role class")));
     }
 }

@@ -266,6 +266,32 @@ The system-graph install on Oxigraph leaves the same quads as a bootstrapped bla
 
 With `system_graphs`, a new store holds `<oxilite:schema>` and `<oxilite:vocabulary>`; they are current, unlisted, do not narrow reasoning and hide with the schema, and a store with data gets them only on request.
 
+### Imports bring registered ontologies into scope
+
+An ontology importing another registered one — recorded in the registry by graph name, or asserted in its graph by `oxl:ontologyIri` — gets its axioms; cycles end, and inactive ontologies are not imported.
+
+Deactivating every ontology then silences reasoning instead of falling back to every graph.
+
+### The active flag reads alike everywhere
+
+A plain `"false"` leaves a graph active for the listing and for reasoning and is reported as a problem; `"0"^^xsd:boolean` deactivates it for both and is valid.
+
+### Remapping keeps the description
+
+A graph typed with two roles is listed once per role; setting its targets keeps both roles and its version, and no targets are written as `oxl:AllGraphs`.
+
+### Readers agree on edge cases
+
+Unit test of the reader: two role classes give two entries, only `xsd:boolean` false deactivates, and the SQL reads both lexical forms of false.
+
+### Registry problems
+
+Unit test of `problems`: a non-boolean flag, a duplicate flag, a literal target, a malformed digest and a description with no role class are each reported once.
+
+### Registry writes are detected narrowly
+
+Bulk typing and plain data updates through `GRAPH ?g` do not count as registry writes; `oxl:` classes, variable classes, `owl:imports` and anything in `<oxilite:schema>` do.
+
 ## Text search
 
 FTS5 full-text search and `oxl:textMatch`, see [[architecture#Text search]].
@@ -318,6 +344,10 @@ With no shapes graph registered, and with more than one registered and none name
 
 On a D1-like async backend (and the Miniflare D1 sidecar with `OXILITE_D1_URL`), prefetch-based SHACL and ShEx validation match full validation, and a too-small limit fails with `TooLarge` stating the limit and size found.
 
+
+### The registry shapes check a registry
+
+rudof validates a registry against the shapes in the bundled vocabulary: a canonical registry with a two-role graph conforms, and a plain `"false"`, a short digest and a roleless description are the three focus nodes reported.
 ## JSON-LD documents
 
 Specification scenarios of `oxilite-jsonld`, run on bundled SQLite, the system `libsqlite3`, the D1 code path and (with `OXILITE_D1_URL`) Miniflare D1. See [[architecture#JSON-LD documents]].

@@ -53,7 +53,8 @@ pub enum RegistryCommand {
         /// A version to pin (`owl:versionIRI`, a tag…).
         #[arg(long)]
         version: Option<String>,
-        /// An `owl:imports` target to record (repeatable; recorded, not loaded).
+        /// An `owl:imports` target to record (repeatable). It is not loaded, but when it names
+        /// another registered ontology, that ontology's axioms join this one's scopes.
         #[arg(long = "import")]
         imports: Vec<String>,
         /// A graph the schema applies to (repeatable; an IRI, DEFAULT or ALL). Without it, the
@@ -97,6 +98,22 @@ pub enum RegistryCommand {
         #[command(flatten)]
         location: Location,
         graph: String,
+    },
+    /// Checks the registry against its own SHACL shapes (`oxl:RegistrationShape`); exits
+    /// non-zero when it finds a problem.
+    Check {
+        #[command(flatten)]
+        location: Location,
+    },
+    /// Checks that FILE is still the document GRAPH was registered from: compares its SHA-256
+    /// with the one recorded at registration; exits non-zero on drift.
+    Verify {
+        #[command(flatten)]
+        location: Location,
+        graph: String,
+        /// The source document.
+        #[arg(long)]
+        file: String,
     },
     /// Prints the SHACL property shapes compiled from the registered shapes graphs.
     Shapes {
@@ -199,6 +216,40 @@ pub fn run(command: RegistryCommand) -> Result<()> {
             let n = Db::open(&location)?.drop_schema_graph(&g)?;
             eprintln!("dropped {} ({n} quads)", graph_text(&g));
         }
+        RegistryCommand::Check { location } => {
+            let problems = Db::open(&location)?.registry_problems()?;
+            if problems.is_empty() {
+                eprintln!("the registry is valid");
+            } else {
+                for p in &problems {
+                    println!("{p}");
+                }
+                return Err(format!("{} registry problem(s)", problems.len()).into());
+            }
+        }
+        RegistryCommand::Verify {
+            location,
+            graph,
+            file,
+        } => {
+            let g = parse_graph(&graph)?;
+            let entries = Db::open(&location)?.schema_graphs()?;
+            let Some(e) = entries.iter().find(|e| e.graph == g) else {
+                return Err(format!("{} is not registered", graph_text(&g)).into());
+            };
+            let Some(recorded) = &e.registration.sha256 else {
+                return Err(format!("{} has no recorded SHA-256", graph_text(&g)).into());
+            };
+            let actual = sha256_hex(&std::fs::read(&file)?);
+            if &actual != recorded {
+                return Err(format!(
+                    "{file} has drifted from {}: sha256 {actual}, registered {recorded}",
+                    graph_text(&g)
+                )
+                .into());
+            }
+            eprintln!("{file} matches {}", graph_text(&g));
+        }
         RegistryCommand::Shapes { location, json } => {
             let index = Db::open(&location)?.shape_index()?;
             if json {
@@ -220,14 +271,12 @@ pub fn targets(args: &[String]) -> Result<Vec<GraphName>> {
     args.iter().map(|a| parse_graph(a)).collect()
 }
 
-/// Re-registers `graph` with new targets, keeping its role and what it records.
+/// Sets the targets of `graph`, keeping its roles and everything else it records.
 pub fn remap(db: &Db, graph: &GraphName, applies_to: Vec<GraphName>) -> Result<()> {
-    let Some(e) = db.schema_graphs()?.into_iter().find(|e| &e.graph == graph) else {
+    if !db.set_schema_graph_targets(graph, &applies_to)? {
         return Err(format!("{} is not registered", graph_text(graph)).into());
-    };
-    let mut r = e.registration;
-    r.applies_to = applies_to;
-    db.register_schema_graph(graph, e.role, &r)
+    }
+    Ok(())
 }
 
 fn set_active(location: &Location, graph: &str, active: bool) -> Result<()> {

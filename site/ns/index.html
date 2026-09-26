@@ -29,9 +29,9 @@
 
   <main class="article">
     <article class="wrap">
-      <span class="kicker">Vocabulary · Version 1</span>
+      <span class="kicker">Vocabulary · Version 2</span>
       <h1>The <code>oxl:</code> vocabulary</h1>
-      <p class="standfirst">The terms oxilite uses in its system graphs: the schema registry in <code>&lt;oxilite:schema&gt;</code> (which named graphs hold ontologies, SHACL shapes or ShEx schemas, and which graphs each applies to) and the history graph <code>&lt;oxilite:history&gt;</code>. Everything here is plain RDF: any SPARQL 1.1 store can hold, query and update it.</p>
+      <p class="standfirst">The terms oxilite uses in its system graphs: the schema registry in <code>&lt;oxilite:schema&gt;</code> (which named graphs hold ontologies, SHACL shapes or ShEx schemas, and which graphs each applies to) and the history graph <code>&lt;oxilite:history&gt;</code>, plus the SHACL shapes the registry conforms to. Everything here is plain RDF: any SPARQL 1.1 store can hold, query, update and validate it.</p>
       <p class="meta">Namespace <code>https://oxilite.dev/ns#</code> · prefix <code>oxl:</code> · <a href="oxl.ttl">Turtle</a> · source <a href="https://github.com/Volland/oxilite/blob/main/crates/oxilite-core/vocab/oxl.ttl"><code>vocab/oxl.ttl</code></a> · reference <a href="https://github.com/Volland/oxilite/blob/main/docs/schema-registry.md">schema registry</a> · article <a href="../articles/named-graphs.html">Graphs that describe graphs</a></p>
 
       <h2>System graphs</h2>
@@ -39,7 +39,7 @@
         <thead><tr><th>Graph</th><th>Holds</th></tr></thead>
         <tbody>
           <tr><td><code>&lt;oxilite:schema&gt;</code></td><td>The schema registry: one description per registered graph (subject: the graph's IRI, or <code>oxl:DefaultGraph</code>), plus descriptions of the system graphs</td></tr>
-          <tr><td><code>&lt;oxilite:vocabulary&gt;</code></td><td>This vocabulary, installed in new stores created by the <code>oxilite</code> command line or with the <code>system_graphs</code> / <code>systemGraphs</code> option</td></tr>
+          <tr><td><code>&lt;oxilite:vocabulary&gt;</code></td><td>This vocabulary and the registry shapes, installed in new stores created by the <code>oxilite</code> command line or with the <code>system_graphs</code> / <code>systemGraphs</code> option</td></tr>
           <tr><td><code>&lt;oxilite:history&gt;</code></td><td>The change log of a versioned store, as a virtual graph of commits (<code>prov:Activity</code>) and their <code>oxl:added</code> / <code>oxl:removed</code> triples</td></tr>
         </tbody>
       </table></div>
@@ -48,11 +48,12 @@
       <div class="table-wrap"><table>
         <thead><tr><th>Term</th><th>Label</th><th>Meaning</th></tr></thead>
         <tbody>
-          <tr id="SchemaGraph"><td><a href="#SchemaGraph"><code>oxl:SchemaGraph</code></a></td><td>schema graph</td><td>A named graph holding schema rather than data. Described in &lt;oxilite:schema&gt; with the graph&#x27;s own IRI as subject; the default graph is oxl:DefaultGraph.</td></tr>
-          <tr id="SystemGraph"><td><a href="#SystemGraph"><code>oxl:SystemGraph</code></a></td><td>system graph</td><td>A graph oxilite maintains itself: &lt;oxilite:schema&gt; (the registry) and &lt;oxilite:vocabulary&gt; (this vocabulary). Hidden with the schema graphs; never narrows reasoning or the shape index.<br><span class="meta-inline">subclass of <code>oxl:SchemaGraph</code></span></td></tr>
-          <tr id="OntologyGraph"><td><a href="#OntologyGraph"><code>oxl:OntologyGraph</code></a></td><td>ontology graph</td><td>An RDFS / OWL ontology. Its axioms drive query-time reasoning over the graphs it applies to.<br><span class="meta-inline">subclass of <code>oxl:SchemaGraph</code></span></td></tr>
-          <tr id="ShapesGraph"><td><a href="#ShapesGraph"><code>oxl:ShapesGraph</code></a></td><td>SHACL shapes graph</td><td>SHACL shapes for validating the graphs it applies to.<br><span class="meta-inline">subclass of <code>oxl:SchemaGraph</code></span></td></tr>
+          <tr id="SchemaGraph"><td><a href="#SchemaGraph"><code>oxl:SchemaGraph</code></a></td><td>schema graph</td><td>A named graph holding schema rather than data. Described in &lt;oxilite:schema&gt; with the graph&#x27;s own IRI as subject; the default graph is oxl:DefaultGraph. A graph may hold several roles and is then typed with each.<br><span class="meta-inline">subclass of <code>sd:Graph</code></span></td></tr>
+          <tr id="SystemGraph"><td><a href="#SystemGraph"><code>oxl:SystemGraph</code></a></td><td>system graph</td><td>A graph oxilite maintains itself: &lt;oxilite:schema&gt; (the registry, which is data about graphs) and &lt;oxilite:vocabulary&gt; (this vocabulary). Hidden with the schema graphs; never contributes axioms or shapes. The set is fixed.<br><span class="meta-inline">subclass of <code>sd:Graph</code> · disjoint with <code>oxl:SchemaGraph</code></span></td></tr>
+          <tr id="OntologyGraph"><td><a href="#OntologyGraph"><code>oxl:OntologyGraph</code></a></td><td>ontology graph</td><td>An RDFS / OWL ontology. Its axioms, and those of the active registered ontologies it imports, drive query-time reasoning over the graphs it applies to.<br><span class="meta-inline">subclass of <code>oxl:SchemaGraph</code></span></td></tr>
+          <tr id="ShapesGraph"><td><a href="#ShapesGraph"><code>oxl:ShapesGraph</code></a></td><td>SHACL shapes graph</td><td>SHACL shapes for validating the graphs it applies to. <code>sh:shapesGraph</code> is derivable from <code>oxl:appliesTo</code>.<br><span class="meta-inline">subclass of <code>oxl:SchemaGraph</code></span></td></tr>
           <tr id="ShExGraph"><td><a href="#ShExGraph"><code>oxl:ShExGraph</code></a></td><td>ShEx schema graph</td><td>A ShEx schema (in RDF) for validating the graphs it applies to.<br><span class="meta-inline">subclass of <code>oxl:SchemaGraph</code></span></td></tr>
+          <tr id="GraphTarget"><td><a href="#GraphTarget"><code>oxl:GraphTarget</code></a></td><td>graph target</td><td>What oxl:appliesTo points at: a named graph, oxl:DefaultGraph, or the selector oxl:AllGraphs.</td></tr>
         </tbody>
       </table></div>
 
@@ -60,12 +61,12 @@
       <div class="table-wrap"><table>
         <thead><tr><th>Term</th><th>Label</th><th>Meaning</th></tr></thead>
         <tbody>
-          <tr id="appliesTo"><td><a href="#appliesTo"><code>oxl:appliesTo</code></a></td><td>applies to</td><td>A graph the schema describes: a graph IRI, oxl:DefaultGraph, or oxl:AllGraphs. A schema graph without oxl:appliesTo applies to all graphs.<br><span class="meta-inline">domain <code>oxl:SchemaGraph</code></span></td></tr>
-          <tr id="active"><td><a href="#active"><code>oxl:active</code></a></td><td>active</td><td>false keeps the graph registered (and hidden as schema) but stops it contributing. Absent means true.<br><span class="meta-inline">domain <code>oxl:SchemaGraph</code> · range <code>xsd:boolean</code></span></td></tr>
-          <tr id="ontologyIri"><td><a href="#ontologyIri"><code>oxl:ontologyIri</code></a></td><td>ontology IRI</td><td>The owl:Ontology IRI of the graph&#x27;s content, when it differs from the graph name.<br><span class="meta-inline">domain <code>oxl:SchemaGraph</code></span></td></tr>
-          <tr id="version"><td><a href="#version"><code>oxl:version</code></a></td><td>version</td><td>A version pinned at registration: an owl:versionIRI, a tag, a release number.<br><span class="meta-inline">domain <code>oxl:SchemaGraph</code> · range <code>xsd:string</code></span></td></tr>
-          <tr id="sha256"><td><a href="#sha256"><code>oxl:sha256</code></a></td><td>SHA-256</td><td>Hex SHA-256 of the document the graph was loaded from, for drift detection.<br><span class="meta-inline">domain <code>oxl:SchemaGraph</code> · range <code>xsd:string</code></span></td></tr>
-          <tr id="loadedAt"><td><a href="#loadedAt"><code>oxl:loadedAt</code></a></td><td>loaded at</td><td>When the graph was registered.<br><span class="meta-inline">domain <code>oxl:SchemaGraph</code> · range <code>xsd:dateTime</code></span></td></tr>
+          <tr id="appliesTo"><td><a href="#appliesTo"><code>oxl:appliesTo</code></a></td><td>applies to</td><td>A graph the schema describes: a graph IRI, oxl:DefaultGraph, or oxl:AllGraphs. oxilite always writes one (oxl:AllGraphs for every graph); none is read as all graphs.<br><span class="meta-inline">domain <code>oxl:SchemaGraph</code> · range <code>oxl:GraphTarget</code></span></td></tr>
+          <tr id="active"><td><a href="#active"><code>oxl:active</code></a></td><td>active</td><td>An xsd:boolean false (&quot;false&quot; or &quot;0&quot;) keeps the graph registered (and hidden as schema) but stops it contributing. Absent means true; a plain &quot;false&quot; is invalid and ignored.<br><span class="meta-inline">functional · domain <code>oxl:SchemaGraph</code> · range <code>xsd:boolean</code></span></td></tr>
+          <tr id="ontologyIri"><td><a href="#ontologyIri"><code>oxl:ontologyIri</code></a></td><td>ontology IRI</td><td>The owl:Ontology IRI of the graph&#x27;s content, when it differs from the graph name. owl:imports resolve against it.<br><span class="meta-inline">functional · domain <code>oxl:SchemaGraph</code> · range <code>owl:Ontology</code></span></td></tr>
+          <tr id="version"><td><a href="#version"><code>oxl:version</code></a></td><td>version</td><td>A version pinned at registration: an owl:versionIRI, an owl:versionInfo, a tag, a release number.<br><span class="meta-inline">functional · domain <code>oxl:SchemaGraph</code> · range <code>xsd:string</code></span></td></tr>
+          <tr id="sha256"><td><a href="#sha256"><code>oxl:sha256</code></a></td><td>SHA-256</td><td>Lowercase hex SHA-256 of the document the graph was loaded from, for drift detection (<code>oxilite registry verify</code>).<br><span class="meta-inline">functional · see <code>spdx:checksum</code> · domain <code>oxl:SchemaGraph</code> · range <code>xsd:string</code></span></td></tr>
+          <tr id="loadedAt"><td><a href="#loadedAt"><code>oxl:loadedAt</code></a></td><td>loaded at</td><td>When the graph was registered.<br><span class="meta-inline">functional · subproperty of <code>dcterms:date</code> · domain <code>oxl:SchemaGraph</code> · range <code>xsd:dateTime</code></span></td></tr>
           <tr id="added"><td><a href="#added"><code>oxl:added</code></a></td><td>added</td><td>In &lt;oxilite:history&gt;: a triple (as a triple term) the commit added.</td></tr>
           <tr id="removed"><td><a href="#removed"><code>oxl:removed</code></a></td><td>removed</td><td>In &lt;oxilite:history&gt;: a triple (as a triple term) the commit removed.</td></tr>
           <tr id="textMatch"><td><a href="#textMatch"><code>oxl:textMatch</code></a></td><td>text match</td><td>A SPARQL function: oxl:textMatch(?literal, &quot;query&quot;) is true when the literal matches the full-text query.</td></tr>
@@ -77,9 +78,12 @@
         <thead><tr><th>Term</th><th>Label</th><th>Meaning</th></tr></thead>
         <tbody>
           <tr id="DefaultGraph"><td><a href="#DefaultGraph"><code>oxl:DefaultGraph</code></a></td><td>default graph</td><td>Names the default graph where an IRI is needed: as a registered schema graph, or as a target of oxl:appliesTo.</td></tr>
-          <tr id="AllGraphs"><td><a href="#AllGraphs"><code>oxl:AllGraphs</code></a></td><td>all graphs</td><td>As a target of oxl:appliesTo: every graph of the dataset.</td></tr>
+          <tr id="AllGraphs"><td><a href="#AllGraphs"><code>oxl:AllGraphs</code></a></td><td>all graphs</td><td>As a target of oxl:appliesTo: every graph of the dataset. A selector, never a registered graph.</td></tr>
         </tbody>
       </table></div>
+
+      <h2 id="RegistrationShape">Registry shapes</h2>
+      <p><code>oxl:RegistrationShape</code> (in the Turtle) checks every registration: an IRI with at least one role class, at most one <code>xsd:boolean</code> <code>oxl:active</code>, IRI targets and imports, and single, well-typed <code>oxl:ontologyIri</code>, <code>oxl:version</code>, <code>oxl:sha256</code> (64 lowercase hex digits) and <code>oxl:loadedAt</code>. Use the Turtle as the shapes graph and <code>&lt;oxilite:schema&gt;</code> as the data graph in any SHACL processor, or run <code>oxilite registry check</code>.</p>
 
       <h2>Example</h2>
 <pre><code>PREFIX oxl: &lt;https://oxilite.dev/ns#&gt;
@@ -87,10 +91,12 @@
 INSERT DATA { GRAPH &lt;oxilite:schema&gt; {
   &lt;https://ex.org/onto/hr&gt; a oxl:OntologyGraph ;
       oxl:appliesTo &lt;https://ex.org/data/staff&gt; ;
+      oxl:active true ;
       oxl:version "2.1" .
-  &lt;https://ex.org/shapes/hr&gt; a oxl:ShapesGraph .      # applies to every graph
+  &lt;https://ex.org/shapes/hr&gt; a oxl:ShapesGraph ;
+      oxl:appliesTo oxl:AllGraphs .
 } }</code></pre>
-      <p>On oxilite, this write immediately scopes RDFS/OWL reasoning over <code>&lt;https://ex.org/data/staff&gt;</code> to the HR ontology and compiles the shapes; on any other store it is ordinary, queryable RDF. A graph without <code>oxl:appliesTo</code> applies to all graphs, and <code>oxl:active false</code> switches a registration off without removing it.</p>
+      <p>On oxilite, this write immediately scopes RDFS/OWL reasoning over <code>&lt;https://ex.org/data/staff&gt;</code> to the HR ontology and compiles the shapes; on any other store it is ordinary, queryable RDF. <code>oxl:appliesTo oxl:AllGraphs</code> (or no <code>oxl:appliesTo</code>) applies to all graphs, and <code>oxl:active false</code> switches a registration off without removing it.</p>
     </article>
   </main>
 
