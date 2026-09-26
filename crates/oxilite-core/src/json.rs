@@ -205,6 +205,9 @@ pub struct JsQueryOptions {
     pub reasoning: crate::reason::Reasoning,
     /// Also match materialized inferences.
     pub include_inferred: bool,
+    /// Match the triples of registered schema graphs (default true).
+    #[serde(alias = "includeSchemaGraphs")]
+    pub include_schema_graphs: Option<bool>,
     /// Read the store as it was at this version (`HEAD~1`, `#42`, `@2026-09-01T00:00:00Z`).
     #[serde(alias = "asOf")]
     pub as_of: Option<String>,
@@ -233,6 +236,7 @@ impl JsQueryOptions {
                 .transpose()?,
             reasoning: self.reasoning,
             include_inferred: self.include_inferred,
+            include_schema_graphs: self.include_schema_graphs.unwrap_or(true),
             as_of: self.as_of.clone(),
             ..crate::QueryOptions::default()
         })
@@ -274,4 +278,98 @@ pub fn output_to_format(out: &QueryOutput, format: &str) -> Result<String> {
         QueryOutput::Graph(_) => unreachable!(),
     };
     Ok(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+// ------------------------------------------------------------------------ schema registry
+
+/// A registration from JSON: `{iri, version, sha256, imports, appliesTo, active}`, all
+/// optional; `imports` and `appliesTo` are IRI lists (`https://oxilite.dev/ns#DefaultGraph`
+/// names the default graph), `active` defaults to true.
+pub fn schema_graph_from_json(
+    graph: GraphName,
+    role: crate::registry::SchemaRole,
+    v: &Value,
+) -> Result<crate::registry::SchemaGraph> {
+    let text = |k: &str| -> Result<Option<String>> {
+        match v.get(k) {
+            None | Some(Value::Null) => Ok(None),
+            Some(Value::String(s)) => Ok(Some(s.clone())),
+            Some(_) => Err(Error::Other(format!(
+                "registration field {k} is not a string"
+            ))),
+        }
+    };
+    let iris = |k: &str| -> Result<Vec<NamedNode>> {
+        match v.get(k) {
+            None | Some(Value::Null) => Ok(Vec::new()),
+            Some(Value::Array(a)) => a
+                .iter()
+                .map(|i| {
+                    let s = i
+                        .as_str()
+                        .ok_or_else(|| Error::Other(format!("registration {k} are IRI strings")))?;
+                    NamedNode::new(s).map_err(|e| Error::Other(e.to_string()))
+                })
+                .collect(),
+            Some(_) => Err(Error::Other(format!("registration {k} is a list"))),
+        }
+    };
+    let mut e = crate::registry::SchemaGraph::new(graph, role);
+    e.iri = text("iri")?
+        .map(NamedNode::new)
+        .transpose()
+        .map_err(|e| Error::Other(e.to_string()))?;
+    e.version = text("version")?;
+    e.sha256 = text("sha256")?;
+    e.imports = iris("imports")?;
+    e.applies_to = iris("appliesTo")?
+        .iter()
+        .filter(|n| n.as_str() != crate::registry::vocab::ALL_GRAPHS)
+        .map(crate::registry::node_graph)
+        .collect();
+    e.active = v.get("active").and_then(Value::as_bool).unwrap_or(true);
+    e.loaded_at = text("loadedAt")?;
+    Ok(e)
+}
+
+/// A registry entry as JSON: `{graph, role, iri, version, sha256, imports, appliesTo, active,
+/// loadedAt}` (`appliesTo` empty: every graph).
+pub fn schema_graph_to_json(e: &crate::registry::SchemaGraph) -> Value {
+    let node = |g: &GraphName| {
+        crate::registry::graph_node(g.as_ref())
+            .map(|n| n.into_string())
+            .unwrap_or_default()
+    };
+    json!({
+        "graph": graph_to_json(&e.graph),
+        "role": e.role.name(),
+        "iri": e.iri.as_ref().map(NamedNode::as_str),
+        "version": e.version,
+        "sha256": e.sha256,
+        "imports": e.imports.iter().map(NamedNode::as_str).collect::<Vec<_>>(),
+        "appliesTo": e.applies_to.iter().map(node).collect::<Vec<_>>(),
+        "active": e.active,
+        "loadedAt": e.loaded_at,
+    })
+}
+
+/// The shape index as a flat JSON list, one entry per target class and path:
+/// `{target, path, datatype, minCount, maxCount, pattern, in, relationship}`.
+pub fn shape_index_to_json(index: &crate::shapes::ShapeIndex) -> Value {
+    let mut out = Vec::new();
+    for (target, paths) in &index.by_class {
+        for (path, s) in paths {
+            out.push(json!({
+                "target": target.as_str(),
+                "path": path.as_str(),
+                "datatype": s.datatype.as_ref().map(NamedNode::as_str),
+                "minCount": s.min,
+                "maxCount": s.max,
+                "pattern": s.pattern,
+                "in": s.values_in.iter().map(term_to_json).collect::<Vec<_>>(),
+                "relationship": s.relationship,
+            }));
+        }
+    }
+    Value::Array(out)
 }

@@ -286,6 +286,127 @@ impl Engine {
         self.wrap(ops::clear_inferences_job(), |_| ok())
     }
 
+    // The schema registry is RDF in `<oxilite:schema>`: these build the portable SPARQL that
+    // registers, maps, lists and drops schema graphs; the driver runs it with `query` and
+    // `update` (whose statistics reload covers registry changes).
+
+    /// SPARQL registering a graph (a JSON term) as `ontology`, `shacl` or `shex`;
+    /// `registration` is JSON (`{iri, version, sha256, imports, appliesTo, active}`).
+    #[wasm_bindgen(js_name = registerSchemaGraphSparql)]
+    pub fn register_schema_graph_sparql(
+        &self,
+        graph: &str,
+        role: &str,
+        registration: Option<String>,
+    ) -> Result<String, JsError> {
+        let role: oxilite_core::registry::SchemaRole = role.parse().map_err(js)?;
+        let registration: Value = match registration {
+            Some(r) => serde_json::from_str(&r).map_err(js)?,
+            None => Value::Null,
+        };
+        let e =
+            oxilite_core::json::schema_graph_from_json(parse_graph(graph)?, role, &registration)
+                .map_err(js)?;
+        oxilite_core::registry::register_update(&e).map_err(js)
+    }
+
+    /// SPARQL removing a registration (the graph's triples stay).
+    #[wasm_bindgen(js_name = unregisterSchemaGraphSparql)]
+    pub fn unregister_schema_graph_sparql(&self, graph: &str) -> Result<String, JsError> {
+        oxilite_core::registry::unregister_update(parse_graph(graph)?.as_ref()).map_err(js)
+    }
+
+    /// SPARQL activating or deactivating a registration.
+    #[wasm_bindgen(js_name = setSchemaGraphActiveSparql)]
+    pub fn set_schema_graph_active_sparql(
+        &self,
+        graph: &str,
+        active: bool,
+    ) -> Result<String, JsError> {
+        oxilite_core::registry::set_active_update(parse_graph(graph)?.as_ref(), active).map_err(js)
+    }
+
+    /// SPARQL removing a registration and every triple of its graph.
+    #[wasm_bindgen(js_name = dropSchemaGraphSparql)]
+    pub fn drop_schema_graph_sparql(&self, graph: &str) -> Result<String, JsError> {
+        oxilite_core::registry::drop_update(parse_graph(graph)?.as_ref()).map_err(js)
+    }
+
+    /// SPARQL `ASK`: is the graph registered?
+    #[wasm_bindgen(js_name = schemaGraphRegisteredSparql)]
+    pub fn schema_graph_registered_sparql(&self, graph: &str) -> Result<String, JsError> {
+        oxilite_core::registry::registered_query(parse_graph(graph)?.as_ref()).map_err(js)
+    }
+
+    /// SPARQL counting a graph's triples (`?n`).
+    #[wasm_bindgen(js_name = graphSizeSparql)]
+    pub fn graph_size_sparql(&self, graph: &str) -> Result<String, JsError> {
+        Ok(oxilite_core::registry::size_query(
+            parse_graph(graph)?.as_ref(),
+        ))
+    }
+
+    /// SPARQL installing or refreshing the system graphs (the vocabulary, the registry's own
+    /// description).
+    #[wasm_bindgen(js_name = systemGraphsSparql)]
+    pub fn system_graphs_sparql(&self) -> String {
+        oxilite_core::registry::system_graphs_update()
+    }
+
+    /// SPARQL `ASK`: are the system graphs installed at the current vocabulary version?
+    #[wasm_bindgen(js_name = systemGraphsReadySparql)]
+    pub fn system_graphs_ready_sparql(&self) -> String {
+        oxilite_core::registry::system_graphs_ready_query()
+    }
+
+    /// SPARQL reading the registry; parse its output with `schemaGraphsFromOutput`.
+    #[wasm_bindgen(js_name = schemaGraphsSparql)]
+    pub fn schema_graphs_sparql(&self) -> String {
+        oxilite_core::registry::entries_query()
+    }
+
+    /// The registry entries (JSON `[{graph, role, iri, version, sha256, imports, appliesTo,
+    /// active, loadedAt}]`) from the JSON output of the `schemaGraphsSparql` query.
+    #[wasm_bindgen(js_name = schemaGraphsFromOutput)]
+    pub fn schema_graphs_from_output(&self, output: &str) -> Result<String, JsError> {
+        let v: Value = serde_json::from_str(output).map_err(js)?;
+        let rows = v
+            .get("rows")
+            .and_then(Value::as_array)
+            .map(|rows| {
+                rows.iter()
+                    .map(|r| {
+                        r.as_array()
+                            .map(|cells| {
+                                cells
+                                    .iter()
+                                    .map(|c| (!c.is_null()).then(|| json_to_term(c).ok()).flatten())
+                                    .collect::<Vec<_>>()
+                            })
+                            .unwrap_or_default()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let entries = oxilite_core::registry::entries_from_rows(&rows);
+        Ok(Value::Array(
+            entries
+                .iter()
+                .map(oxilite_core::json::schema_graph_to_json)
+                .collect(),
+        )
+        .to_string())
+    }
+
+    /// The compiled SHACL property shapes: `[{target, path, datatype, minCount, maxCount,
+    /// pattern, in, relationship}]`.
+    #[wasm_bindgen(js_name = shapeIndex)]
+    pub fn shape_index(&self) -> Job {
+        self.wrap(ops::shape_index_job(&self.caps()), |i| {
+            Ok(oxilite_core::json::shape_index_to_json(&i))
+        })
+    }
+
     /// Creates the schema if needed and loads planner statistics.
     pub fn open(&self) -> Job {
         self.stats_job(ops::open_job(&self.options, &self.caps()))
@@ -1006,4 +1127,9 @@ fn parse_quads(quads: &str) -> Result<Vec<Quad>, JsError> {
         .as_array()
         .ok_or_else(|| js("expected a JSON array of quads"))?;
     arr.iter().map(|q| json_to_quad(q).map_err(js)).collect()
+}
+
+/// A graph name from its JSON term.
+fn parse_graph(graph: &str) -> Result<GraphName, JsError> {
+    json_to_graph(&serde_json::from_str::<Value>(graph).map_err(js)?).map_err(js)
 }

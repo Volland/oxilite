@@ -537,6 +537,41 @@ fn manifest_graphs_and_per_graph_reload() {
     assert_eq!(name["inferred"], false);
 }
 
+// @lat: [[tests#Studio server#Ontology graphs apply where the manifest maps them]]
+#[test]
+fn ontology_graphs_apply_where_mapped() {
+    let manifest = "reasoning = \"rdfs\"\n[[graph]]\niri = \"https://ex.org/g/staff\"\nfiles = [\"staff.ttl\"]\n[[graph]]\niri = \"https://ex.org/g/guests\"\nfiles = [\"guests.ttl\"]\n[[graph]]\niri = \"https://ex.org/g/onto\"\nfiles = [\"onto.ttl\"]\nrole = \"ontology\"\napplies_to = [\"https://ex.org/g/staff\"]\n";
+    let mut c = Client::start(workspace(&[
+        ("oxilite.toml", manifest),
+        ("onto.ttl", ONTOLOGY),
+        ("staff.ttl", STAFF),
+        (
+            "guests.ttl",
+            "@prefix ex: <http://ex.org/> .\nex:gus a ex:Employee .\n",
+        ),
+    ]));
+    let rows = c.ok(
+        "oxilite/query",
+        json!({"query": "SELECT ?x WHERE { ?x a <http://ex.org/Person> } ORDER BY ?x"}),
+    );
+    let people: Vec<String> = rows["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r[0]["value"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    assert_eq!(
+        people,
+        ["http://ex.org/carol", "http://ex.org/dan"],
+        "{rows}"
+    );
+    let registry = c.ok(
+        "oxilite/query",
+        json!({"query": "ASK { GRAPH <oxilite:schema> { <https://ex.org/g/onto> <https://oxilite.dev/ns#appliesTo> <https://ex.org/g/staff> } }"}),
+    );
+    assert_eq!(registry["value"], true, "{registry}");
+}
+
 // @lat: [[tests#Studio server#Explorer shows the class hierarchy]]
 #[test]
 fn explorer_shows_the_class_hierarchy() {

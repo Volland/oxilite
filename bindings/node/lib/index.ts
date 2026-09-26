@@ -43,6 +43,15 @@ import {
   type LevelChange,
   type Versioning,
   type VersionStatus,
+  type GraphArg,
+  type PropertyShapeEntry,
+  type SchemaGraphEntry,
+  type SchemaRegistration,
+  type SchemaRole,
+  graphJson,
+  registrationJson,
+  toSchemaGraphs,
+  toShapeIndex,
   toChanges,
   loadDataToString,
   outputToResult,
@@ -71,6 +80,13 @@ interface NativeStoreInstance {
   optimize(): void;
   materialize(reasonable?: boolean | null): number;
   clearInferences(): void;
+  registerSchemaGraph(graph: string, role: string, registration?: string | null): void;
+  schemaGraphs(): string;
+  setSchemaGraphActive(graph: string, active: boolean): boolean;
+  unregisterSchemaGraph(graph: string): boolean;
+  dropSchemaGraph(graph: string): number;
+  shapeIndex(): string;
+  installSystemGraphs(): boolean;
   clear(): void;
   backup(path: string): void;
   jsonld(op: string, args: string, options?: string | null): string;
@@ -125,6 +141,12 @@ export interface StoreOptions {
   asOfIndex?: boolean;
   /** With `"stamped"` or `"log"`: index the tick that added each quad. */
   stampIndex?: boolean;
+  /**
+   * Install the system graphs in a blank store: the oxilite vocabulary in `<oxilite:vocabulary>`
+   * and the schema registry's own description in `<oxilite:schema>` (default false, so a new
+   * store is empty as in Oxigraph).
+   */
+  systemGraphs?: boolean;
 }
 
 const j = (t?: TermLike | null) => (t ? JSON.stringify(toJson(t)) : null);
@@ -149,6 +171,7 @@ export class Store {
         versioning: opts.versioning ?? "off",
         asOfIndex: opts.asOfIndex ?? false,
         stampIndex: opts.stampIndex ?? false,
+        systemGraphs: opts.systemGraphs ?? false,
       }),
     );
     if (init && typeof init !== "string" && isIterable(init)) this.addAll(init);
@@ -338,6 +361,49 @@ export class Store {
   /** Removes every materialized inference. */
   clearInferences(): void {
     this.native.clearInferences();
+  }
+
+  /**
+   * Declares a graph to hold an ontology, SHACL shapes or a ShEx schema. Its triples stay
+   * where they are; registering the first ontology graph scopes reasoning to the registered
+   * ones, and the first shapes graph scopes the compiled shape index. Registering again
+   * replaces the entry.
+   */
+  registerSchemaGraph(graph: GraphArg, role: SchemaRole, registration: SchemaRegistration = {}): void {
+    this.native.registerSchemaGraph(graphJson(graph), role, registrationJson(registration));
+  }
+
+  /** The schema registry, ordered by role and graph. */
+  schemaGraphs(): SchemaGraphEntry[] {
+    return toSchemaGraphs(JSON.parse(this.native.schemaGraphs()));
+  }
+
+  /** Activates or deactivates a registration; returns whether one was found. */
+  setSchemaGraphActive(graph: GraphArg, active: boolean): boolean {
+    return this.native.setSchemaGraphActive(graphJson(graph), active);
+  }
+
+  /** Removes a registration, keeping the graph's triples; returns whether one was found. */
+  unregisterSchemaGraph(graph: GraphArg): boolean {
+    return this.native.unregisterSchemaGraph(graphJson(graph));
+  }
+
+  /** Removes a registration and every quad of its graph; returns the number of quads removed. */
+  dropSchemaGraph(graph: GraphArg): number {
+    return this.native.dropSchemaGraph(graphJson(graph));
+  }
+
+  /**
+   * Installs or refreshes the system graphs (`<oxilite:vocabulary>`, `<oxilite:schema>`'s own
+   * description) in an existing store; returns `false` when they were already current.
+   */
+  installSystemGraphs(): boolean {
+    return this.native.installSystemGraphs();
+  }
+
+  /** The compiled SHACL property shapes of the registered shapes graphs. */
+  shapeIndex(): PropertyShapeEntry[] {
+    return toShapeIndex(JSON.parse(this.native.shapeIndex()));
   }
 
   /** Refreshes planner statistics (run after large imports). */

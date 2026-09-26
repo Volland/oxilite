@@ -143,15 +143,21 @@ fn is_axiom_class(o: &str) -> bool {
         .is_some_and(|l| matches!(l, "SymmetricProperty" | "TransitiveProperty"))
 }
 
-/// Does writing this quad change the schema closure?
+/// Does writing this quad change the schema closure? (A schema axiom, or anything in the
+/// registry graph, which scopes the closure.)
 pub fn is_schema_quad(q: QuadRef<'_>) -> bool {
-    is_schema_iri(q.predicate.as_str())
+    crate::registry::is_registry_quad(q)
+        || is_schema_iri(q.predicate.as_str())
         || (q.predicate == rdf::TYPE
             && matches!(q.object, TermRef::NamedNode(n) if is_axiom_class(n.as_str())))
 }
 
 /// Can this update change the schema closure? (Conservative: variables count as schema.)
 pub fn update_touches_schema(update: &Update) -> bool {
+    crate::registry::update_touches_registry(update) || touches_axioms(update)
+}
+
+fn touches_axioms(update: &Update) -> bool {
     let pattern = |p: &NamedNodePattern, o: &TermPattern| match p {
         NamedNodePattern::Variable(_) => true,
         NamedNodePattern::NamedNode(n) if is_schema_iri(n.as_str()) => true,
@@ -190,13 +196,13 @@ pub(crate) fn non_literal(x: &str) -> String {
     format!("(({x}) >> {PAYLOAD_BITS}) IN (1, 2, 9)")
 }
 
-/// Statements recomputing `tbox_closure` from the asserted quads (every graph).
+/// Statements recomputing `tbox_closure`, one closure per scope (see
+/// [`crate::registry::ontology_axioms`]): the scope of every graph, and one per graph that an
+/// active ontology is mapped to. Each statement reads the ontology axioms tagged with their
+/// scope; recursion only joins rows of the same scope.
 pub fn closure_statements() -> Vec<Statement> {
     let v = vocab();
-    // Only the active registered ontology graphs contribute axioms; while none is registered,
-    // this is every graph, which is what the closure did before the registry existed.
-    let ontology_quads = crate::registry::scoped_quads(crate::registry::SchemaRole::Ontology);
-    let quads = ontology_quads.as_str();
+    let ax = |cond: String| crate::registry::ontology_axioms(&cond);
     let (c, p, s_, t) = (
         kind::CLASS,
         kind::PROPERTY,
@@ -204,60 +210,63 @@ pub fn closure_statements() -> Vec<Statement> {
         kind::TRANSITIVE,
     );
     let class_edges = format!(
-        "SELECT s AS a, o AS b FROM {quads} WHERE p = {sco} UNION SELECT s, o FROM {quads} WHERE p = {eqc} UNION SELECT o, s FROM {quads} WHERE p = {eqc}",
-        sco = v.sco,
-        eqc = v.eqc
+        "SELECT scope AS k, s AS a, o AS b FROM {} UNION SELECT scope, o, s FROM {}",
+        ax(format!("q.p IN ({}, {})", v.sco, v.eqc)),
+        ax(format!("q.p = {}", v.eqc))
     );
     let prop_edges = format!(
-        "SELECT s AS a, o AS b FROM {quads} WHERE p = {spo} UNION SELECT s, o FROM {quads} WHERE p = {eqp} UNION SELECT o, s FROM {quads} WHERE p = {eqp}",
-        spo = v.spo,
-        eqp = v.eqp
+        "SELECT scope AS k, s AS a, o AS b FROM {} UNION SELECT scope, o, s FROM {}",
+        ax(format!("q.p IN ({}, {})", v.spo, v.eqp)),
+        ax(format!("q.p = {}", v.eqp))
     );
     let closure = |k: i64, edges: &str| {
         Statement::new(format!(
-            "WITH RECURSIVE e(a, b) AS ({edges}), c(a, b) AS (SELECT a, b FROM e UNION SELECT c.a, e.b FROM c JOIN e ON e.a = c.b) \
-             INSERT OR IGNORE INTO tbox_closure(kind, sub, sup) SELECT {k}, a, b FROM c WHERE a <> b"
+            "WITH RECURSIVE e(k, a, b) AS ({edges}), \
+             c(k, a, b) AS (SELECT k, a, b FROM e UNION SELECT c.k, c.a, e.b FROM c JOIN e ON e.k = c.k AND e.a = c.b) \
+             INSERT OR IGNORE INTO tbox_closure(kind, scope, sub, sup) SELECT {k}, k, a, b FROM c WHERE a <> b"
         ))
     };
     // OWL: property edges with a direction bit (1 = inverse), composed modulo 2.
     let owl = Statement::new(format!(
-        "WITH RECURSIVE e(a, b, d) AS (SELECT a, b, 0 FROM ({prop_edges}) \
-           UNION SELECT s, o, 1 FROM {quads} WHERE p = {inv} UNION SELECT o, s, 1 FROM {quads} WHERE p = {inv} \
-           UNION SELECT s, s, 1 FROM {quads} WHERE p = {ty} AND o = {sym}), \
-         c(a, b, d) AS (SELECT a, b, d FROM e UNION SELECT c.a, e.b, (c.d + e.d) % 2 FROM c JOIN e ON e.a = c.b) \
-         INSERT OR IGNORE INTO tbox_closure(kind, sub, sup) SELECT {s_} + d, a, b FROM c WHERE d = 1 OR a <> b",
-        inv = v.inv,
-        ty = v.ty,
-        sym = v.sym,
+        "WITH RECURSIVE e(k, a, b, d) AS (SELECT k, a, b, 0 FROM ({prop_edges}) \
+           UNION SELECT scope, s, o, 1 FROM {inv} UNION SELECT scope, o, s, 1 FROM {inv} \
+           UNION SELECT scope, s, s, 1 FROM {sym}), \
+         c(k, a, b, d) AS (SELECT k, a, b, d FROM e UNION SELECT c.k, c.a, e.b, (c.d + e.d) % 2 FROM c JOIN e ON e.k = c.k AND e.a = c.b) \
+         INSERT OR IGNORE INTO tbox_closure(kind, scope, sub, sup) SELECT {s_} + d, k, a, b FROM c WHERE d = 1 OR a <> b",
+        inv = ax(format!("q.p = {}", v.inv)),
+        sym = ax(format!("q.p = {} AND q.o = {}", v.ty, v.sym)),
     ));
-    // Classes a domain/range class is a subclass of (reflexive).
+    let dom_rng = || ax(format!("q.p IN ({}, {})", v.dom, v.rng));
+    // Classes a domain/range class is a subclass of (reflexive), per scope.
     let classes = format!(
-        "SELECT o AS a, o AS b FROM {quads} WHERE p IN ({dom}, {rng}) UNION SELECT sub, sup FROM tbox_closure WHERE kind = {c}",
-        dom = v.dom,
-        rng = v.rng
+        "SELECT scope AS k, o AS a, o AS b FROM {} UNION SELECT scope, sub, sup FROM tbox_closure WHERE kind = {c}",
+        dom_rng()
     );
     // Properties with (sub, sup) where sup is reflexive over properties having a domain/range.
     let subs = |k: i64| {
         format!(
-            "SELECT s AS a, s AS b FROM {quads} WHERE p IN ({dom}, {rng}) UNION SELECT sub, sup FROM tbox_closure WHERE kind = {k}",
-            dom = v.dom,
-            rng = v.rng
+            "SELECT scope AS k, s AS a, s AS b FROM {} UNION SELECT scope, sub, sup FROM tbox_closure WHERE kind = {k}",
+            dom_rng()
         )
     };
     let typed = |k: i64, props: &str, axiom: i64| {
         format!(
-            "SELECT {k}, pq.a, cd.b FROM ({props}) pq JOIN {quads} ax ON ax.p = {axiom} AND ax.s = pq.b JOIN ({classes}) cd ON cd.a = ax.o"
+            "SELECT {k}, pq.k, pq.a, cd.b FROM ({props}) pq JOIN {} x ON x.s = pq.b AND x.scope = pq.k \
+             JOIN ({classes}) cd ON cd.a = x.o AND cd.k = pq.k",
+            ax(format!("q.p = {axiom}"))
         )
     };
     let inverse_typed = |k: i64, axiom: i64| {
         format!(
-            "SELECT {k}, pq.sub, cd.b FROM tbox_closure pq JOIN {quads} ax ON ax.p = {axiom} AND ax.s = pq.sup JOIN ({classes}) cd ON cd.a = ax.o WHERE pq.kind = {inv}",
+            "SELECT {k}, pq.scope, pq.sub, cd.b FROM tbox_closure pq JOIN {} x ON x.s = pq.sup AND x.scope = pq.scope \
+             JOIN ({classes}) cd ON cd.a = x.o AND cd.k = pq.scope WHERE pq.kind = {inv}",
+            ax(format!("q.p = {axiom}")),
             inv = kind::OWL_INVERSE
         )
     };
     let insert = |sql: String| {
         Statement::new(format!(
-            "INSERT OR IGNORE INTO tbox_closure(kind, sub, sup) {sql}"
+            "INSERT OR IGNORE INTO tbox_closure(kind, scope, sub, sup) {sql}"
         ))
     };
     vec![
@@ -266,9 +275,8 @@ pub fn closure_statements() -> Vec<Statement> {
         closure(p, &prop_edges),
         owl,
         Statement::new(format!(
-            "INSERT OR IGNORE INTO tbox_closure(kind, sub, sup) SELECT {t}, s, s FROM {quads} WHERE p = {ty} AND o = {trans}",
-            ty = v.ty,
-            trans = v.trans
+            "INSERT OR IGNORE INTO tbox_closure(kind, scope, sub, sup) SELECT {t}, scope, s, s FROM {}",
+            ax(format!("q.p = {} AND q.o = {}", v.ty, v.trans))
         )),
         insert(typed(kind::SUBJECT_TYPE, &subs(p), v.dom)),
         insert(typed(kind::OBJECT_TYPE, &subs(p), v.rng)),
@@ -288,7 +296,7 @@ pub fn closure_statements() -> Vec<Statement> {
 /// Loads the transitive properties (kept in memory with the planner statistics).
 pub fn transitive_statement(id_col: impl Fn(&str) -> String) -> Statement {
     Statement::new(format!(
-        "SELECT {} FROM tbox_closure WHERE kind = {}",
+        "SELECT DISTINCT {} FROM tbox_closure WHERE kind = {}",
         id_col("sub"),
         kind::TRANSITIVE
     ))
@@ -313,6 +321,9 @@ pub struct Entailment<'a> {
     /// (`QueryOptions::include_schema_graphs`).
     pub hide_schema: bool,
     pub transitive: &'a BTreeSet<i64>,
+    /// Graphs with a closure of their own (see `tbox_closure.scope`); every other graph uses
+    /// the closure of [`crate::registry::all_scope`].
+    pub scopes: &'a BTreeSet<i64>,
     /// Maximum terms of a compound SELECT.
     pub max_compound: usize,
     /// Read the store as it was at this tick (see `version`), from the change log.
@@ -320,6 +331,21 @@ pub struct Entailment<'a> {
 }
 
 impl Entailment<'_> {
+    /// SQL: the closure scope of the quads whose graph column is `g`.
+    fn scope_of(&self, g: &str) -> String {
+        let all = crate::registry::all_scope();
+        if self.scopes.is_empty() {
+            return all.to_string();
+        }
+        let list = self
+            .scopes
+            .iter()
+            .map(i64::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("(CASE WHEN {g} IN ({list}) THEN {g} ELSE {all} END)")
+    }
+
     /// Is any rewriting needed?
     pub fn active(&self) -> bool {
         self.reasoning != Reasoning::None || self.inferred
@@ -401,6 +427,9 @@ impl Entailment<'_> {
         }
         let v = vocab();
         let (same, inv, subj, obj) = self.kinds();
+        // Each quad is entailed with the closure of its graph's scope.
+        let cs = format!(" AND c.scope = {}", self.scope_of("x.g"));
+        let cs = cs.as_str();
         // One arm: `SELECT s AS s, p AS p, o AS o, g AS g FROM …` (compound SELECTs take their
         // column names from the first arm, and derived tables cannot rename columns).
         let row = |s: &str, p: &str, o: &str, gx: &str, rest: String| {
@@ -428,7 +457,7 @@ impl Entailment<'_> {
             }
             // Superclasses of asserted types, then domains and ranges.
             a.push(row("x.s", &ty, "c.sup", "x", format!(
-                "{base} x JOIN tbox_closure c ON c.kind = {} AND c.sub = x.o WHERE x.p = {ty}{}{}{}",
+                "{base} x JOIN tbox_closure c ON c.kind = {} AND c.sub = x.o WHERE x.p = {ty}{cs}{}{}{}",
                 kind::CLASS, eq("x.s", s), eq("c.sup", o), gw("x")
             )));
             a.push(row(
@@ -437,7 +466,7 @@ impl Entailment<'_> {
                 "c.sup",
                 "x",
                 format!(
-                    "tbox_closure c JOIN {base} x ON x.p = c.sub WHERE c.kind = {subj}{}{}{}",
+                    "tbox_closure c JOIN {base} x ON x.p = c.sub WHERE c.kind = {subj}{cs}{}{}{}",
                     eq("x.s", s),
                     eq("c.sup", o),
                     gw("x")
@@ -449,7 +478,7 @@ impl Entailment<'_> {
                 "c.sup",
                 "x",
                 format!(
-                    "tbox_closure c JOIN {base} x ON x.p = c.sub WHERE c.kind = {obj} AND {}{}{}{}",
+                    "tbox_closure c JOIN {base} x ON x.p = c.sub WHERE c.kind = {obj}{cs} AND {}{}{}{}",
                     non_literal("x.o"),
                     eq("x.o", s),
                     eq("c.sup", o),
@@ -464,13 +493,13 @@ impl Entailment<'_> {
             let mut a = vec![
                 row("x.s", &pid_s, "x.o", "x", format!("{base} x WHERE x.p = {pid}{}{}{}", eq("x.s", s), eq("x.o", o), gw("x"))),
                 row("x.s", &pid_s, "x.o", "x", format!(
-                    "tbox_closure c JOIN {base} x ON x.p = c.sub WHERE c.kind = {same} AND c.sup = {pid}{}{}{}",
+                    "tbox_closure c JOIN {base} x ON x.p = c.sub WHERE c.kind = {same} AND c.sup = {pid}{cs}{}{}{}",
                     eq("x.s", s), eq("x.o", o), gw("x")
                 )),
             ];
             if let Some(inv) = inv {
                 a.push(row("x.o", &pid_s, "x.s", "x", format!(
-                    "tbox_closure c JOIN {base} x ON x.p = c.sub WHERE c.kind = {inv} AND c.sup = {pid} AND {}{}{}{}",
+                    "tbox_closure c JOIN {base} x ON x.p = c.sub WHERE c.kind = {inv} AND c.sup = {pid}{cs} AND {}{}{}{}",
                     non_literal("x.o"), eq("x.o", s), eq("x.s", o), gw("x")
                 )));
             }
@@ -493,8 +522,29 @@ impl Entailment<'_> {
         };
         // A transitive property: the closure of its (otherwise) entailed triples, walked from a
         // constant endpoint when there is one.
-        let transitive = |pid: i64, s: Option<i64>, o: Option<i64>| -> String {
-            let u = union_all(prop_arms(pid, None, None), self.max_compound);
+        // With graphs of their own scope, a property is transitive only in the graphs whose
+        // scope declares it so; elsewhere its triples are entailed as for any property.
+        let declared = |pid: i64, g: &str| {
+            format!(
+                "EXISTS (SELECT 1 FROM tbox_closure t WHERE t.kind = {} AND t.sub = {pid} AND t.scope = {})",
+                kind::TRANSITIVE,
+                self.scope_of(g)
+            )
+        };
+        let transitive = |pid: i64, s: Option<i64>, o: Option<i64>| -> Vec<String> {
+            let mut u = union_all(prop_arms(pid, None, None), self.max_compound);
+            let mut arms = Vec::new();
+            if !self.scopes.is_empty() {
+                u = format!(
+                    "SELECT z.s, z.p, z.o, z.g FROM ({u}) z WHERE {}",
+                    declared(pid, "z.g")
+                );
+                arms.push(format!(
+                    "SELECT z.s, z.p, z.o, z.g FROM ({}) z WHERE NOT {}",
+                    union_all(prop_arms(pid, s, o), self.max_compound),
+                    declared(pid, "z.g")
+                ));
+            }
             let rec = match (s, o) {
                 (Some(s), _) => format!(
                     "r(n, g) AS (SELECT o, g FROM u WHERE s = {s} UNION SELECT u.o, u.g FROM r JOIN u ON u.s = r.n AND u.g = r.g) \
@@ -510,13 +560,16 @@ impl Entailment<'_> {
                      SELECT s, {pid} AS p, o, g FROM r"
                 ),
             };
-            format!("SELECT * FROM (WITH RECURSIVE u(s, p, o, g) AS ({u}), {rec})")
+            arms.push(format!(
+                "SELECT * FROM (WITH RECURSIVE u(s, p, o, g) AS ({u}), {rec})"
+            ));
+            arms
         };
         let mut arms = Vec::new();
         match p {
             Some(pid) if pid == v.ty => arms.extend(type_arms(s, o, true)),
             Some(pid) if self.reasoning == Reasoning::OwlQl && self.transitive.contains(&pid) => {
-                arms.push(transitive(pid, s, o));
+                arms.extend(transitive(pid, s, o));
             }
             Some(pid) => arms.extend(prop_arms(pid, s, o)),
             None => {
@@ -540,7 +593,7 @@ impl Entailment<'_> {
                     "x.o",
                     "x",
                     format!(
-                        "tbox_closure c JOIN {base} x ON x.p = c.sub WHERE c.kind = {same}{}{}{}",
+                        "tbox_closure c JOIN {base} x ON x.p = c.sub WHERE c.kind = {same}{cs}{}{}{}",
                         eq("x.s", s),
                         eq("x.o", o),
                         gw("x")
@@ -548,7 +601,7 @@ impl Entailment<'_> {
                 ));
                 if let Some(inv) = inv {
                     arms.push(row("x.o", "c.sup", "x.s", "x", format!(
-                        "tbox_closure c JOIN {base} x ON x.p = c.sub WHERE c.kind = {inv} AND {}{}{}{}",
+                        "tbox_closure c JOIN {base} x ON x.p = c.sub WHERE c.kind = {inv}{cs} AND {}{}{}{}",
                         non_literal("x.o"), eq("x.o", s), eq("x.s", o), gw("x")
                     )));
                 }
@@ -562,7 +615,7 @@ impl Entailment<'_> {
                 arms.extend(type_arms(s, o, false));
                 if self.reasoning == Reasoning::OwlQl {
                     for &pid in self.transitive {
-                        arms.push(transitive(pid, s, o));
+                        arms.extend(transitive(pid, s, o));
                     }
                 }
             }

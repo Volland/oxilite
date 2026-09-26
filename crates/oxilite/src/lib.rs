@@ -41,11 +41,14 @@ pub use oxilite_core::{
 };
 pub use schema_store::{RegisteredGraph, Registration};
 
-/// The schema registry: ontologies and shapes graphs declared as such, and the compiled shape
-/// index they feed.
+/// The schema registry: ontologies and shapes graphs declared as such in the system graph
+/// `<oxilite:schema>`, which graphs they apply to, and the compiled shape index they feed.
 pub mod schema {
     pub use crate::schema_store::{RegisteredGraph, Registration};
-    pub use oxilite_core::registry::{SchemaGraph, SchemaRole};
+    pub use oxilite_core::registry::{
+        vocab, SchemaGraph, SchemaRole, NS, SCHEMA_GRAPH, VOCABULARY, VOCABULARY_GRAPH,
+        VOCABULARY_VERSION,
+    };
     pub use oxilite_core::shapes::{PropertyShape, ShapeIndex};
 }
 

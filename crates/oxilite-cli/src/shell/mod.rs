@@ -14,11 +14,12 @@ mod render;
 #[cfg(test)]
 mod tests;
 
-use crate::db::Db;
+use crate::db::{parse_reasoning, reasoning_name, Db, QueryFlags};
 use crate::studio::conn::Vocab;
 use crate::Location;
 use oxilite::io::{RdfFormat, RdfSerializer};
 use oxilite::model::{GraphName, NamedNode, NamedOrBlankNode, Quad, Term};
+use oxilite::schema::{Registration, SchemaRole};
 use oxilite::sparql::SparqlParser;
 use oxilite_core::QueryOutput;
 use prefixes::Prefixes;
@@ -49,12 +50,37 @@ pub const COMMANDS: &[(&str, &str, &str)] = &[
         "?QUERY?",
         "Show the SQL a query compiles to (default: the last query)",
     ),
+    (
+        ".activate",
+        "GRAPH",
+        "Make a registered schema graph contribute again",
+    ),
+    (
+        ".deactivate",
+        "GRAPH",
+        "Stop a registered schema graph contributing",
+    ),
     (".graphs", "", "List the named graphs and their sizes"),
     (".help", "", "Show this message"),
     (
         ".load",
         "FILE ?GRAPH?",
         "Load an RDF file, into GRAPH if given",
+    ),
+    (
+        ".inferred",
+        "?on|off?",
+        "Show or set whether queries match materialized inferences",
+    ),
+    (
+        ".materialize",
+        "?clear?",
+        "Compute the OWL 2 RL inferences (or remove them)",
+    ),
+    (
+        ".map",
+        "GRAPH TARGET...",
+        "Set the graphs a schema graph applies to (ALL: every graph)",
     ),
     (".maxrows", "?N?", "Show or set how many rows a table shows"),
     (".mode", "?MODE?", "Show or set the output mode"),
@@ -75,9 +101,31 @@ pub const COMMANDS: &[(&str, &str, &str)] = &[
     ),
     (".quit", "", "Exit the shell"),
     (".read", "FILE", "Run the statements and commands in FILE"),
+    (
+        ".reasoning",
+        "?MODE?",
+        "Show or set query-time reasoning: none, rdfs or owl-ql",
+    ),
+    (
+        ".register",
+        "ROLE GRAPH ?FILE?",
+        "Register GRAPH as ontology, shacl or shex (loading FILE into it)",
+    ),
+    (".registry", "", "List the registered schema graphs"),
     (".save", "FILE", "Copy this store into a new SQLite file"),
+    (
+        ".schemagraphs",
+        "?on|off?",
+        "Show or set whether queries match registered schema graphs",
+    ),
+    (".shapes", "", "List the compiled SHACL property shapes"),
     (".stats", "", "Summarize the store"),
     (".timer", "on|off", "Show how long each statement takes"),
+    (
+        ".unregister",
+        "GRAPH ?--drop?",
+        "Unregister a schema graph (--drop also deletes its triples)",
+    ),
 ];
 
 pub enum Flow {
@@ -97,6 +145,8 @@ pub struct Session {
     /// The store's vocabulary for completion, computed on demand after each change.
     vocab: Option<Vocab>,
     mode: Mode,
+    /// How the user's queries match (reasoning, inferences, schema graphs).
+    flags: QueryFlags,
     timer: bool,
     max_rows: usize,
     paint: Paint,
@@ -125,6 +175,7 @@ impl Session {
             line_no: 0,
             vocab: None,
             mode: Mode::Table,
+            flags: QueryFlags::default(),
             timer: true,
             max_rows: 200,
             paint: Paint { color: false },
@@ -262,7 +313,7 @@ impl Session {
         let full = self.prefixes.declare_missing(body);
         let start = Instant::now();
         match SparqlParser::new().parse_query(&full) {
-            Ok(_) => match self.db.query(&full, &[], &[]) {
+            Ok(_) => match self.db.query_at(&full, &[], &[], None, &self.flags) {
                 Ok(out) => {
                     let took = start.elapsed();
                     self.prefixes.learn(body);
@@ -362,6 +413,51 @@ impl Session {
                     self.footer("Optimized", start.elapsed());
                 })
             }
+            ".register" => match args.as_slice() {
+                [role, graph, rest @ ..] if rest.len() <= 1 => {
+                    self.register(role, graph, rest.first().copied())
+                }
+                _ => Err("usage: .register ROLE GRAPH ?FILE?".into()),
+            },
+            ".unregister" => match args.as_slice() {
+                [graph] => self.unregister(graph, false),
+                [graph, "--drop"] | ["--drop", graph] => self.unregister(graph, true),
+                _ => Err("usage: .unregister GRAPH ?--drop?".into()),
+            },
+            ".activate" | ".deactivate" => match args.as_slice() {
+                [graph] => self.set_active(graph, name == ".activate"),
+                _ => Err(format!("usage: {name} GRAPH").into()),
+            },
+            ".map" => match args.as_slice() {
+                [graph, targets @ ..] if !targets.is_empty() => self.map(graph, targets),
+                _ => Err("usage: .map GRAPH TARGET...".into()),
+            },
+            ".registry" => self.registry(),
+            ".shapes" => self.shapes(),
+            ".reasoning" => match args.first() {
+                None => {
+                    self.note(reasoning_name(self.flags.reasoning));
+                    Ok(())
+                }
+                Some(m) => parse_reasoning(m)
+                    .map(|r| self.flags.reasoning = r)
+                    .map_err(Into::into),
+            },
+            ".inferred" => self.switch(args.first().copied(), name, |f| &mut f.inferred),
+            ".schemagraphs" => self.switch(args.first().copied(), name, |f| &mut f.schema_graphs),
+            ".materialize" => match args.first() {
+                None => {
+                    let start = Instant::now();
+                    self.db.materialize().map(|n| {
+                        self.footer(
+                            &render::count(n as usize, "inferred triple", "inferred triples"),
+                            start.elapsed(),
+                        );
+                    })
+                }
+                Some(&"clear") => self.db.clear_inferences(),
+                Some(_) => Err("usage: .materialize ?clear?".into()),
+            },
             ".timer" => match args.first() {
                 Some(&"on") => {
                     self.timer = true;
@@ -396,7 +492,7 @@ impl Session {
         let mut text = String::new();
         for (name, args, what) in COMMANDS {
             let head = format!("{name} {args}");
-            let pad = " ".repeat(26usize.saturating_sub(head.chars().count()));
+            let pad = " ".repeat(29usize.saturating_sub(head.chars().count()));
             text.push_str(&format!(
                 "{} {}{pad}{}\n",
                 p.paint(name, &format!("{BOLD};{YELLOW}")),
@@ -418,6 +514,188 @@ impl Session {
             )
         ));
         self.print(&text);
+    }
+
+    /// Shows or sets an on/off query flag.
+    fn switch(
+        &mut self,
+        value: Option<&str>,
+        name: &str,
+        flag: impl Fn(&mut QueryFlags) -> &mut bool,
+    ) -> Result<()> {
+        match value {
+            None => {
+                let on = *flag(&mut self.flags);
+                self.note(if on { "on" } else { "off" });
+                Ok(())
+            }
+            Some("on") => {
+                *flag(&mut self.flags) = true;
+                Ok(())
+            }
+            Some("off") => {
+                *flag(&mut self.flags) = false;
+                Ok(())
+            }
+            Some(_) => Err(format!("usage: {name} on|off").into()),
+        }
+    }
+
+    /// A graph argument: `DEFAULT`, `<iri>`, a prefixed name or a bare IRI.
+    fn graph(&self, text: &str) -> Result<GraphName> {
+        if text.eq_ignore_ascii_case("default") {
+            return Ok(GraphName::DefaultGraph);
+        }
+        Ok(NamedNode::new(self.expand(text)?)?.into())
+    }
+
+    fn graph_label(&self, g: &GraphName) -> String {
+        match g {
+            GraphName::NamedNode(n) => self
+                .prefixes
+                .compact(n.as_str())
+                .unwrap_or_else(|| format!("<{}>", n.as_str())),
+            g => crate::registry::graph_text(g),
+        }
+    }
+
+    fn register(&mut self, role: &str, graph: &str, file: Option<&str>) -> Result<()> {
+        let role: SchemaRole = role.parse()?;
+        let g = self.graph(graph)?;
+        let start = Instant::now();
+        let mut registration = Registration::new();
+        if let Some(f) = file {
+            let target = match &g {
+                GraphName::NamedNode(n) => Some(format!("<{}>", n.as_str())),
+                _ => None,
+            };
+            self.load(f, target.as_deref())?;
+            registration.sha256 = Some(crate::registry::sha256_hex(&std::fs::read(f)?));
+        }
+        self.db.register_schema_graph(&g, role, &registration)?;
+        let text = format!("Registered {} as {}", self.graph_label(&g), role.name());
+        self.footer(&text, start.elapsed());
+        Ok(())
+    }
+
+    fn map(&mut self, graph: &str, targets: &[&str]) -> Result<()> {
+        let g = self.graph(graph)?;
+        let applies_to = if targets.iter().any(|t| t.eq_ignore_ascii_case("all")) {
+            Vec::new()
+        } else {
+            targets
+                .iter()
+                .map(|t| self.graph(t))
+                .collect::<Result<Vec<_>>>()?
+        };
+        crate::registry::remap(&self.db, &g, applies_to)
+    }
+
+    fn unregister(&mut self, graph: &str, drop: bool) -> Result<()> {
+        let g = self.graph(graph)?;
+        let label = self.graph_label(&g);
+        if drop {
+            let n = self.db.drop_schema_graph(&g)?;
+            self.vocab = None;
+            self.note(&format!(
+                "Dropped {label} ({})",
+                render::count(n as usize, "quad", "quads")
+            ));
+        } else if !self.db.unregister_schema_graph(&g)? {
+            return Err(format!("{label} is not registered").into());
+        }
+        Ok(())
+    }
+
+    fn set_active(&mut self, graph: &str, active: bool) -> Result<()> {
+        let g = self.graph(graph)?;
+        if !self.db.set_schema_graph_active(&g, active)? {
+            return Err(format!("{} is not registered", self.graph_label(&g)).into());
+        }
+        Ok(())
+    }
+
+    fn registry(&mut self) -> Result<()> {
+        let entries = self.db.schema_graphs()?;
+        if entries.is_empty() {
+            self.note("No schema graph registered: every graph contributes axioms and shapes.");
+            return Ok(());
+        }
+        let rows: Vec<Vec<render::Cell>> = entries
+            .iter()
+            .map(|e| {
+                let r = &e.registration;
+                vec![
+                    render::Cell {
+                        text: self.graph_label(&e.graph),
+                        code: render::BLUE,
+                        right: false,
+                    },
+                    render::Cell::plain(e.role.name()),
+                    render::Cell::plain(if r.applies_to.is_empty() {
+                        "all graphs".to_owned()
+                    } else {
+                        r.applies_to
+                            .iter()
+                            .map(|g| self.graph_label(g))
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    }),
+                    render::Cell::plain(if r.active { "yes" } else { "no" }),
+                    render::Cell::plain(r.version.clone().unwrap_or_default()),
+                    render::Cell::plain(
+                        r.sha256
+                            .as_deref()
+                            .map(|h| h[..h.len().min(12)].to_string())
+                            .unwrap_or_default(),
+                    ),
+                ]
+            })
+            .collect();
+        let headers =
+            ["graph", "role", "applies to", "active", "version", "sha256"].map(String::from);
+        let t = render::table(&headers, &rows, self.width(), self.paint);
+        self.print(&t);
+        Ok(())
+    }
+
+    fn shapes(&mut self) -> Result<()> {
+        let index = self.db.shape_index()?;
+        if index.is_empty() {
+            self.note("No SHACL property shape compiled.");
+            return Ok(());
+        }
+        let short = |iri: &str| {
+            self.prefixes
+                .compact(iri)
+                .unwrap_or_else(|| format!("<{iri}>"))
+        };
+        let mut rows = Vec::new();
+        for (target, paths) in &index.by_class {
+            for (path, s) in paths {
+                let mut c = crate::registry::shape_constraints(s);
+                if let Some(d) = &s.datatype {
+                    c[0] = format!("datatype {}", short(d.as_str()));
+                }
+                rows.push(vec![
+                    render::Cell {
+                        text: short(target.as_str()),
+                        code: render::BLUE,
+                        right: false,
+                    },
+                    render::Cell {
+                        text: short(path.as_str()),
+                        code: render::BLUE,
+                        right: false,
+                    },
+                    render::Cell::plain(c.join(", ")),
+                ]);
+            }
+        }
+        let headers = ["target", "path", "constraints"].map(String::from);
+        let t = render::table(&headers, &rows, self.width(), self.paint);
+        self.print(&t);
+        Ok(())
     }
 
     /// Opens another store with the same flags; `:memory:` without a file.
@@ -637,7 +915,7 @@ impl Session {
             self.prefixes
                 .declare_missing(input::strip_terminator(query))
         };
-        let text = self.db.explain(&full)?;
+        let text = self.db.explain_at(&full, None, &self.flags)?;
         self.print(&format!("{}\n", text.trim_end()));
         Ok(())
     }

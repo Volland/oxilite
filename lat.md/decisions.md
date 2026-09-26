@@ -128,7 +128,7 @@ Documents therefore never share blank nodes (two credentials' anonymous nodes st
 
 ## D22 Schema graphs registered, not separated
 
-A graph that holds an ontology or SHACL shapes is registered by role in `schema_graphs`; its triples stay in `quads`, and derived caches are scoped by that registration.
+A graph that holds an ontology or SHACL shapes is registered by role; its triples stay in `quads`, and derived caches are scoped by that registration. Where registrations live is [[decisions#D34 The schema registry is RDF in a system graph]].
 
 Moving schema into its own tables would force a `UNION` into every pattern scan and would stop SPARQL reading shapes, which are RDF people query; `GRAPH ?g` already separates them. Registering instead makes drop and replace one `DELETE FROM quads WHERE g = ?` with no read, as `jsonld_graphs` does for documents ([[decisions#D18 The raw document is the source of truth]]). An empty registry means "every graph", so the feature is purely additive. See [[architecture#Schema registry]].
 
@@ -204,3 +204,8 @@ In the history's RDF view a commit is its tick as an `xsd:integer`, and a write 
 
 Term ids are xxh3 hashes computed in Rust, so SQL cannot mint an id for a new IRI or literal; an inline integer is the one id SQL can compute, which makes the history graph and the Datalog history relations pure SQL over `ticks` and `quad_log` with no stored copy. The literals a commit is described with are known in Rust when the tick opens, so they are written then — one more statement per versioned batch and about two rows, never one per triple. Rejected: commit IRIs (no SQL-computable id), a materialized history graph (a write per change), and computing the terms at query time (a write during a read).
 
+## D34 The schema registry is RDF in a system graph
+
+Registrations are triples of `<oxilite:schema>` in the `oxl:` vocabulary, not rows of a table, and each may name the graphs it applies to with `oxl:appliesTo`.
+
+A table is invisible to SPARQL, lost in an N-Quads dump, and only oxilite's SQL can maintain it. As RDF, a registry travels with the dataset, is registered and read by plain SPARQL that runs unchanged on Oxigraph, and can express which data each schema describes. Only the derived caches (`tbox_closure`, the shape index) stay SQL: they read the registry triples in place, so scoping costs no extra round trip. Supersedes the `schema_graphs` table of [[decisions#D22 Schema graphs registered, not separated]]; see [[architecture#Schema registry]].

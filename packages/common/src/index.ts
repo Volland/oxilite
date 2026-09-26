@@ -276,6 +276,11 @@ export interface QueryOptions {
   /** Also match inferences stored by `materialize()` (oxilite extension). */
   include_inferred?: boolean;
   /**
+   * Match the triples of registered schema graphs (oxilite extension, default true); `false`
+   * queries the data without the ontologies and shapes that describe it.
+   */
+  include_schema_graphs?: boolean;
+  /**
    * Read the store as it was at this version (oxilite extension, versioning `log`):
    * `"HEAD~2"`, `"#42"` (a tick) or `"@2026-09-01T12:00:00Z"`.
    */
@@ -666,5 +671,99 @@ export function toChanges(v: unknown): Change[] {
     tick: c.tick,
     added: c.added,
     quad: fromJson(c.quad) as Quad,
+  }));
+}
+
+// ------------------------------------------------------------------------- schema registry
+//
+// The registry is RDF in the system graph <oxilite:schema> (vocabulary: https://oxilite.dev/ns#):
+// each registered graph is typed oxl:OntologyGraph, oxl:ShapesGraph or oxl:ShExGraph and names
+// the graphs it applies to with oxl:appliesTo. The same triples work on any SPARQL store.
+
+/** The system graph holding the schema registry. */
+export const SCHEMA_GRAPH = "oxilite:schema";
+/** The oxilite vocabulary namespace (`oxl:`). */
+export const OXL = "https://oxilite.dev/ns#";
+/** Names the default graph in the registry (as a schema graph or an `appliesTo` target). */
+export const DEFAULT_GRAPH_IRI = "https://oxilite.dev/ns#DefaultGraph";
+
+/** What a registered graph holds. */
+export type SchemaRole = "ontology" | "shacl" | "shex";
+
+/** What is recorded about a graph when it is registered (every field optional). */
+export interface SchemaRegistration {
+  /** The `owl:Ontology` IRI, when it differs from the graph name. */
+  iri?: string;
+  /** `owl:versionIRI`, a version string, or anything else worth pinning. */
+  version?: string;
+  /** Digest of the document the graph was loaded from, for drift detection. */
+  sha256?: string;
+  /** `owl:imports` targets, recorded but not resolved. */
+  imports?: string[];
+  /**
+   * The graphs the schema applies to (`oxl:appliesTo`): IRIs, or `DEFAULT_GRAPH_IRI`. Absent or
+   * empty: every graph.
+   */
+  appliesTo?: GraphArg[];
+  /** An inactive graph stays registered (and hidden) but stops contributing (default true). */
+  active?: boolean;
+}
+
+/** One entry of the schema registry. */
+export interface SchemaGraphEntry {
+  graph: Term;
+  role: SchemaRole;
+  iri: string | null;
+  version: string | null;
+  sha256: string | null;
+  imports: string[];
+  /** The graphs the schema applies to (IRIs, `DEFAULT_GRAPH_IRI`); empty: every graph. */
+  appliesTo: string[];
+  active: boolean;
+  /** When the graph was registered (`xsd:dateTime`). */
+  loadedAt: string | null;
+}
+
+/** One compiled SHACL property shape: every constraint declared on a target class and path. */
+export interface PropertyShapeEntry {
+  target: string;
+  path: string;
+  datatype: string | null;
+  minCount: number | null;
+  maxCount: number | null;
+  pattern: string | null;
+  /** The `sh:in` values. */
+  in: Term[];
+  /** Relationship-valued (`sh:class` / `sh:node`). */
+  relationship: boolean;
+}
+
+/** A graph argument: an RDF/JS term, or an IRI string. */
+export type GraphArg = TermLike | string;
+
+/** The JSON text of a graph argument. */
+export function graphJson(g: GraphArg): string {
+  return JSON.stringify(typeof g === "string" ? { termType: "NamedNode", value: g } : toJson(g));
+}
+
+/** A registration's JSON text. */
+export function registrationJson(r: SchemaRegistration = {}): string {
+  const iri = (g: GraphArg) => (typeof g === "string" ? g : g.termType === "DefaultGraph" ? DEFAULT_GRAPH_IRI : g.value);
+  return JSON.stringify({ ...r, appliesTo: r.appliesTo?.map(iri) });
+}
+
+/** Registry entries from their JSON form. */
+export function toSchemaGraphs(v: unknown): SchemaGraphEntry[] {
+  return (v as (Omit<SchemaGraphEntry, "graph"> & { graph: TermJson })[]).map((e) => ({
+    ...e,
+    graph: fromJson(e.graph),
+  }));
+}
+
+/** Shape index entries from their JSON form. */
+export function toShapeIndex(v: unknown): PropertyShapeEntry[] {
+  return (v as (Omit<PropertyShapeEntry, "in"> & { in: TermJson[] })[]).map((e) => ({
+    ...e,
+    in: e.in.map(fromJson),
   }));
 }

@@ -9,10 +9,13 @@
 // @lat: [[architecture#Command line and HTTP endpoint]]
 
 mod db;
+mod registry;
 mod shell;
 mod studio;
 mod versioning;
 
+use db::QueryFlags;
+use registry::RegistryCommand;
 use versioning::VersioningCommand;
 
 use clap::{Parser, Subcommand};
@@ -77,6 +80,10 @@ struct Location {
     /// Message recorded on the commits of this command's writes (versioned stores).
     #[arg(long, short = 'm')]
     message: Option<String>,
+    /// Do not install the system graphs (the oxilite vocabulary in `<oxilite:vocabulary>`,
+    /// the registry's description in `<oxilite:schema>`) in a new, blank store.
+    #[arg(long)]
+    no_system_graphs: bool,
 }
 
 #[derive(Subcommand)]
@@ -90,6 +97,9 @@ enum Command {
         /// Worker threads.
         #[arg(long, default_value_t = 8)]
         threads: usize,
+        /// How every query matches (reasoning, inferences, schema graphs).
+        #[command(flatten)]
+        flags: QueryFlags,
     },
     /// Bulk-loads RDF files, then refreshes planner statistics.
     Load {
@@ -114,6 +124,8 @@ enum Command {
         /// Results format (json, xml, csv, tsv, or an RDF format for graph results).
         #[arg(long, default_value = "json")]
         results_format: String,
+        #[command(flatten)]
+        flags: QueryFlags,
     },
     /// Prints the SQL a query compiles to, with the planner's notes.
     Explain {
@@ -124,6 +136,8 @@ enum Command {
         /// Compile the query against this version of the store (see `query --as-of`).
         #[arg(long, value_name = "VERSION")]
         as_of: Option<String>,
+        #[command(flatten)]
+        flags: QueryFlags,
     },
     /// Runs a SPARQL update.
     Update {
@@ -155,6 +169,19 @@ enum Command {
         #[arg(long, value_name = "VERSION", conflicts_with = "materialize")]
         as_of: Option<String>,
     },
+    /// The schema registry: which graphs hold ontologies, SHACL shapes or ShEx schemas.
+    Registry {
+        #[command(subcommand)]
+        action: RegistryCommand,
+    },
+    /// Computes the OWL 2 RL closure into the inference table (query it with `--inferred`).
+    Materialize {
+        #[command(flatten)]
+        location: Location,
+        /// Remove every materialized inference instead.
+        #[arg(long)]
+        clear: bool,
+    },
     /// Versioning: the level, the history, changes, diffs, purges and D1 migrations.
     Versioning {
         #[command(subcommand)]
@@ -178,6 +205,9 @@ enum Command {
         /// With `stamped` or `log`: the stamp index.
         #[arg(long)]
         stamp_index: bool,
+        /// Also insert the system graphs (the oxilite vocabulary and the registry's description).
+        #[arg(long)]
+        system_graphs: bool,
     },
     /// Refreshes planner statistics and the reasoning closure.
     Optimize {
@@ -240,6 +270,7 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
             location,
             bind,
             threads,
+            flags,
         } => {
             let db = Arc::new(Db::open(&location)?);
             let server = Arc::new(Server::http(&bind).map_err(|e| e.to_string())?);
@@ -247,9 +278,10 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
             let workers: Vec<_> = (0..threads.max(1))
                 .map(|_| {
                     let (server, db) = (Arc::clone(&server), Arc::clone(&db));
+                    let flags = flags.clone();
                     std::thread::spawn(move || {
                         for request in server.incoming_requests() {
-                            handle(&db, request);
+                            handle(&db, &flags, request);
                         }
                     })
                 })
@@ -283,9 +315,10 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
             query,
             results_format,
             as_of,
+            flags,
         } => {
             let db = Db::open(&location)?;
-            let out = db.query_at(&query, &[], &[], as_of.as_deref())?;
+            let out = db.query_at(&query, &[], &[], as_of.as_deref(), &flags)?;
             print!(
                 "{}",
                 oxilite_core::json::output_to_format(&out, &results_format)?
@@ -296,10 +329,11 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
             location,
             query,
             as_of,
+            flags,
         } => {
             println!(
                 "{}",
-                Db::open(&location)?.explain_at(&query, as_of.as_deref())?
+                Db::open(&location)?.explain_at(&query, as_of.as_deref(), &flags)?
             );
             Ok(())
         }
@@ -339,12 +373,28 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
         }
         Command::Optimize { location } => Ok(Db::open(&location)?.optimize()?),
         Command::Versioning { action } => versioning::run(action),
+        Command::Registry { action } => registry::run(action),
+        Command::Materialize { location, clear } => {
+            let db = Db::open(&location)?;
+            if clear {
+                db.clear_inferences()?;
+            } else {
+                let start = Instant::now();
+                let n = db.materialize()?;
+                eprintln!(
+                    "{n} inferred triple(s) in {:.2}s",
+                    start.elapsed().as_secs_f64()
+                );
+            }
+            Ok(())
+        }
         Command::Schema {
             no_graph_index,
             text_index,
             versioning,
             as_of_index,
             stamp_index,
+            system_graphs,
         } => {
             let options = oxilite::StoreOptions {
                 graph_index: !no_graph_index,
@@ -352,6 +402,7 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
                 versioning: versioning.parse()?,
                 as_of_index,
                 stamp_index,
+                system_graphs,
             };
             print!("{}", oxilite_core::schema::schema_sql(&options));
             Ok(())
@@ -392,7 +443,7 @@ fn read_program(
     Ok(buf)
 }
 
-fn parse_format(media: &str) -> Result<RdfFormat, String> {
+pub(crate) fn parse_format(media: &str) -> Result<RdfFormat, String> {
     let m = media.split(';').next().unwrap_or_default().trim();
     RdfFormat::from_media_type(m)
         .or_else(|| RdfFormat::from_extension(m))
@@ -449,7 +500,7 @@ fn negotiate(accept: Option<&str>, graph: bool) -> &'static str {
     candidates[if graph { 1 } else { 0 }]
 }
 
-fn handle(db: &Db, mut request: Request) {
+fn handle(db: &Db, flags: &QueryFlags, mut request: Request) {
     let url = request.url().to_string();
     let (path, query_string) = url.split_once('?').unwrap_or((url.as_str(), ""));
     let mut params: Vec<(String, String)> = form_urlencoded::parse(query_string.as_bytes())
@@ -489,6 +540,7 @@ fn handle(db: &Db, mut request: Request) {
                     &all("default-graph-uri"),
                     &all("named-graph-uri"),
                     get("version").as_deref(),
+                    flags,
                 )
                 .map_err(|e| e.to_string())?;
             let graph = matches!(out, oxilite_core::QueryOutput::Graph(_));

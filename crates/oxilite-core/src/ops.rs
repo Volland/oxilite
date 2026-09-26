@@ -34,8 +34,13 @@ pub fn open_job(options: &StoreOptions, caps: &Capabilities) -> impl Job<Output 
     enum Phase {
         Start,
         Schema,
+        Inspect,
+        Legacy,
+        Migrated,
         Stats,
-        Empty(Stats),
+        Bootstrapped,
+        Final,
+        Empty(Box<Stats>),
         Upgraded,
         Reloaded,
     }
@@ -43,6 +48,20 @@ pub fn open_job(options: &StoreOptions, caps: &Capabilities) -> impl Job<Output 
         options: StoreOptions,
         caps: Capabilities,
         phase: Phase,
+        /// The store held no quad when opened: it gets the system graphs if asked for.
+        blank: bool,
+    }
+    impl Open {
+        /// Ends the job, first installing the system graphs in a blank store that wants them.
+        fn finish(&mut self, stats: Stats) -> Result<Step<Stats>> {
+            if self.options.system_graphs && std::mem::take(&mut self.blank) {
+                self.phase = Phase::Bootstrapped;
+                return Ok(Step::Execute(Request::atomic(
+                    crate::schema::system_graph_statements(&self.caps),
+                )));
+            }
+            Ok(Step::Done(stats))
+        }
     }
     impl Job for Open {
         type Output = Stats;
@@ -54,15 +73,66 @@ pub fn open_job(options: &StoreOptions, caps: &Capabilities) -> impl Job<Output 
                     Ok(Step::Execute(base_schema(&self.options)))
                 }
                 Phase::Schema => {
+                    self.phase = Phase::Inspect;
+                    Ok(Step::Execute(Request::read(vec![
+                        Statement::new(
+                            "SELECT name, sql FROM sqlite_master WHERE type = 'table' \
+                             AND name IN ('tbox_closure', 'schema_graphs')",
+                        ),
+                        Statement::new("SELECT NOT EXISTS (SELECT 1 FROM quads)"),
+                    ])))
+                }
+                // Schema version 1: `tbox_closure` without scopes, registrations in a table.
+                Phase::Inspect => {
+                    let response = response.unwrap_or_default();
+                    self.blank = response
+                        .get(1)
+                        .and_then(|r| r.rows.first())
+                        .and_then(|row| row.first())
+                        .and_then(SqlValue::as_i64)
+                        == Some(1);
+                    let (mut old_closure, mut legacy) = (false, false);
+                    for row in response
+                        .first()
+                        .map(|r| r.rows.as_slice())
+                        .unwrap_or_default()
+                    {
+                        let name = crate::sql::col(row, 0)?.as_str().unwrap_or_default();
+                        let sql = crate::sql::col(row, 1)?.as_str().unwrap_or_default();
+                        match name {
+                            "tbox_closure" => old_closure = !sql.contains("scope"),
+                            "schema_graphs" => legacy = true,
+                            _ => {}
+                        }
+                    }
+                    if legacy {
+                        self.phase = Phase::Legacy;
+                        Ok(Step::Execute(Request::read(vec![
+                            crate::registry::legacy_rows_statement(),
+                        ])))
+                    } else if old_closure {
+                        self.phase = Phase::Migrated;
+                        Ok(Step::Execute(migration_request(&[], &self.caps)?))
+                    } else {
+                        self.phase = Phase::Stats;
+                        Ok(Step::Execute(Stats::load_request(&self.caps)))
+                    }
+                }
+                Phase::Legacy => {
+                    let entries = crate::registry::legacy_entries(&response.unwrap_or_default())?;
+                    self.phase = Phase::Migrated;
+                    Ok(Step::Execute(migration_request(&entries, &self.caps)?))
+                }
+                Phase::Migrated => {
                     self.phase = Phase::Stats;
                     Ok(Step::Execute(Stats::load_request(&self.caps)))
                 }
                 Phase::Stats => {
                     let stats = Stats::from_response(&response.unwrap_or_default())?;
                     if wanted <= stats.version.level {
-                        return Ok(Step::Done(stats));
+                        return self.finish(stats);
                     }
-                    self.phase = Phase::Empty(stats);
+                    self.phase = Phase::Empty(Box::new(stats));
                     Ok(Step::Execute(Request::read(vec![Statement::new(
                         "SELECT NOT EXISTS (SELECT 1 FROM quads)",
                     )])))
@@ -95,8 +165,14 @@ pub fn open_job(options: &StoreOptions, caps: &Capabilities) -> impl Job<Output 
                     Ok(Step::Execute(Stats::load_request(&self.caps)))
                 }
                 Phase::Reloaded => {
-                    Stats::from_response(&response.unwrap_or_default()).map(Step::Done)
+                    let stats = Stats::from_response(&response.unwrap_or_default())?;
+                    self.finish(stats)
                 }
+                Phase::Bootstrapped => {
+                    self.phase = Phase::Final;
+                    Ok(Step::Execute(Stats::load_request(&self.caps)))
+                }
+                Phase::Final => Stats::from_response(&response.unwrap_or_default()).map(Step::Done),
             }
         }
     }
@@ -104,7 +180,39 @@ pub fn open_job(options: &StoreOptions, caps: &Capabilities) -> impl Job<Output 
         options: options.clone(),
         caps: caps.clone(),
         phase: Phase::Start,
+        blank: false,
     }
+}
+
+/// Migrates a schema version 1 store in one atomic request: `tbox_closure` is recreated with
+/// its scope column, the `schema_graphs` rows become triples of `<oxilite:schema>` and the
+/// table goes, then both schema caches are rebuilt.
+fn migration_request(
+    entries: &[crate::registry::SchemaGraph],
+    caps: &Capabilities,
+) -> Result<Request> {
+    let mut stmts: Vec<Statement> = vec![
+        "DROP TABLE IF EXISTS tbox_closure".into(),
+        crate::schema::TBOX_TABLE.into(),
+        crate::schema::TBOX_INDEX.into(),
+    ];
+    let mut quads = Vec::new();
+    for e in entries {
+        quads.extend(crate::registry::entry_quads(e)?);
+    }
+    if !quads.is_empty() {
+        stmts.extend(EncodedQuads::new(quads.iter().map(Quad::as_ref)).insert_statements(caps));
+    }
+    stmts.push("DROP TABLE IF EXISTS schema_graphs".into());
+    stmts.push(
+        format!(
+            "UPDATE oxilite_meta SET value = '{}' WHERE key = 'schema_version'",
+            crate::schema::SCHEMA_VERSION
+        )
+        .into(),
+    );
+    stmts.extend(schema_refresh(true, true));
+    Ok(Request::atomic(stmts))
 }
 
 /// Loads statistics only.
@@ -471,7 +579,11 @@ pub fn remove_named_graph_job(g: NamedOrBlankNodeRef<'_>) -> OneShot<bool> {
         Statement::new(format!("DELETE FROM quads WHERE g = {id}")),
         Statement::new(format!("DELETE FROM graphs WHERE id = {id}")),
     ];
-    stmts.extend(crate::registry::unregister_statements(id));
+    // A removed graph is no longer registered: its description leaves the registry graph.
+    stmts.push(Statement::new(format!(
+        "DELETE FROM quads WHERE g = {} AND s = {id}",
+        crate::registry::registry_graph_id()
+    )));
     stmts.extend(schema_refresh(true, true));
     OneShot::new(Request::atomic(stmts), |r| {
         Ok(r.iter().take(2).any(|rs| rs.changes > 0))
@@ -497,7 +609,6 @@ pub fn clear_job() -> OneShot<()> {
             "DELETE FROM tbox_closure".into(),
             "DELETE FROM shapes_index".into(),
             "DELETE FROM shapes_in".into(),
-            "DELETE FROM schema_graphs".into(),
             "DELETE FROM graphs".into(),
             "DELETE FROM triple_terms".into(),
             "DELETE FROM terms".into(),
@@ -506,127 +617,11 @@ pub fn clear_job() -> OneShot<()> {
     )
 }
 
-/// Registers a schema graph, then rebuilds what its role feeds.
-///
-/// A registration changes the *scope* of the closure and the shape index — not just their
-/// content — so both are rebuilt in the same atomic request as the registration itself.
-///
-/// A named graph may be registered before it holds anything, so the registration creates it
-/// (as `insert_named_graph` would): otherwise the registry would name a graph the term
-/// dictionary has never heard of.
-pub fn register_schema_graph_job(
-    entry: &crate::registry::SchemaGraph,
-    graph: GraphNameRef<'_>,
-    caps: &Capabilities,
-) -> OneShot<()> {
-    let mut stmts = Vec::new();
-    let named: Option<NamedOrBlankNodeRef<'_>> = match graph {
-        GraphNameRef::NamedNode(n) => Some(n.into()),
-        GraphNameRef::BlankNode(b) => Some(b.into()),
-        GraphNameRef::DefaultGraph => None,
-    };
-    if let Some(g) = named {
-        let mut rows = EncodedRows::default();
-        let id = rows.subject(g);
-        stmts.extend(term_statements(&rows, caps));
-        stmts.push(Statement::new(format!(
-            "INSERT OR IGNORE INTO graphs(id) VALUES ({id})"
-        )));
-    }
-    stmts.extend(crate::registry::register_statements(entry));
-    stmts.extend(schema_refresh(true, true));
-    OneShot::new(Request::atomic(stmts), |_| Ok(()))
-}
-
-/// Removes a registration, keeping the graph's triples.
-pub fn unregister_schema_graph_job(graph: i64) -> OneShot<bool> {
-    let mut stmts = crate::registry::unregister_statements(graph);
-    stmts.extend(schema_refresh(true, true));
-    OneShot::new(Request::atomic(stmts), |r| Ok(scalar_changes(&r, 1) > 0))
-}
-
-/// Activates or deactivates a registration.
-pub fn set_schema_graph_active_job(graph: i64, active: bool) -> OneShot<bool> {
-    let mut stmts = crate::registry::set_active_statements(graph, active);
-    stmts.extend(schema_refresh(true, true));
-    OneShot::new(Request::atomic(stmts), |r| Ok(scalar_changes(&r, 1) > 0))
-}
-
-/// Removes a registration together with every quad of its graph.
-pub fn drop_schema_graph_job(graph: i64) -> OneShot<u64> {
-    let mut stmts = crate::registry::drop_statements(graph);
-    stmts.extend(schema_refresh(true, true));
-    OneShot::new(Request::atomic(stmts), |r| Ok(scalar_changes(&r, 1)))
-}
-
-/// Reads the registry, with each row's graph name resolved.
-pub fn schema_graphs_job(
-    caps: &Capabilities,
-) -> impl Job<Output = Vec<(crate::registry::SchemaGraph, GraphName)>> {
-    struct Registry {
-        request: Option<Request>,
-        caps: Capabilities,
-        resolver: TermResolver,
-        rows: Vec<crate::registry::SchemaGraph>,
-        started: bool,
-    }
-    impl Job for Registry {
-        type Output = Vec<(crate::registry::SchemaGraph, GraphName)>;
-        fn step(&mut self, response: Option<Response>) -> Result<Step<Self::Output>> {
-            if let Some(r) = self.request.take() {
-                return Ok(Step::Execute(r));
-            }
-            let response = response.unwrap_or_default();
-            if self.started {
-                self.resolver.absorb(response)?;
-            } else {
-                self.started = true;
-                self.rows = crate::registry::from_response(&response)?;
-                for row in &self.rows {
-                    if row.graph != DEFAULT_GRAPH_ID {
-                        self.resolver.want(row.graph);
-                    }
-                }
-            }
-            if let Some(r) = self.resolver.request(&self.caps) {
-                return Ok(Step::Execute(r));
-            }
-            std::mem::take(&mut self.rows)
-                .into_iter()
-                .map(|row| {
-                    let name = if row.graph == DEFAULT_GRAPH_ID {
-                        GraphName::DefaultGraph
-                    } else {
-                        crate::encoding::to_graph_name(
-                            row.graph,
-                            Some(self.resolver.get(row.graph)?),
-                        )?
-                    };
-                    Ok((row, name))
-                })
-                .collect::<Result<Vec<_>>>()
-                .map(Step::Done)
-        }
-    }
-    Registry {
-        request: Some(crate::registry::load_request(caps)),
-        caps: caps.clone(),
-        resolver: TermResolver::default(),
-        rows: Vec::new(),
-        started: false,
-    }
-}
-
 /// Reads the compiled shape index.
 pub fn shape_index_job(caps: &Capabilities) -> OneShot<crate::shapes::ShapeIndex> {
     OneShot::new(crate::shapes::ShapeIndex::load_request(caps), |r| {
         crate::shapes::ShapeIndex::from_response(&r)
     })
-}
-
-/// Rows changed by the first `n` statements of a response.
-fn scalar_changes(r: &Response, n: usize) -> u64 {
-    r.iter().take(n).map(|rs| rs.changes).sum()
 }
 
 /// Helper used by drivers: encodes a term to its id without I/O.

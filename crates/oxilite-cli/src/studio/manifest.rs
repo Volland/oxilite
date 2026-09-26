@@ -73,6 +73,9 @@ pub struct GraphSpec {
     pub files: Vec<String>,
     #[serde(default)]
     pub role: Role,
+    /// For an ontology graph: the graphs it applies to (every graph when empty).
+    #[serde(default)]
+    pub applies_to: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]

@@ -1166,6 +1166,7 @@ impl<'a> Compiler<'a> {
             inferred: self.options.include_inferred,
             hide_schema: !self.options.include_schema_graphs,
             transitive: &self.stats.transitive,
+            scopes: &self.stats.schema_scopes,
             max_compound: self.caps.max_compound_select,
             as_of: self.as_of,
         }

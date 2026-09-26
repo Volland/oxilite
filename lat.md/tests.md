@@ -172,6 +172,14 @@ RDFS subclass chains, an OWL transitive property and SQL-rule materialization (o
 
 `@oxilite/d1` stores credentials with the bundled W3C contexts, stores a presentation's embedded credentials, finds them by issuer and validity, and rejects invalid credentials.
 
+### System graphs on D1
+
+`installSystemGraphs()` installs the vocabulary and registry description on D1 once, and the schema script with `systemGraphs` carries their inserts.
+
+### Schema registry on D1
+
+On Miniflare D1 the registry's portable SPARQL registers, maps, lists, deactivates and drops schema graphs; a mapping narrows entailments and hiding excludes the registered graphs.
+
 ## Reasoning
 
 Query-time RDFS / OWL QL rewriting and OWL 2 RL materialization, each test run on the bundled SQLite and on the system `libsqlite3`, see [[architecture#Reasoning]].
@@ -198,11 +206,11 @@ On five sample ontologies (RDFS, property axioms, equality, class expressions wi
 
 ## Schema registry
 
-Ontology and shapes graphs declared as such, the scoping that follows, and the compiled shape index, see [[architecture#Schema registry]].
+Ontology and shapes graphs declared in the registry graph `<oxilite:schema>`, their mapping to data graphs, the scoping that follows, and the compiled shape index, see [[architecture#Schema registry]].
 
 ### Registration round-trip
 
-A graph is registered with role, IRI, version and imports, listed back with its graph name resolved, and unregistered; registering and unregistering leave its triples untouched and queryable.
+A graph is registered with role, IRI, version and imports, listed back from `<oxilite:schema>`, and unregistered; registering and unregistering leave its triples untouched and queryable.
 
 ### Reasoning scoped to registered ontologies
 
@@ -235,6 +243,28 @@ Two shapes targeting the same class and path, one declaring a cardinality and th
 ### Registry survives reopening
 
 A store reopened from disk still lists its registrations and still reasons under them.
+
+### Ontologies apply to the graphs they are mapped to
+
+Two conflicting ontologies mapped to two data graphs entail only for their own graph's quads; a global ontology adds to both, remapping to every graph widens the entailments, and `schema_graphs_for` lists what applies to a graph.
+
+### The registry is RDF in the schema graph
+
+A plain SPARQL `INSERT DATA` into `<oxilite:schema>` registers a graph as the API does; the API's registration, mapping and deactivation read back with SPARQL, and hiding schema graphs hides the registry graph too.
+
+### A version 1 registry is migrated
+
+A store with the old `schema_graphs` table and unscoped `tbox_closure` opens with its registration as registry triples, reasoning scoped by it, the table gone and schema version 2 recorded.
+
+### Registry SPARQL runs on Oxigraph
+
+The core's registry SPARQL runs unchanged on Oxigraph, reads back the same registration, and leaves the same `<oxilite:schema>` graph as oxilite.
+
+The system-graph install on Oxigraph leaves the same quads as a bootstrapped blank oxilite store, and the vocabulary parses as Turtle.
+
+### A blank store starts with the system graphs
+
+With `system_graphs`, a new store holds `<oxilite:schema>` and `<oxilite:vocabulary>`; they are current, unlisted, do not narrow reasoning and hide with the schema, and a store with data gets them only on request.
 
 ## Text search
 
@@ -437,6 +467,14 @@ A child Node process writes a quad to a SQLite file; a store reopened on that fi
 ### Credentials are stored and found
 
 `@oxilite/node` stores credentials under their id with validity as `Date`s, stores a presentation's credentials, finds them by issuer, validity and type, and raises `JsonLdError` codes for invalid credentials.
+
+### Schema registry
+
+The Node store registers ontology and shapes graphs by term or IRI, scopes RDFS reasoning to them, maps an ontology to other graphs or the default graph, exposes the shape index and rejects unknown roles.
+
+### System graphs
+
+`new Store({ systemGraphs: true })` starts with the vocabulary graph while a default store stays empty, and `installSystemGraphs()` adds it to an existing store once.
 
 ## Cypher
 
@@ -824,6 +862,24 @@ Predicates and classes of the store complete after their prefix in the right pos
 
 A script prints what succeeded, reports errors with their line on standard error and exits with 1; `.exit` stops before later lines run.
 
+### Schema registry commands
+
+`.register` (loading a file), `.map`, `.registry`, `.shapes`, `.activate`, `.deactivate` and `.unregister --drop` manage the registry from the shell; unknown roles and graphs report errors.
+
+### Session query options
+
+`.reasoning`, `.inferred` and `.schemagraphs` apply to the user's queries and `.explain`, not to `.dump`; `.materialize` and `.materialize clear` drive OWL 2 RL inferences.
+
+## Command line
+
+The `oxilite` subcommands beyond the shell, see [[architecture#Command line and HTTP endpoint]].
+
+### Registry and reasoning flags
+
+A new CLI store starts with the system graphs, `registry` manages registrations, and the query flags change what queries match.
+
+The system graphs can be skipped (`--no-system-graphs`) and installed later (`registry init`); `registry register --file` loads and records a digest, `list --json`, `map`, `activate`, `drop` and `shapes` work on a file store, and `query` / `explain` honour `--reasoning`, `--inferred` and `--no-schema-graphs`.
+
 ## Studio server
 
 The language server behind oxilite studio, driven over an in-memory LSP connection against a temporary workspace, see [[architecture#Studio server]].
@@ -977,6 +1033,10 @@ Each rule reports its body matches and its head's facts, and a rule over a predi
 ### Explorer shows the class hierarchy
 
 The explorer lists its folders, roots the class tree at the superclass with its inferred instances counted, lists subclasses with asserted counts, and gives files their roles.
+
+### Ontology graphs apply where the manifest maps them
+
+A manifest ontology graph with `applies_to` makes employees of the mapped graph persons, not those of another graph, and the mapping is visible in `<oxilite:schema>`.
 
 ## Versioning
 

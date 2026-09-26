@@ -124,6 +124,62 @@ describe("D1Store (Oxigraph JS API, async)", () => {
     await store.clearInferences();
   });
 
+  // @lat: [[tests#D1#Schema registry on D1]]
+  it("registers schema graphs on D1", async () => {
+    const onto = namedNode("http://example.com/onto");
+    await store.load(
+      `@prefix ex: <http://example.com/> . @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+       ex:Dog rdfs:subClassOf ex:Animal .`,
+      { format: "text/turtle", to_graph_name: onto },
+    );
+    await store.load(
+      `@prefix ex: <http://example.com/> . @prefix sh: <http://www.w3.org/ns/shacl#> . @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+       ex:S a sh:NodeShape ; sh:targetClass ex:Person ; sh:property [ sh:path ex:age ; sh:datatype xsd:integer ] .`,
+      { format: "text/turtle", to_graph_name: ex2 },
+    );
+    await store.add(quad(namedNode("http://example.com/rex"), namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"), namedNode("http://example.com/Dog"), ex));
+    await store.registerSchemaGraph(onto, "ontology", { version: "v1" });
+    await store.registerSchemaGraph(ex2, "shacl");
+    const entries = await store.schemaGraphs();
+    assert.deepStrictEqual(entries.map((e) => [e.graph.value, e.role, e.version]), [
+      ["http://example.com/onto", "ontology", "v1"],
+      ["http://example.com/2", "shacl", null],
+    ]);
+    const animals = (await store.query("SELECT ?x WHERE { ?x a <http://example.com/Animal> }", {
+      reasoning: "rdfs",
+      use_default_graph_as_union: true,
+    })) as unknown[];
+    assert.strictEqual(animals.length, 1);
+    const count = "SELECT (COUNT(*) AS ?n) WHERE { GRAPH ?g { ?s ?p ?o } }";
+    const n = async (o: object) => Number(((await store.query(count, o)) as Map<string, Term>[])[0]?.get("n")?.value);
+    assert.strictEqual(await n({ include_schema_graphs: false }), 1);
+    assert.strictEqual((await store.shapeIndex())[0]?.datatype, "http://www.w3.org/2001/XMLSchema#integer");
+    assert.match((await store.schemaGraphs())[0]?.loadedAt ?? "", /^\d{4}-/);
+    // Mapped to graph ex2 only: rex (in graph ex) is no longer an animal.
+    await store.registerSchemaGraph(onto, "ontology", { appliesTo: [ex2] });
+    assert.deepStrictEqual((await store.schemaGraphs())[0]?.appliesTo, ["http://example.com/2"]);
+    const none = (await store.query("SELECT ?x WHERE { ?x a <http://example.com/Animal> }", {
+      reasoning: "rdfs",
+      use_default_graph_as_union: true,
+    })) as unknown[];
+    assert.strictEqual(none.length, 0);
+    assert.strictEqual(await store.query("ASK { GRAPH <oxilite:schema> { ?g a <https://oxilite.dev/ns#ShapesGraph> } }"), true);
+    assert(await store.setSchemaGraphActive(onto, false));
+    assert(await store.unregisterSchemaGraph(onto));
+    assert((await store.dropSchemaGraph(ex2)) > 0);
+    assert.deepStrictEqual(await store.schemaGraphs(), []);
+  });
+
+  // @lat: [[tests#D1#System graphs on D1]]
+  it("installs the system graphs on D1", async () => {
+    assert.strictEqual(await store.installSystemGraphs(), true);
+    assert.strictEqual(await store.installSystemGraphs(), false);
+    assert.strictEqual(await store.query("ASK { GRAPH <oxilite:vocabulary> { ?s ?p ?o } }"), true);
+    assert.deepStrictEqual(await store.schemaGraphs(), []);
+    const { D1Store: S } = await import("../src/node.js");
+    assert(S.schemaSql({ systemGraphs: true }).includes("INSERT"));
+  });
+
   // @lat: [[tests#Text search#Text search on D1]]
   it("full-text search with FTS5 on D1", async () => {
     const db = await mf.getD1Database("DB");

@@ -23,12 +23,19 @@ export {
 
 let ready = false;
 
-function engineOptions(o: { graphIndex?: boolean; versioning?: Versioning; asOfIndex?: boolean; stampIndex?: boolean }): string {
+function engineOptions(o: {
+  graphIndex?: boolean;
+  versioning?: Versioning;
+  asOfIndex?: boolean;
+  stampIndex?: boolean;
+  systemGraphs?: boolean;
+}): string {
   return JSON.stringify({
     graphIndex: o.graphIndex ?? true,
     versioning: o.versioning ?? "off",
     asOfIndex: o.asOfIndex ?? false,
     stampIndex: o.stampIndex ?? false,
+    systemGraphs: o.systemGraphs ?? false,
   });
 }
 
@@ -64,6 +71,7 @@ export class D1Store {
       versioning?: Versioning;
       asOfIndex?: boolean;
       stampIndex?: boolean;
+      systemGraphs?: boolean;
       wasm?: WebAssembly.Module | BufferSource;
     } = {},
   ): Promise<string> {

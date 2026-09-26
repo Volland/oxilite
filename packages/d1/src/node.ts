@@ -33,6 +33,7 @@ export class D1Store {
       versioning?: Versioning;
       asOfIndex?: boolean;
       stampIndex?: boolean;
+      systemGraphs?: boolean;
     } = {},
   ): string {
     const e = new Engine(
@@ -42,6 +43,7 @@ export class D1Store {
         versioning: options.versioning ?? "off",
         asOfIndex: options.asOfIndex ?? false,
         stampIndex: options.stampIndex ?? false,
+        systemGraphs: options.systemGraphs ?? false,
       }),
     );
     if (options.jsonld) return e.jsonldSchemaSql(JSON.stringify(options.jsonld === true ? {} : options.jsonld));

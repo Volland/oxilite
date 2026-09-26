@@ -36,8 +36,10 @@ pub struct Stats {
     pub graph_index: bool,
     /// The full-text index exists (`oxl:textMatch` compiles to FTS5).
     pub text_index: bool,
-    /// Transitive properties (from `tbox_closure`), for query-time reasoning.
+    /// Transitive properties (from `tbox_closure`, any scope), for query-time reasoning.
     pub transitive: BTreeSet<i64>,
+    /// Graphs with a closure scope of their own (see `registry::ontology_axioms`).
+    pub schema_scopes: BTreeSet<i64>,
     /// The versioning level and history of the store (see `version`).
     pub version: crate::version::VersionState,
 }
@@ -69,11 +71,12 @@ impl Stats {
                 id_col(caps, "p"),
                 id_col(caps, "o")
             )),
+            crate::registry::scopes_statement(|c| id_col(caps, c)),
         ])
     }
 
     pub fn from_response(response: &Response) -> Result<Self> {
-        expect_len(response, 5)?;
+        expect_len(response, 6)?;
         let mut stats = Self::default();
         for row in &response[0].rows {
             let key = col(row, 0)?.as_str().unwrap_or_default();
@@ -117,6 +120,11 @@ impl Stats {
         for row in &response[3].rows {
             if let Some(p) = col(row, 0)?.as_i64() {
                 stats.transitive.insert(p);
+            }
+        }
+        for row in &response[5].rows {
+            if let Some(g) = col(row, 0)?.as_i64() {
+                stats.schema_scopes.insert(g);
             }
         }
         for row in &response[4].rows {
