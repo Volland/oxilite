@@ -112,8 +112,12 @@ fn registry_sparql_runs_on_oxigraph() {
         },
     )
     .unwrap();
+    // The vocabulary's shapes hold blank nodes, labelled differently by each store: compare
+    // canonical forms.
     let all = |quads: Vec<Quad>| {
-        let mut v: Vec<String> = quads.iter().map(ToString::to_string).collect();
+        let mut d: oxrdf::Dataset = quads.into_iter().collect();
+        d.canonicalize(oxrdf::dataset::CanonicalizationAlgorithm::Unstable);
+        let mut v: Vec<String> = d.iter().map(|q| q.to_string()).collect();
         v.sort();
         v
     };

@@ -422,6 +422,20 @@ impl Db {
         Ok(sync_store!(self, s => s.schema_graphs(), s => s.schema_graphs())?)
     }
 
+    pub fn set_schema_graph_targets(
+        &self,
+        graph: &GraphName,
+        applies_to: &[GraphName],
+    ) -> Result<bool> {
+        Ok(sync_store!(self,
+            s => s.set_schema_graph_targets(graph, applies_to),
+            s => s.set_schema_graph_targets(graph, applies_to))?)
+    }
+
+    pub fn registry_problems(&self) -> Result<Vec<String>> {
+        Ok(sync_store!(self, s => s.registry_problems(), s => s.registry_problems())?)
+    }
+
     pub fn set_schema_graph_active(&self, graph: &GraphName, active: bool) -> Result<bool> {
         Ok(sync_store!(self,
             s => s.set_schema_graph_active(graph, active),

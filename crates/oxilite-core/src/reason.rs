@@ -134,8 +134,13 @@ fn is_schema_iri(p: &str) -> bool {
         || p == rdfs::SUB_PROPERTY_OF.as_str()
         || p == rdfs::DOMAIN.as_str()
         || p == rdfs::RANGE.as_str()
-        || p.strip_prefix(OWL)
-            .is_some_and(|l| matches!(l, "equivalentClass" | "equivalentProperty" | "inverseOf"))
+        || p.strip_prefix(OWL).is_some_and(|l| {
+            // `owl:imports` pulls another registered ontology into a scope.
+            matches!(
+                l,
+                "equivalentClass" | "equivalentProperty" | "inverseOf" | "imports"
+            )
+        })
 }
 
 fn is_axiom_class(o: &str) -> bool {

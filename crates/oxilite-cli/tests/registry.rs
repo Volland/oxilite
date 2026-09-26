@@ -112,6 +112,39 @@ fn registry_and_reasoning_flags() {
     assert_eq!(list[0]["version"], "v1");
     assert_eq!(list[0]["sha256"].as_str().unwrap().len(), 64);
 
+    // The registry passes its own shapes; the recorded digest catches a changed source file.
+    assert!(
+        String::from_utf8_lossy(&oxilite(&["registry", "check", "-l", db]).stderr)
+            .contains("valid")
+    );
+    ok(&[
+        "registry",
+        "verify",
+        "http://ex.org/good",
+        "--file",
+        &good,
+        "-l",
+        db,
+    ]);
+    let drift = oxilite(&[
+        "registry",
+        "verify",
+        "http://ex.org/good",
+        "--file",
+        &bad,
+        "-l",
+        db,
+    ]);
+    assert!(!drift.status.success());
+    assert!(String::from_utf8_lossy(&drift.stderr).contains("drifted"));
+    ok(&["update", "-l", db, "-u",
+        "INSERT DATA { GRAPH <oxilite:schema> { <http://ex.org/good> <https://oxilite.dev/ns#active> \"no\" } }"]);
+    let check = oxilite(&["registry", "check", "-l", db]);
+    assert!(!check.status.success());
+    assert!(String::from_utf8_lossy(&check.stdout).contains("<https://oxilite.dev/ns#active>"));
+    ok(&["update", "-l", db, "-u",
+        "DELETE DATA { GRAPH <oxilite:schema> { <http://ex.org/good> <https://oxilite.dev/ns#active> \"no\" } }"]);
+
     let plants = "SELECT ?x WHERE { ?x a <http://ex.org/Plant> }";
     let animals = "SELECT ?x WHERE { ?x a <http://ex.org/Animal> }";
     assert!(
@@ -163,10 +196,10 @@ fn registry_and_reasoning_flags() {
         a.extend_from_slice(extra);
         ok(&a).lines().nth(1).unwrap().trim().to_owned()
     };
-    // Visible: both ontologies, the registry graph's five triples about the good one (role,
-    // active, version, sha256, registration time), and the system graphs the new store started
-    // with (the vocabulary and the registry's own description: 74 triples).
-    assert_eq!(n(&[]), "81");
+    // Visible: both ontologies, the registry graph's six triples about the good one (role,
+    // active, oxl:AllGraphs, version, sha256, registration time), and the system graphs the new
+    // store started with (the vocabulary with its shapes, and the registry's own description).
+    assert_eq!(n(&[]), "182");
     assert_eq!(n(&["--no-schema-graphs"]), "1");
 
     // Mapping: the good ontology applies to another graph only, then to every graph again.
