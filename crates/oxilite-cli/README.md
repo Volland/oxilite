@@ -40,7 +40,7 @@ oxilite> SELECT ?who ?name WHERE {
 oxilite> .exit
 ```
 
-A statement runs as soon as it is complete on one line; a statement over several lines runs when it ends with `;` or an empty line. Tab completes dot-commands, SPARQL keywords, prefixes, variables and the store's own predicates and classes in the position they fit. Well-known prefixes (`rdf`, `rdfs`, `owl`, `xsd`, `foaf`, `schema`, …) are predeclared, and `PREFIX` declarations and loaded Turtle files add to them. Results are tables fitted to the terminal; `.mode` switches to JSON, XML, CSV, TSV or an RDF format. `.help` lists the commands: `.open`, `.save`, `.load`, `.read`, `.dump`, `.explain`, `.datalog`, `.graphs`, `.stats`, `.prefix`, `.timer`, `.maxrows`, `.exit` and more. History is kept in `~/.oxilite_history`.
+A statement runs as soon as it is complete on one line; a statement over several lines runs when it ends with `;` or an empty line. Tab completes dot-commands, SPARQL keywords, prefixes, variables and the store's own predicates and classes in the position they fit. Well-known prefixes (`rdf`, `rdfs`, `owl`, `xsd`, `foaf`, `schema`, …) are predeclared, and `PREFIX` declarations and loaded Turtle files add to them. Results are tables fitted to the terminal; `.mode` switches to JSON, XML, CSV, TSV or an RDF format. `.help` lists the commands: `.open`, `.save`, `.load`, `.read`, `.dump`, `.explain`, `.datalog`, `.graphs`, `.stats`, `.prefix`, `.reasoning`, `.register`, `.registry`, `.timer`, `.maxrows`, `.exit` and more. History is kept in `~/.oxilite_history`.
 
 ## Commands
 
@@ -53,6 +53,23 @@ oxilite optimize -l data.sqlite                                  # planner stati
 oxilite serve    -l data.sqlite -b 127.0.0.1:7879                # /query, /update, /store
 oxilite serve    -l data.sqlite --library /usr/lib/libsqlite3.so # the same file on the system SQLite
 ```
+
+### Ontologies, shapes and reasoning
+
+```bash
+oxilite registry register http://ex.org/onto/hr --role ontology --file hr.ttl \
+        --applies-to http://ex.org/data/staff -l kb.sqlite      # load, register, record its SHA-256
+oxilite registry register http://ex.org/shapes --role shacl --file shapes.ttl -l kb.sqlite
+oxilite registry init  -l old.sqlite                              # install the system graphs in an existing store
+oxilite registry list  -l kb.sqlite [--json]                     # role, mapping, state, version
+oxilite registry map   http://ex.org/onto/hr --to ALL -l kb.sqlite  # apply to every graph (or IRIs, DEFAULT)
+oxilite registry shapes -l kb.sqlite                             # the compiled SHACL property shapes
+oxilite registry deactivate|activate|unregister|drop GRAPH -l kb.sqlite
+oxilite query -l kb.sqlite --reasoning rdfs -q 'SELECT …'        # also --inferred, --no-schema-graphs
+oxilite materialize -l kb.sqlite [--clear]                       # OWL 2 RL inferences
+```
+
+A database the CLI creates starts with the system graphs: the `oxl:` vocabulary in `<oxilite:vocabulary>` and the registry's own description (`--no-system-graphs` opts out). Registrations are RDF in the named graph `<oxilite:schema>`, so the same setup works on Oxigraph with plain SPARQL; each ontology entails only for the graphs it applies to. In the shell: `.register`, `.map`, `.registry`, `.shapes`, `.reasoning`, `.inferred`, `.schemagraphs`, `.materialize`. See the [schema registry reference](https://github.com/Volland/oxilite/blob/main/docs/schema-registry.md).
 
 ### Versioning
 

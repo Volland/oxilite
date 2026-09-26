@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Graphs that describe graphs – oxilite</title>
+  <meta name="description" content="oxilite keeps its schema registry as RDF in a named graph, with a published vocabulary: which graphs are ontologies or SHACL shapes, which data each one describes, and reasoning scoped per graph. The same SPARQL works on Oxigraph.">
+  <meta property="og:title" content="Graphs that describe graphs">
+  <meta property="og:description" content="Named graphs, system graphs and the oxl: vocabulary: a schema registry that is plain RDF and travels with your data.">
+  <meta property="og:image" content="../assets/logo.png">
+  <meta name="theme-color" content="#0a0a0a">
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg">
+  <link rel="icon" type="image/png" href="../assets/logo.png">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt=""><span>oxi<b>lite</b></span></a>
+      <nav class="nav" aria-label="Main">
+        <a href="../">Home</a>
+        <a href="./">Articles</a>
+        <a href="../ns/">Vocabulary</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="article">
+    <article class="wrap">
+      <span class="kicker">Named graphs · Ontologies · SHACL</span>
+      <h1>Graphs that describe graphs</h1>
+      <p class="standfirst">A knowledge graph usually holds more than data: the ontologies that give it meaning and the shapes that keep it honest. oxilite now records which graph is which, and which data each schema describes, as plain RDF in a named graph of its own, with a published vocabulary. Your schema setup travels with your data and works on any SPARQL store.</p>
+      <p class="meta">A design note · Available on <code>main</code>, shipping in the next release · Every example is asserted by <a href="https://github.com/Volland/oxilite/blob/main/crates/oxilite/tests/schema_registry.rs"><code>schema_registry.rs</code></a>, <a href="https://github.com/Volland/oxilite/blob/main/testsuite/tests/registry_portability.rs"><code>registry_portability.rs</code></a> and the CLI tests · Reference: <a href="https://github.com/Volland/oxilite/blob/main/docs/schema-registry.md">docs/schema-registry.md</a></p>
+
+      <h2>Named graphs are the unit of meaning</h2>
+      <p>RDF gives you one tool for saying "these triples belong together": the named graph. People use it for provenance (one graph per source), for tenancy (one per customer), for versions, and for schema: the HR ontology in one graph, the product ontology in another, SHACL shapes in a third.</p>
+      <p>The store, though, has no idea which of those graphs are <em>schema</em>. An ontology is just more triples. Reasoners then do the only thing they can: they treat every <code>rdfs:subClassOf</code> anywhere in the dataset as an axiom that applies everywhere. Load two datasets whose ontologies disagree, and every entity ends up inheriting from both.</p>
+      <p>oxilite's <a href="schema-registry.html">schema registry</a> fixed the first half of that problem by letting a graph declare its role. It kept that declaration in a private SQL table, and that had a price:</p>
+      <ul>
+        <li>SPARQL could not see it;</li>
+        <li>a dump lost it;</li>
+        <li>it could not say <em>which data</em> an ontology is for.</li>
+      </ul>
+      <p>The registry is now RDF.</p>
+
+      <h2><span class="step">1</span>The registry is a named graph</h2>
+      <p>Registrations live in the system graph <code>&lt;oxilite:schema&gt;</code>. Each registered graph is described there, with the graph's own IRI as the subject:</p>
+<pre><code><span class="k">PREFIX</span> oxl: &lt;https://oxilite.dev/ns#&gt;
+
+<span class="k">GRAPH</span> &lt;oxilite:schema&gt; {
+  &lt;https://ex.org/onto/zoo&gt; <span class="k">a</span> oxl:OntologyGraph ;
+      oxl:appliesTo &lt;https://ex.org/data/zoo&gt; ;
+      oxl:active <span class="k">true</span> ;
+      oxl:version <span class="s">"2.1"</span> ;
+      oxl:loadedAt <span class="s">"2026-09-26T10:00:00Z"</span>^^xsd:dateTime .
+
+  &lt;https://ex.org/shapes&gt; <span class="k">a</span> oxl:ShapesGraph .     <span class="c"># no oxl:appliesTo: every graph</span>
+}</code></pre>
+      <p>Nothing about the ontology graph itself changes: its triples stay where you loaded them, ordinary RDF that SPARQL reads and updates. The registry is a description <em>about</em> graphs, which is exactly what RDF is good at.</p>
+      <p>Because it is just triples, registering a graph is just an update. This is a complete registration, on oxilite or anywhere else:</p>
+<pre><code><span class="k">INSERT DATA</span> { <span class="k">GRAPH</span> &lt;oxilite:schema&gt; {
+  &lt;https://ex.org/onto/zoo&gt; <span class="k">a</span> oxl:OntologyGraph ; oxl:appliesTo &lt;https://ex.org/data/zoo&gt; .
+} }</code></pre>
+      <p>oxilite notices the write, and in the same atomic request rebuilds what depends on it: the reasoning closure and the SHACL shape index.</p>
+
+      <h2><span class="step">2</span>Map each schema to the data it describes</h2>
+      <p><code>oxl:appliesTo</code> is the new idea. It names the graphs a schema describes: graph IRIs, <code>oxl:DefaultGraph</code>, or <code>oxl:AllGraphs</code>. Leaving it out means every graph.</p>
+      <p>That is what lets two datasets with conflicting ontologies share one store:</p>
+<pre><code><span class="c"># ontology graphs                         # data graphs</span>
+ex:zoo-onto     ex:Dog ⊑ ex:Animal        ex:zoo      ex:rex  a ex:Dog
+ex:garden-onto  ex:Dog ⊑ ex:Plant         ex:garden   ex:fido a ex:Dog   <span class="c"># a snapdragon cultivar</span>
+ex:common       ex:Animal ⊑ ex:Being , ex:Plant ⊑ ex:Being</code></pre>
+<pre><code>$ oxilite registry register http://ex.org/zoo-onto    --role ontology --applies-to http://ex.org/zoo    -l kg.sqlite
+$ oxilite registry register http://ex.org/garden-onto --role ontology --applies-to http://ex.org/garden -l kg.sqlite
+$ oxilite registry register http://ex.org/common      --role ontology -l kg.sqlite
+
+$ oxilite query -l kg.sqlite --reasoning rdfs -q 'SELECT ?x { GRAPH ?g { ?x a ex:Animal } }'   <span class="c"># ex:rex</span>
+$ oxilite query -l kg.sqlite --reasoning rdfs -q 'SELECT ?x { GRAPH ?g { ?x a ex:Plant } }'    <span class="c"># ex:fido</span>
+$ oxilite query -l kg.sqlite --reasoning rdfs -q 'SELECT ?x { GRAPH ?g { ?x a ex:Being } }'    <span class="c"># both</span></code></pre>
+      <p>Each triple is entailed with the axioms that apply to <em>its own graph</em>: the zoo ontology for zoo data, the garden ontology for garden data, and the common ontology for both. This holds even when the query reads every graph at once, with <code>GRAPH ?g</code> or a union default graph. <code>schema_graphs_for(graph, role)</code> answers the same question from code: which active ontologies (or shapes) apply to this graph?</p>
+      <p>Under the hood, the TBox closure is kept per <em>scope</em>:</p>
+      <ul>
+        <li>one closure for all graphs;</li>
+        <li>one more for each graph that has ontologies of its own, built from those ontologies plus the global ones.</li>
+      </ul>
+      <p>Closures do not compose across ontologies, so each scope gets a full one. That costs little, because a TBox is small. The query rewrite then joins each quad with the closure of its graph. A store that maps nothing pays one extra equality on an indexed column, and nothing else.</p>
+
+      <h2><span class="step">3</span>System graphs, and the ontology of the registry</h2>
+      <p>A registry written in a vocabulary should carry that vocabulary. So oxilite now keeps two <strong>system graphs</strong>, both typed <code>oxl:SystemGraph</code> in the registry:</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Graph</th><th>Holds</th></tr></thead>
+        <tbody>
+          <tr><td><code>&lt;oxilite:schema&gt;</code></td><td>The registry: what every registered graph is and where it applies, including a description of itself</td></tr>
+          <tr><td><code>&lt;oxilite:vocabulary&gt;</code></td><td>The <code>oxl:</code> ontology: classes, properties and their documentation, declared to apply to <code>&lt;oxilite:schema&gt;</code></td></tr>
+        </tbody>
+      </table></div>
+      <p>A database the <code>oxilite</code> command line creates starts with both, so the registry is self-describing from its first write:</p>
+<pre><code>$ oxilite new.sqlite
+oxilite&gt; SELECT ?class ?label { GRAPH &lt;oxilite:vocabulary&gt; { ?class rdfs:subClassOf oxl:SchemaGraph ; rdfs:label ?label } } ORDER BY ?class
+┌───────────────────┬────────────────────┐
+│ class             │ label              │
+├───────────────────┼────────────────────┤
+│ oxl:OntologyGraph │ ontology graph     │
+│ oxl:ShExGraph     │ ShEx schema graph  │
+│ oxl:ShapesGraph   │ SHACL shapes graph │
+│ oxl:SystemGraph   │ system graph       │
+└───────────────────┴────────────────────┘
+4 rows</code></pre>
+      <p>The libraries leave a new store empty by default. <code>@oxilite/node</code> and the Rust crate are drop-in replacements for Oxigraph, and an Oxigraph store starts empty. You opt in with one flag:</p>
+<pre><code><span class="c">// Rust</span>
+Store::open_with_options(<span class="s">"kg.sqlite"</span>, StoreOptions { system_graphs: <span class="k">true</span>, ..Default::default() })?;
+<span class="c">// Node</span>
+<span class="k">new</span> Store({ path: <span class="s">"kg.sqlite"</span>, systemGraphs: <span class="k">true</span> });
+<span class="c">// Cloudflare D1 (or: npx oxilite-d1 schema --system-graphs &gt; migrations/0001.sql)</span>
+<span class="k">await</span> D1Store.open(env.DB, { wasm, systemGraphs: <span class="k">true</span> });</code></pre>
+      <p>An existing database gets them with <code>oxilite registry init</code>, <code>install_system_graphs()</code> or <code>installSystemGraphs()</code>. Each of these does nothing when the installed vocabulary is already current.</p>
+      <p>System graphs are part of the dataset, but they are not registrations:</p>
+      <ul>
+        <li><code>schema_graphs()</code> does not list them;</li>
+        <li>they never narrow reasoning or the shape index;</li>
+        <li>they stay out of the "every graph" fallback;</li>
+        <li><code>include_schema_graphs: false</code> hides them along with the schema they describe.</li>
+      </ul>
+      <p>The vocabulary is published on its own at <a href="../ns/">oxilitedb.com/ns</a>, as a readable page and as <a href="../ns/oxl.ttl">Turtle</a>.</p>
+
+      <h2><span class="step">4</span>The same setup on Oxigraph</h2>
+      <p>Every registry operation is SPARQL 1.1, which the core generates. Register, map, deactivate, unregister, drop, install the system graphs: all are plain updates, and listing is one <code>SELECT</code>. A test runs that exact text on a real Oxigraph store and checks three things:</p>
+      <ul>
+        <li>Oxigraph reads back the same registration;</li>
+        <li>it ends up with the identical <code>&lt;oxilite:schema&gt;</code> graph oxilite writes;</li>
+        <li>installing the system graphs there leaves the same quads as a bootstrapped blank oxilite store.</li>
+      </ul>
+      <p>Oxigraph does not reason, but everything that <em>describes</em> your schema is portable:</p>
+      <ul>
+        <li>an N-Quads dump carries it;</li>
+        <li>a validator pointed at Oxigraph can find the shapes for a graph;</li>
+        <li>any tool can ask which ontologies apply where.</li>
+      </ul>
+<pre><code><span class="c"># which active ontologies describe ex:staff? (any SPARQL store)</span>
+<span class="k">SELECT</span> ?onto <span class="k">WHERE</span> { <span class="k">GRAPH</span> &lt;oxilite:schema&gt; {
+  ?onto <span class="k">a</span> oxl:OntologyGraph .
+  <span class="k">FILTER NOT EXISTS</span> { ?onto oxl:active <span class="k">false</span> }
+  <span class="k">FILTER</span> (<span class="k">NOT EXISTS</span> { ?onto oxl:appliesTo ?any }
+       || <span class="k">EXISTS</span> { ?onto oxl:appliesTo &lt;https://ex.org/data/staff&gt; }
+       || <span class="k">EXISTS</span> { ?onto oxl:appliesTo oxl:AllGraphs })
+} }</code></pre>
+
+      <h2>Everywhere you work</h2>
+      <p>The registry used to be Rust-only. Every surface now reaches it, and every one runs the same SPARQL underneath:</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Surface</th><th>Register and map</th><th>Reason</th></tr></thead>
+        <tbody>
+          <tr><td>Shell</td><td><code>.register ontology ex:onto onto.ttl</code>, <code>.map ex:onto ex:data</code>, <code>.registry</code>, <code>.shapes</code></td><td><code>.reasoning rdfs</code>, <code>.schemagraphs off</code></td></tr>
+          <tr><td>CLI</td><td><code>oxilite registry register … --applies-to …</code>, <code>registry map</code>, <code>registry init</code></td><td><code>oxilite query --reasoning rdfs --no-schema-graphs</code></td></tr>
+          <tr><td>Node, D1</td><td><code>registerSchemaGraph(g, "ontology", { appliesTo })</code>, <code>schemaGraphs()</code></td><td><code>query(q, { reasoning: "rdfs", include_schema_graphs: false })</code></td></tr>
+          <tr><td>Rust</td><td><code>register_schema_graph(g, SchemaRole::Ontology, &amp;Registration::new().applies_to([…]))</code></td><td><code>QueryOptions { reasoning, include_schema_graphs, .. }</code></td></tr>
+          <tr><td>Studio</td><td><code>[[graph]] role = "ontology"</code>, <code>applies_to = […]</code> in <code>oxilite.toml</code></td><td>the project's reasoning profile</td></tr>
+        </tbody>
+      </table></div>
+
+      <h2>Upgrading</h2>
+      <p>Stores created by 0.4 kept registrations in a <code>schema_graphs</code> table. Opening one migrates it in a single atomic request:</p>
+      <ul>
+        <li>each row becomes triples of <code>&lt;oxilite:schema&gt;</code>;</li>
+        <li>the table is dropped;</li>
+        <li>the closure cache gains its scope column.</li>
+      </ul>
+      <p>On D1, the migration runs on <code>D1Store.open()</code>. A store that registers nothing behaves exactly as before: every graph's axioms apply to every graph.</p>
+
+      <h2>Limits to know</h2>
+      <ul>
+        <li><strong>Graphs named by blank nodes cannot be registered.</strong> Another graph has no way to name them.</li>
+        <li><strong>Mappings drive query-time reasoning.</strong> OWL 2 RL <code>materialize()</code> still reasons over the merged dataset. The class-keyed shape index behind Cypher ignores shapes mappings; validators can use <code>schema_graphs_for</code>.</li>
+        <li><strong><code>owl:imports</code> is recorded, not followed.</strong></li>
+        <li><strong>On a versioned store, the system graphs and the 0.4 migration are written outside the change log.</strong></li>
+        <li><strong>The namespace is <code>https://oxilite.dev/ns#</code></strong> (shared with <code>oxl:textMatch</code> and the history graph). The document describing it lives at <a href="../ns/">oxilitedb.com/ns</a>.</li>
+      </ul>
+
+      <div class="callout">
+        <p><strong>The takeaway.</strong> Which graphs are schema, and which data each schema describes, is now data too: triples in <code>&lt;oxilite:schema&gt;</code>, in a vocabulary the store carries in <code>&lt;oxilite:vocabulary&gt;</code>. Reasoning follows the mapping graph by graph, and the whole setup moves with a dump and runs as plain SPARQL on Oxigraph.</p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt="" width="28" height="28"><span>oxilite</span></a>
+      <span>MIT or Apache-2.0</span>
+      <nav aria-label="Rechtliches">
+        <a href="../impressum.html">Impressum</a>
+        <a href="../datenschutz.html">Datenschutz</a>
+        <a href="../agb.html">AGB</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>

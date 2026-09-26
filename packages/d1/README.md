@@ -98,7 +98,7 @@ The same store runs on a Durable Object's embedded SQLite through a small adapte
 
 ## API
 
-`D1Store` mirrors Oxigraph's JavaScript `Store`, asynchronously: `query`, `queryJson`, `update`, `load`, `bulkLoad`, `dump`, `add`, `delete`, `has`, `match`, `size`, `clear`, plus `cypher`, `explain`, `explainUpdate`, `explainCypher`, `optimize`, `materialize` (OWL 2 RL as SQL rules), `clearInferences`, `jsonld(options)` and `credentials(options)`. Query options add `reasoning: "rdfs" | "owl-ql"` and `include_inferred`; create the store with `textIndex: true` for FTS5 search with `oxl:textMatch`.
+`D1Store` mirrors Oxigraph's JavaScript `Store`, asynchronously: `query`, `queryJson`, `update`, `load`, `bulkLoad`, `dump`, `add`, `delete`, `has`, `match`, `size`, `clear`, plus `cypher`, `explain`, `explainUpdate`, `explainCypher`, `optimize`, `materialize` (OWL 2 RL as SQL rules), `clearInferences`, `jsonld(options)` and `credentials(options)`. The [schema registry](https://github.com/Volland/oxilite/blob/main/docs/schema-registry.md) is there too: `registerSchemaGraph(graph, role, { appliesTo })`, `schemaGraphs()`, `setSchemaGraphActive`, `unregisterSchemaGraph`, `dropSchemaGraph`, `shapeIndex()`; registrations are RDF in `<oxilite:schema>`, written with the same portable SPARQL as on Oxigraph. `D1Store.open(db, { systemGraphs: true })` (or `npx oxilite-d1 schema --system-graphs`) starts a blank database with the `oxl:` vocabulary in `<oxilite:vocabulary>`; `installSystemGraphs()` adds it to an existing one. Query options add `reasoning: "rdfs" | "owl-ql"`, `include_inferred` and `include_schema_graphs`; create the store with `textIndex: true` for FTS5 search with `oxl:textMatch`.
 
 | Import | Use |
 |---|---|
