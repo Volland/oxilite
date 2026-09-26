@@ -53,7 +53,7 @@ pub enum RegistryCommand {
         /// A version to pin (`owl:versionIRI`, a tag…).
         #[arg(long)]
         version: Option<String>,
-        /// An `owl:imports` target to record (repeatable). It is not loaded, but when it names
+        /// An import target to record as `oxl:imports` (repeatable). It is not loaded, but when it names
         /// another registered ontology, that ontology's axioms join this one's scopes.
         #[arg(long = "import")]
         imports: Vec<String>,

@@ -18,6 +18,7 @@ The registry is plain RDF in a well-known named graph, so it travels with the da
 - [Validating the registry](#validating-the-registry)
 - [SPARQL recipes (any store)](#sparql-recipes-any-store)
 - [Interoperability](#interoperability)
+- [Compared with other stores](#compared-with-other-stores)
 - [APIs](#apis)
 - [Upgrading](#upgrading)
 - [Limits](#limits)
@@ -37,7 +38,7 @@ GRAPH <oxilite:schema> {
       oxl:active true ;
       oxl:version "2.1" ;
       oxl:ontologyIri <https://ex.org/hr#> ;
-      owl:imports <http://xmlns.com/foaf/0.1/> ;
+      oxl:imports <http://xmlns.com/foaf/0.1/> ;
       oxl:sha256 "9f2c…" ;
       oxl:loadedAt "2026-09-26T10:00:00Z"^^xsd:dateTime .
 
@@ -78,7 +79,7 @@ A *blank* store can start with both installed: the vocabulary graph plus these r
 GRAPH <oxilite:schema> {
   <oxilite:schema>     a oxl:SystemGraph ; rdfs:label "schema registry" .
   <oxilite:vocabulary> a oxl:SystemGraph ; rdfs:label "oxilite vocabulary" ;
-      oxl:appliesTo <oxilite:schema> ; oxl:ontologyIri <https://oxilite.dev/ns#> ; oxl:version "2" .
+      oxl:appliesTo <oxilite:schema> ; oxl:ontologyIri <https://oxilite.dev/ns#> ; oxl:version "2.1" .
 }
 ```
 
@@ -98,15 +99,16 @@ A blank store gets them only once, when it is opened blank. On a versioned store
 
 ## Vocabulary
 
-Namespace `oxl:` = `https://oxilite.dev/ns#`, version 2. The vocabulary is published at [oxilitedb.com/ns](https://oxilitedb.com/ns/) (HTML) and [oxilitedb.com/ns/oxl.ttl](https://oxilitedb.com/ns/oxl.ttl) (Turtle). The source is [`crates/oxilite-core/vocab/oxl.ttl`](../crates/oxilite-core/vocab/oxl.ttl), exposed as `oxilite::schema::VOCABULARY` and installed in `<oxilite:vocabulary>`.
+Namespace `oxl:` = `https://oxilite.dev/ns#`, version 2.1. The vocabulary is published at [oxilitedb.com/ns](https://oxilitedb.com/ns/) (HTML) and [oxilitedb.com/ns/oxl.ttl](https://oxilitedb.com/ns/oxl.ttl) (Turtle). The source is [`crates/oxilite-core/vocab/oxl.ttl`](../crates/oxilite-core/vocab/oxl.ttl), exposed as `oxilite::schema::VOCABULARY` and installed in `<oxilite:vocabulary>`.
 
 | Term | Kind | Meaning |
 |---|---|---|
-| `oxl:SchemaGraph` | class ⊑ `sd:Graph` | A named graph holding schema rather than data |
+| `oxl:RegisteredGraph` | class ⊑ `sd:Graph`, disjoint union of `oxl:SchemaGraph` and `oxl:SystemGraph` | A graph described in the registry; the domain of every registration property |
+| `oxl:SchemaGraph` | class ⊑ `oxl:RegisteredGraph` | A named graph holding schema rather than data |
 | `oxl:OntologyGraph` | class ⊑ `oxl:SchemaGraph` | RDFS / OWL axioms, used for query-time reasoning |
 | `oxl:ShapesGraph` | class ⊑ `oxl:SchemaGraph` | SHACL shapes |
 | `oxl:ShExGraph` | class ⊑ `oxl:SchemaGraph` | A ShEx schema (recorded and hidden, not compiled) |
-| `oxl:SystemGraph` | class ⊑ `sd:Graph`, disjoint with `oxl:SchemaGraph` | A graph oxilite maintains itself: `<oxilite:schema>`, `<oxilite:vocabulary>` |
+| `oxl:SystemGraph` | class ⊑ `oxl:RegisteredGraph`, disjoint with `oxl:SchemaGraph` | A graph oxilite maintains itself: `<oxilite:schema>`, `<oxilite:vocabulary>` |
 | `oxl:GraphTarget` | class | What `oxl:appliesTo` points at: a graph IRI, `oxl:DefaultGraph` or `oxl:AllGraphs` |
 | `oxl:appliesTo` | property, range `oxl:GraphTarget` | A graph the schema describes. None at all is read as `oxl:AllGraphs` |
 | `oxl:active` | functional, `xsd:boolean` | An `xsd:boolean` false (`false` or `"0"^^xsd:boolean`) keeps the graph registered and hidden but stops it contributing. Absent means `true`. A plain `"false"` is invalid and ignored |
@@ -114,10 +116,14 @@ Namespace `oxl:` = `https://oxilite.dev/ns#`, version 2. The vocabulary is publi
 | `oxl:version` | functional, string | A version pinned at registration (see also `owl:versionInfo`) |
 | `oxl:sha256` | functional, string | Lowercase hex SHA-256 of the source document, for drift detection |
 | `oxl:loadedAt` | functional, `xsd:dateTime`, ⊑ `dcterms:date` | When the graph was registered |
-| `owl:imports` | IRI | Imports; those naming another registered ontology are resolved (see [Imports](#imports)) |
+| `oxl:imports` | IRI | Imports recorded in the registry; those naming another registered ontology are resolved (see [Imports](#imports)). An `owl:imports` there (vocabulary 2) is still read |
 | `oxl:DefaultGraph` | individual, `oxl:GraphTarget` | Names the default graph, as a registered graph or as a target |
 | `oxl:AllGraphs` | individual, `oxl:GraphTarget` | As a target: every graph. A selector, never a registered graph |
 | `oxl:RegistrationShape` | `sh:NodeShape` | The shape every registration conforms to (see [Validating the registry](#validating-the-registry)) |
+| `oxl:added`, `oxl:removed` | property, domain `prov:Activity` | In `<oxilite:history>`: a triple term a commit added or removed |
+| `oxl:textMatch` | `sd:Function` | The full-text SPARQL function |
+
+The registration properties have the domain `oxl:RegisteredGraph`, not `oxl:SchemaGraph`, because the system graphs are described with them too. The subject of a registration is the graph's IRI, read as denoting the graph itself (`sd:Graph`), not the name–graph pair `sd:NamedGraph`. The vocabulary is consistent under OWL together with the system graphs' descriptions, and a test keeps it so.
 
 The Rust reader, the SQL that scopes the caches and the SPARQL recipes below read these terms identically. A graph typed with two roles counts for both, and only the two lexical forms of an `xsd:boolean` false deactivate a graph.
 
@@ -148,7 +154,8 @@ This holds even in a query over the union of graphs: entailment is per graph, li
 
 When an ontology imports another *registered, active* ontology, the imported ontology's axioms join the importer's reasoning scopes. This is transitive, and import cycles are safe.
 
-- **Where imports are read:** `owl:imports` recorded in the registry (`--import`, `with_imports`), and `owl:imports` asserted in the ontology's own graph.
+- **Where imports are read:** `oxl:imports` recorded in the registry (`--import`, `with_imports`), and `owl:imports` asserted in the ontology's own graph. An `owl:imports` in the registry, as vocabulary 2 wrote it, is read too.
+- **Why the registry does not use `owl:imports`:** its domain is `owl:Ontology`. In the registry it would make every registration an ontology, shapes graphs included, and an OWL tool loading `<oxilite:schema>` would try to fetch every import.
 - **What an import matches:** a registered ontology's graph name or its `oxl:ontologyIri`.
 - **What an import does not do:** fetch anything. An import that matches no registered ontology is recorded and ignored. Load and register the imported ontology yourself.
 
@@ -176,7 +183,7 @@ Here the core axioms also apply to the zoo graph, because the zoo ontology impor
   - The index is keyed by class, so it ignores shapes mappings (see [Limits](#limits)). Validators can pick shapes per graph with `schema_graphs_for`.
 - **Hiding:** `include_schema_graphs: false` removes the system graphs and every registered graph, active or not, from pattern matching.
 - **Change detection:** a write that can change the registry rebuilds the reasoning closure and the shape index in the same atomic request. That includes a plain SPARQL `INSERT DATA`, and any `owl:imports` write.
-  - Updates with a variable graph count only when a triple could be a registry triple: a variable or `oxl:` predicate, `owl:imports`, or `rdf:type` with a variable or `oxl:` class.
+  - Updates with a variable graph count only when a triple could be a registry triple: a variable or `oxl:` predicate (`oxl:imports` included), `owl:imports`, or `rdf:type` with a variable or `oxl:` class.
   - A bulk `INSERT { GRAPH ?g { ?s a ex:Person } } WHERE …` therefore rebuilds nothing.
 - **Not affected:**
   - `materialize()` (OWL 2 RL) still reasons over the merged dataset.
@@ -187,7 +194,7 @@ Here the core axioms also apply to the zoo graph, because the zoo ontology impor
 The vocabulary graph contains `oxl:RegistrationShape`, which checks each registration:
 - the node is an IRI with at least one role class;
 - `oxl:active` is at most one `xsd:boolean`;
-- `oxl:appliesTo`, `oxl:ontologyIri` and `owl:imports` are IRIs;
+- `oxl:appliesTo`, `oxl:ontologyIri`, `oxl:imports` and `owl:imports` are IRIs;
 - `oxl:version`, `oxl:sha256` and `oxl:loadedAt` each have at most one value, of the right datatype;
 - `oxl:sha256` is 64 lowercase hex digits.
 
@@ -288,10 +295,42 @@ The registry aligns with standard vocabularies instead of duplicating them:
   } }
   ```
 
-- **SPARQL Service Description.** `oxl:SchemaGraph` and `oxl:SystemGraph` are subclasses of `sd:Graph`.
-- **Dublin Core / PROV.** `oxl:loadedAt` is a sub-property of `dcterms:date`, and its description points to `prov:generatedAtTime`.
+- **Dublin Core `conformsTo`.** `?data dcterms:conformsTo ?schema`, as DCAT uses it, is the reverse of `oxl:appliesTo` as well. Derive it the same way:
+
+  ```sparql
+  PREFIX oxl:     <https://oxilite.dev/ns#>
+  PREFIX dcterms: <http://purl.org/dc/terms/>
+  CONSTRUCT { ?data dcterms:conformsTo ?schema }
+  WHERE { GRAPH <oxilite:schema> {
+    ?schema a ?role ; oxl:appliesTo ?data .
+    FILTER (?role IN (oxl:OntologyGraph, oxl:ShapesGraph, oxl:ShExGraph))
+    FILTER (?data != oxl:AllGraphs)
+    FILTER NOT EXISTS { ?schema oxl:active ?a FILTER (?a = false) }
+  } }
+  ```
+
+- **SPARQL Service Description.** `oxl:RegisteredGraph`, and with it `oxl:SchemaGraph` and `oxl:SystemGraph`, is a subclass of `sd:Graph`. `oxl:textMatch` is an `sd:Function`.
+- **Dublin Core / PROV.** `oxl:loadedAt` is a sub-property of `dcterms:date`, and its description points to `prov:generatedAtTime`. History commits are `prov:Activity`, the domain of `oxl:added` and `oxl:removed`.
 - **OWL and SPDX.** `oxl:version` points to `owl:versionInfo` / `owl:versionIRI`, which stay in the ontology's own graph. `oxl:sha256` points to `spdx:checksum`.
-- **Vocabulary metadata.** `owl:versionIRI`, `dcterms:license`, `vann:preferredNamespacePrefix`, and `rdfs:isDefinedBy` on every term.
+- **Vocabulary metadata.** `owl:versionIRI`, `owl:priorVersion`, `owl:backwardCompatibleWith`, `dcterms:license`, `vann:preferredNamespacePrefix`, and `rdfs:isDefinedBy` on every term.
+
+## Compared with other stores
+
+Most stores separate ontologies too, but keep the configuration outside the data. The table compares how each one decides which schema applies to which data.
+
+| | Unit of separation | Configuration kept as | Scope per data graph | Scope chosen per query | Portable to another store | Validates its own configuration | Roles and provenance |
+|---|---|---|---|---|---|---|---|
+| **oxilite (`oxl:` 2.1)** | named graph, described in a registry graph | RDF in the dataset | yes, for reasoning | no | yes, plain SPARQL 1.1 | yes, SHACL shapes | a role class per graph, one description shared by its roles |
+| Stardog reasoning schemas | a named schema: a set of graphs | database configuration | no | yes | no | no | none |
+| Virtuoso inference rule sets | a rule set built from a graph | SQL | no | yes (`input:inference`) | no | no | none |
+| GraphDB / RDF4J | a ruleset per repository; SHACL shapes in a reserved graph | repository configuration | no | no | partly | partly | none |
+| Apache Jena | a model in code; `ont-policy` file for imports | code, and an RDF file outside the data | in code | in code | partly | no | ontology locations only |
+| Neo4j neosemantics (n10s) | graph configuration | node properties | no | no | no | partly | none |
+| Nanopublications | a head graph naming assertion, provenance and publication-info graphs | RDF in the dataset | not applicable (no reasoning) | not applicable | yes | through shapes | strong |
+| PROF + DCAT + VoID | resource descriptors with roles | RDF | can be described | can be described | yes | through shapes | strong |
+
+- **Where oxilite is ahead:** the mapping from schemas to data travels with the dataset, is queried and changed with plain SPARQL, and checks itself. Stardog and Virtuoso choose schemas per query, but their configuration is invisible to SPARQL and lost in a dump.
+- **Where it is behind:** it cannot choose ontologies per query. One description is shared by all roles of a graph, where the Profiles Vocabulary (`prof:ResourceDescriptor` with `prof:hasRole`) and nanopublications keep a separate resource per role. Registration resources of that kind are the candidate for vocabulary 3 (see [Limits](#limits)).
 
 ## APIs
 
@@ -309,6 +348,15 @@ GRAPH arguments take an IRI or `DEFAULT`; `ALL` as a target means every graph. I
 
 ## Upgrading
 
+### From vocabulary 2
+
+Vocabulary 2.1 is backward compatible: a registry written with vocabulary 2 reads exactly as before.
+- New registrations record imports with `oxl:imports`. An `owl:imports` in the registry is still read and still resolves.
+- The registration properties have the domain `oxl:RegisteredGraph`, so the system graphs' descriptions are consistent under OWL.
+- `oxl:textMatch` is typed `sd:Function`, and `oxl:added` / `oxl:removed` have the domain `prov:Activity`.
+
+An older oxilite does not read `oxl:imports`: it ignores imports recorded by 2.1. `oxilite registry init` (or `install_system_graphs()`) installs version 2.1 of `<oxilite:vocabulary>`.
+
 ### From vocabulary 1 (0.5)
 
 Existing registries keep working as they are:
@@ -322,7 +370,7 @@ Behaviour changes:
 - **`owl:imports`** between registered ontologies is now followed.
 - **`oxl:SystemGraph`** is no longer a subclass of `oxl:SchemaGraph`.
 
-`oxilite registry init` (or `install_system_graphs()`) replaces `<oxilite:vocabulary>` with version 2. Then run `oxilite registry check`.
+`oxilite registry init` (or `install_system_graphs()`) replaces `<oxilite:vocabulary>` with the current version. Then run `oxilite registry check`.
 
 ### From 0.4
 

@@ -199,7 +199,7 @@ fn registry_and_reasoning_flags() {
     // Visible: both ontologies, the registry graph's six triples about the good one (role,
     // active, oxl:AllGraphs, version, sha256, registration time), and the system graphs the new
     // store started with (the vocabulary with its shapes, and the registry's own description).
-    assert_eq!(n(&[]), "182");
+    assert_eq!(n(&[]), "206");
     assert_eq!(n(&["--no-schema-graphs"]), "1");
 
     // Mapping: the good ontology applies to another graph only, then to every graph again.

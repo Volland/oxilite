@@ -34,7 +34,7 @@ pub const VOCABULARY_GRAPH: &str = "oxilite:vocabulary";
 
 /// The version of the vocabulary that [`system_quads`] installs (`oxl:version` of
 /// `<oxilite:vocabulary>` in the registry).
-pub const VOCABULARY_VERSION: &str = "2";
+pub const VOCABULARY_VERSION: &str = "2.1";
 
 /// The oxilite namespace (`oxl:`).
 pub const NS: &str = "https://oxilite.dev/ns#";
@@ -58,7 +58,10 @@ pub mod vocab {
     pub const LOADED_AT: &str = "https://oxilite.dev/ns#loadedAt";
     pub const DEFAULT_GRAPH: &str = "https://oxilite.dev/ns#DefaultGraph";
     pub const ALL_GRAPHS: &str = "https://oxilite.dev/ns#AllGraphs";
-    pub const IMPORTS: &str = "http://www.w3.org/2002/07/owl#imports";
+    /// Imports recorded in the registry (vocabulary 2.1; `owl:imports` there is still read).
+    pub const IMPORTS: &str = "https://oxilite.dev/ns#imports";
+    /// `owl:imports`: asserted in an ontology's own graph, and in registries of vocabulary 2.
+    pub const OWL_IMPORTS: &str = "http://www.w3.org/2002/07/owl#imports";
 }
 
 /// The graphs oxilite maintains itself. They never contribute axioms or shapes, whatever the
@@ -134,7 +137,7 @@ pub struct SchemaGraph {
     pub version: Option<String>,
     /// Digest of the document the graph was loaded from, for drift detection.
     pub sha256: Option<String>,
-    /// `owl:imports` targets. An import naming another active registered ontology (by graph
+    /// Import targets (`oxl:imports`). An import naming another active registered ontology (by graph
     /// name or `oxl:ontologyIri`) brings its axioms into this ontology's scopes.
     pub imports: Vec<NamedNode>,
     /// The graphs the schema applies to; empty means every graph (written as
@@ -377,7 +380,7 @@ pub fn entries_from_rows(rows: &[Vec<Option<Term>>]) -> Vec<SchemaGraph> {
                 (vocab::VERSION, Term::Literal(l)) => e.version = Some(l.value().to_owned()),
                 (vocab::SHA256, Term::Literal(l)) => e.sha256 = Some(l.value().to_owned()),
                 (vocab::LOADED_AT, Term::Literal(l)) => e.loaded_at = Some(l.value().to_owned()),
-                (vocab::IMPORTS, Term::NamedNode(n)) => e.imports.push(n),
+                (vocab::IMPORTS | vocab::OWL_IMPORTS, Term::NamedNode(n)) => e.imports.push(n),
                 _ => {}
             }
         }
@@ -386,6 +389,7 @@ pub fn entries_from_rows(rows: &[Vec<Option<Term>>]) -> Vec<SchemaGraph> {
         }
         e.applies_to.sort_by_key(ToString::to_string);
         e.imports.sort();
+        e.imports.dedup();
         for role in roles {
             out.push(SchemaGraph { role, ..e.clone() });
         }
@@ -418,7 +422,7 @@ pub fn update_touches_registry(update: &Update) -> bool {
             _ => false,
         },
         NamedNodePattern::NamedNode(n) => {
-            n.as_str().starts_with(NS) || n.as_str() == vocab::IMPORTS
+            n.as_str().starts_with(NS) || n.as_str() == vocab::OWL_IMPORTS
         }
     };
     let counts = |g: &GraphNamePattern, p: &NamedNodePattern, o: &TermPattern| match g {
@@ -461,7 +465,9 @@ struct Ids {
     dflt: i64,
     all: i64,
     system: i64,
+    /// `oxl:imports`, and `owl:imports` (registries of vocabulary 2, and ontology graphs).
     imports: i64,
+    owl_imports: i64,
     ontology_iri: i64,
 }
 
@@ -481,6 +487,7 @@ fn ids() -> Ids {
         all: named_node_id(vocab::ALL_GRAPHS),
         system: named_node_id(vocab::SYSTEM_GRAPH),
         imports: named_node_id(vocab::IMPORTS),
+        owl_imports: named_node_id(vocab::OWL_IMPORTS),
         ontology_iri: named_node_id(vocab::ONTOLOGY_IRI),
     }
 }
@@ -601,8 +608,8 @@ pub fn without_schema_graphs(source: &str) -> String {
 ///
 /// The axioms of the active ontology graphs that apply to every graph come with the scope
 /// [`all_scope`] and again with every specific scope; those of an ontology mapped to graph G
-/// with scope G. An ontology's `owl:imports` (recorded in the registry or asserted in its own
-/// graph) that name another active ontology — by graph name or `oxl:ontologyIri` — bring that
+/// with scope G. An ontology's imports (`oxl:imports` or `owl:imports` recorded in the registry,
+/// or `owl:imports` asserted in its own graph) that name another active ontology — by graph name or `oxl:ontologyIri` — bring that
 /// ontology's axioms into the importer's scopes, transitively. While no ontology is
 /// registered, every graph's triples but the system graphs' count, with scope [`all_scope`].
 pub fn ontology_axioms(cond: &str) -> String {
@@ -635,12 +642,13 @@ pub fn ontology_axioms(cond: &str) -> String {
     );
     // (importer graph, imported IRI): recorded in the registry, or asserted in the ontology.
     let imports = format!(
-        "SELECT {gx} AS f, x.o AS iri FROM quads x WHERE x.g = {reg} AND x.p = {imp} \
-         UNION SELECT {gi}, y.o FROM ({act}) ia JOIN quads y ON y.p = {imp} AND y.g = {gi}",
+        "SELECT {gx} AS f, x.o AS iri FROM quads x WHERE x.g = {reg} AND x.p IN ({imp}, {owl}) \
+         UNION SELECT {gi}, y.o FROM ({act}) ia JOIN quads y ON y.p = {owl} AND y.g = {gi}",
         gx = graph_of(&i, "x.s"),
         gi = graph_of(&i, "ia.s"),
         reg = i.reg,
-        imp = i.imports
+        imp = i.imports,
+        owl = i.owl_imports
     );
     // (IRI, graph) naming each active ontology: its graph name and its oxl:ontologyIri.
     let named = format!(
@@ -766,7 +774,7 @@ pub fn system_graphs_ready_query() -> String {
 ///
 /// A node is checked when it has a role class, `oxl:SystemGraph`, or a registration property.
 pub fn problems(rows: &[Vec<Option<Term>>]) -> Vec<String> {
-    const PROPS: [&str; 7] = [
+    const PROPS: [&str; 8] = [
         vocab::APPLIES_TO,
         vocab::ACTIVE,
         vocab::ONTOLOGY_IRI,
@@ -774,6 +782,7 @@ pub fn problems(rows: &[Vec<Option<Term>>]) -> Vec<String> {
         vocab::SHA256,
         vocab::LOADED_AT,
         vocab::IMPORTS,
+        vocab::OWL_IMPORTS,
     ];
     let mut by: BTreeMap<String, Vec<(String, Term)>> = BTreeMap::new();
     for row in rows {
@@ -818,7 +827,12 @@ pub fn problems(rows: &[Vec<Option<Term>>]) -> Vec<String> {
                 bad(format!("<{p}> has {n} values, at most one is allowed"));
             }
         }
-        for p in [vocab::APPLIES_TO, vocab::ONTOLOGY_IRI, vocab::IMPORTS] {
+        for p in [
+            vocab::APPLIES_TO,
+            vocab::ONTOLOGY_IRI,
+            vocab::IMPORTS,
+            vocab::OWL_IMPORTS,
+        ] {
             for o in values(p).filter(|o| !matches!(o, Term::NamedNode(_))) {
                 bad(format!("<{p}> {o} is not an IRI"));
             }
@@ -1075,6 +1089,80 @@ mod tests {
         assert!(touches(
             "INSERT DATA { GRAPH <oxilite:schema> { ex:a ex:b ex:c } }"
         ));
+    }
+
+    // @lat: [[tests#Schema registry#The vocabulary is consistent with the system graphs]]
+    #[test]
+    fn vocabulary_is_consistent_with_the_system_graphs() {
+        use std::collections::BTreeSet;
+        let rdfs = |l: &str| format!("http://www.w3.org/2000/01/rdf-schema#{l}");
+        let disjoint = "http://www.w3.org/2002/07/owl#disjointWith";
+        let vocabulary: Vec<oxrdf::Triple> =
+            oxrdfio::RdfParser::from_format(oxrdfio::RdfFormat::Turtle)
+                .for_slice(VOCABULARY.as_bytes())
+                .map(|q| oxrdf::Triple::from(q.unwrap()))
+                .collect();
+        let objects = |s: &str, p: &str| -> Vec<String> {
+            vocabulary
+                .iter()
+                .filter(|t| t.subject.to_string() == format!("<{s}>") && t.predicate.as_str() == p)
+                .filter_map(|t| match &t.object {
+                    Term::NamedNode(n) => Some(n.as_str().to_owned()),
+                    _ => None,
+                })
+                .collect()
+        };
+        // RDFS entailment of the types of each subject of <oxilite:schema>: its rdf:type and
+        // the domains of its properties, closed over rdfs:subClassOf.
+        let mut types: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+        for q in system_quads() {
+            if !matches!(&q.graph_name, GraphName::NamedNode(g) if g.as_str() == SCHEMA_GRAPH) {
+                continue;
+            }
+            let entry = types.entry(q.subject.to_string()).or_default();
+            match (&q.predicate, &q.object) {
+                (p, Term::NamedNode(c)) if *p == rdf::TYPE => {
+                    entry.insert(c.as_str().to_owned());
+                }
+                (p, _) => entry.extend(objects(p.as_str(), &rdfs("domain"))),
+            }
+        }
+        for (node, classes) in &mut types {
+            let mut todo: Vec<String> = classes.iter().cloned().collect();
+            while let Some(c) = todo.pop() {
+                for sup in objects(&c, &rdfs("subClassOf")) {
+                    if classes.insert(sup.clone()) {
+                        todo.push(sup);
+                    }
+                }
+            }
+            for c in classes.iter() {
+                for d in objects(c, disjoint) {
+                    assert!(
+                        !classes.contains(&d),
+                        "{node} is both <{c}> and the disjoint <{d}>"
+                    );
+                }
+            }
+            assert!(classes.contains(vocab::SYSTEM_GRAPH), "{node}: {classes:?}");
+        }
+        assert_eq!(types.len(), SYSTEM_GRAPHS.len());
+        // Every registration property has a declared domain.
+        for p in [
+            vocab::APPLIES_TO,
+            vocab::ACTIVE,
+            vocab::ONTOLOGY_IRI,
+            vocab::VERSION,
+            vocab::SHA256,
+            vocab::LOADED_AT,
+            vocab::IMPORTS,
+        ] {
+            assert_eq!(
+                objects(p, &rdfs("domain")),
+                [format!("{NS}RegisteredGraph")],
+                "{p}"
+            );
+        }
     }
 
     // @lat: [[tests#Schema registry#Registry problems]]
