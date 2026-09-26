@@ -246,9 +246,9 @@ It also checks projects (`oxilite check`, [[architecture#Studio server#Check com
 
 ### Schema registry commands
 
-`oxilite registry list|register|map|activate|deactivate|unregister|drop|shapes` manages the registry of a store, and `oxilite materialize [--clear]` its OWL 2 RL inferences. See [[crates/oxilite-cli/src/registry.rs]].
+`oxilite registry list|register|map|activate|deactivate|unregister|drop|shapes|check|verify` manages the registry of a store, and `oxilite materialize [--clear]` its OWL 2 RL inferences. See [[crates/oxilite-cli/src/registry.rs]].
 
-`register --file` loads the file into the graph first and records its SHA-256; `--applies-to` (repeatable) and `map --to` set `oxl:appliesTo`, with `DEFAULT` and `ALL`. `query`, `explain` and `serve` take the same query flags as the shell ([[crates/oxilite-cli/src/db.rs#QueryFlags]]): `--reasoning`, `--inferred`, `--no-schema-graphs`; `explain` refuses them on D1, whose explain takes no options.
+`register --file` loads the file into the graph first and records its SHA-256, which `verify GRAPH --file F` compares to detect drift; `check` reports every violation of the registry shapes and exits non-zero; `--applies-to` (repeatable) and `map --to` set `oxl:appliesTo`, with `DEFAULT` and `ALL`. `query`, `explain` and `serve` take the same query flags as the shell ([[crates/oxilite-cli/src/db.rs#QueryFlags]]): `--reasoning`, `--inferred`, `--no-schema-graphs`; `explain` refuses them on D1, whose explain takes no options.
 
 ### Interactive shell
 
@@ -386,30 +386,40 @@ Each registered graph is a resource of `<oxilite:schema>` with the graph's IRI a
 
 | Term | Meaning |
 |---|---|
-| `oxl:OntologyGraph`, `oxl:ShapesGraph`, `oxl:ShExGraph` | The role, as `rdf:type` (subclasses of `oxl:SchemaGraph`) |
-| `oxl:appliesTo` | A target graph, `oxl:DefaultGraph` or `oxl:AllGraphs`; none means every graph |
-| `oxl:active` | `false` keeps the graph registered and hidden but contributing nothing |
-| `oxl:ontologyIri`, `oxl:version`, `oxl:sha256`, `oxl:loadedAt`, `owl:imports` | What was recorded at registration |
+| `oxl:OntologyGraph`, `oxl:ShapesGraph`, `oxl:ShExGraph` | The role, as `rdf:type` (subclasses of `oxl:SchemaGraph`); a graph may carry several |
+| `oxl:appliesTo` | A target graph, `oxl:DefaultGraph` or `oxl:AllGraphs`; oxilite writes `oxl:AllGraphs` for every graph, and none is read the same |
+| `oxl:active` | An `xsd:boolean` false (`false`, `"0"^^xsd:boolean`) keeps the graph registered and hidden but contributing nothing; other literals are ignored |
+| `oxl:ontologyIri`, `oxl:version`, `oxl:sha256`, `oxl:loadedAt`, `owl:imports` | What was recorded at registration; imports resolve against registered ontologies |
 
-The vocabulary ships as Turtle (`registry::VOCABULARY`, `crates/oxilite-core/vocab/oxl.ttl`) and is documented with SPARQL recipes in `docs/schema-registry.md`. Graphs named by blank nodes cannot be registered, since another graph cannot name them.
+The vocabulary (version 2) ships as Turtle (`registry::VOCABULARY`, `crates/oxilite-core/vocab/oxl.ttl`) with the registry's own SHACL shapes (`oxl:RegistrationShape`), aligned to SD, Dublin Core, PROV and SPDX, and is documented with SPARQL recipes in `docs/schema-registry.md`. Graphs named by blank nodes cannot be registered, since another graph cannot name them.
+
+The Rust reader, the SQL scopes and the SPARQL recipes agree on every edge case: a graph with two roles is listed and scoped once per role, and only the two lexical forms of an `xsd:boolean` false deactivate. [[crates/oxilite-core/src/registry.rs#problems]] checks what the shapes check without a SHACL engine (`Store::registry_problems`, `oxilite registry check`); readers stay lenient and ignore what the shapes reject. See [[decisions#D35 Registry vocabulary 2: canonical, self-validating, import-aware]].
 
 ### Registry operations
 
-Registering, mapping, activating, unregistering and dropping are SPARQL updates the core builds ([[crates/oxilite-core/src/registry.rs#register_update]]); listing is one SELECT parsed by [[crates/oxilite-core/src/registry.rs#entries_from_rows]].
+Registering, mapping, activating, unregistering and dropping are SPARQL updates the core builds ([[crates/oxilite-core/src/registry.rs#register_update]], [[crates/oxilite-core/src/registry.rs#remap_update]]); listing is one SELECT parsed by [[crates/oxilite-core/src/registry.rs#entries_from_rows]].
+
+Registering replaces the whole description, roles included; remapping replaces only `oxl:appliesTo`, so it keeps every role.
 
 The stores run them through their ordinary update path ([[crates/oxilite/src/schema_store.rs]]), so they are atomic, versioned when versioning is on, and rebuild both derived caches in the same request. The same text runs on Oxigraph and leaves the same registry graph; a plain `INSERT DATA` into `<oxilite:schema>` registers a graph exactly as the API does. Registering a named graph creates it (`CREATE SILENT GRAPH`); `drop_schema_graph` removes the description and every quad of the graph in one update; removing a named graph also removes its description.
 
-Anything that can change the registry counts as a schema change for the writers and the update planner ([[crates/oxilite-core/src/registry.rs#is_registry_quad]], [[crates/oxilite-core/src/registry.rs#update_touches_registry]]): a quad of `<oxilite:schema>`, or an update pattern on it.
+Anything that can change the registry counts as a schema change for the writers and the update planner ([[crates/oxilite-core/src/registry.rs#is_registry_quad]], [[crates/oxilite-core/src/registry.rs#update_touches_registry]]): a quad of `<oxilite:schema>`, an update pattern on it, or a variable-graph pattern that could write a registry triple (a variable or `oxl:` predicate, `owl:imports`, `rdf:type` with a variable or `oxl:` class). Bulk typing through `GRAPH ?g` rebuilds nothing. `owl:imports` in any graph is also a schema-closure trigger.
 
 ### System graphs
 
-`<oxilite:schema>` and `<oxilite:vocabulary>` (the `oxl:` vocabulary) are typed `oxl:SystemGraph` in the registry; a blank store can start with both. See [[crates/oxilite-core/src/registry.rs#system_quads]].
+`<oxilite:schema>` and `<oxilite:vocabulary>` (the `oxl:` vocabulary and the registry shapes) are typed `oxl:SystemGraph` in the registry; a blank store can start with both. See [[crates/oxilite-core/src/registry.rs#system_quads]].
+
+The set is fixed ([[crates/oxilite-core/src/registry.rs#SYSTEM_GRAPHS]]): the SQL excludes their ids from every fallback whatever the registry says, so typing another graph `oxl:SystemGraph` hides it but never silences it. `oxl:SystemGraph` is disjoint with `oxl:SchemaGraph`: the registry is data about graphs, not schema.
 
 `StoreOptions::system_graphs` (off by default, so a new store stays empty as in Oxigraph; on for stores the command line creates) makes `open` write them into a store that holds no quad, after any versioning level change and outside the change log, in one atomic request that also rebuilds the caches. `create_schema` appends the same inserts to schema scripts. `install_system_graphs` (and `oxilite registry init`) runs the portable [[crates/oxilite-core/src/registry.rs#system_graphs_update]] on an existing store unless `oxl:version` already matches. System graphs are not registrations: they never narrow reasoning or the shape index, are excluded from the "every graph" fallback, and are hidden with the schema graphs.
 
 ### Scoping in SQL
 
-The derived caches stay SQL and read the registry triples in place: every scoping predicate is "the active graphs of this role, or every graph while none is registered", one subquery over `quads` in `<oxilite:schema>`.
+The derived caches stay SQL and read the registry triples in place: every scoping predicate is "the active graphs of this role, or every graph but the system graphs while none is registered", one subquery over `quads` in `<oxilite:schema>`.
+
+Deactivating the last ontology therefore silences reasoning rather than letting every graph back in.
+
+Ontology scopes follow imports: a recursive CTE adds, to each (graph, scope) pair of an active ontology, the graphs of the active ontologies it imports — `owl:imports` recorded in the registry or asserted in its own graph, matched against graph names and `oxl:ontologyIri` — transitively, with `UNION` ending cycles.
 
 A store that registers nothing therefore behaves exactly as it did before the registry existed, and no operation gains a round trip. Ontology axioms are read with the scope they apply to ([[crates/oxilite-core/src/registry.rs#ontology_axioms]], [[architecture#Reasoning]]).
 
@@ -433,7 +443,7 @@ They are caches with the discipline `tbox_closure` follows: rebuilt by pure `INS
 
 RDFS/OWL-QL reasoning by query rewriting against a small materialized TBox closure; full OWL 2 RL materialization is explicit and opt-in. Delivered in M4, see [[crates/oxilite-core/src/reason.rs]].
 
-`tbox_closure(kind, scope, sub, sup)` holds the class closure (subClassOf and equivalentClass), the RDFS and OWL property closures (OWL composes subPropertyOf, equivalentProperty, inverseOf and symmetric properties with a direction bit), transitive properties, and the classes a property's subjects and objects belong to (domains and ranges through sub-properties, super-classes and inverses). It is computed by recursive CTEs from the asserted quads of the active registered ontology graphs — of every graph while none is registered ([[architecture#Schema registry]]) — recomputed by `optimize()`, by any change to a registration, and inside the same atomic request as any write that touches schema triples; stores then reload the transitive properties, which live in memory with the statistics.
+`tbox_closure(kind, scope, sub, sup)` holds the class closure (subClassOf and equivalentClass), the RDFS and OWL property closures (OWL composes subPropertyOf, equivalentProperty, inverseOf and symmetric properties with a direction bit), transitive properties, and the classes a property's subjects and objects belong to (domains and ranges through sub-properties, super-classes and inverses). It is computed by recursive CTEs from the asserted quads of the active registered ontology graphs and the active ontologies they import — of every graph but the system graphs while none is registered ([[architecture#Schema registry]]) — recomputed by `optimize()`, by any change to a registration, and inside the same atomic request as any write that touches schema triples; stores then reload the transitive properties, which live in memory with the statistics.
 
 The closure is kept per scope: one for every graph (scope `oxl:AllGraphs`) from the ontologies without a specific mapping, and one for each graph an active ontology is mapped to, from the global ontologies plus those mapped to it. Closures do not compose across ontologies, so each scope gets its own. Recursion joins rows of one scope. The specific scopes load with the statistics; the rewrite adds `c.scope = <scope of x.g>` to every closure join, the constant scope of every graph when there are none, so an unmapped store pays one indexed equality. A transitive property is walked only in the graphs whose scope declares it; `?a rdfs:subClassOf ?b` patterns read every scope. Materialization still reasons over the merged dataset.
 

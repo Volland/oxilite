@@ -196,10 +196,10 @@ fn schema_graphs_can_be_hidden() {
         )
         .unwrap();
     // Visible: the data, the ontology, and the registry graph's description of it (type,
-    // active flag, registration time).
+    // active flag, oxl:appliesTo oxl:AllGraphs, registration time).
     assert_eq!(
         values(&store, q, &visible),
-        ["\"5\"^^<http://www.w3.org/2001/XMLSchema#integer>"]
+        ["\"6\"^^<http://www.w3.org/2001/XMLSchema#integer>"]
     );
     assert_eq!(
         values(&store, q, &hidden),
@@ -613,7 +613,8 @@ fn blank_store_starts_with_system_graphs() {
             &all
         )
         .len(),
-        4
+        3,
+        "the role classes; oxl:SystemGraph is not a schema graph"
     );
     // System graphs are not registrations, do not narrow reasoning, and hide with the schema.
     assert!(store.schema_graphs().unwrap().is_empty());
@@ -644,4 +645,191 @@ fn blank_store_starts_with_system_graphs() {
     assert!(plain.install_system_graphs().unwrap());
     assert!(plain.system_graphs_installed().unwrap());
     assert!(plain.schema_graphs().unwrap().is_empty());
+}
+
+// @lat: [[tests#Schema registry#Imports bring registered ontologies into scope]]
+#[test]
+fn imports_bring_registered_ontologies_into_scope() {
+    let store = store();
+    load(
+        &store,
+        "GRAPH ex:zoo { ex:Dog rdfs:subClassOf ex:Mammal } \
+         GRAPH ex:core { ex:Mammal rdfs:subClassOf ex:Animal } \
+         GRAPH ex:a { ex:rex a ex:Dog } \
+         GRAPH ex:b { ex:tom a ex:Mammal }",
+    );
+    let register = |o: &str, r: Registration| {
+        store
+            .register_schema_graph(graph(o).as_ref(), SchemaRole::Ontology, &r)
+            .unwrap();
+    };
+    let core = || Registration::new().applies_to([graph("http://example.com/b")]);
+    let zoo = || Registration::new().applies_to([graph("http://example.com/a")]);
+    let animals = "SELECT ?x WHERE { ?x a ex:Animal }";
+    register("http://example.com/core", core());
+    register("http://example.com/zoo", zoo());
+    assert_eq!(
+        values(&store, animals, &rdfs()),
+        ["<http://example.com/tom>"]
+    );
+
+    // An import recorded in the registry, naming the imported graph.
+    register(
+        "http://example.com/zoo",
+        zoo().with_imports([NamedNode::new("http://example.com/core").unwrap()]),
+    );
+    assert_eq!(
+        values(&store, animals, &rdfs()),
+        ["<http://example.com/rex>", "<http://example.com/tom>"]
+    );
+
+    // An import asserted in the ontology itself, naming the other's oxl:ontologyIri.
+    register("http://example.com/zoo", zoo());
+    assert_eq!(
+        values(&store, animals, &rdfs()),
+        ["<http://example.com/tom>"]
+    );
+    register(
+        "http://example.com/core",
+        core().with_iri(NamedNode::new("http://example.com/coreOnto").unwrap()),
+    );
+    load(
+        &store,
+        "GRAPH ex:zoo { ex:zooOnto owl:imports ex:coreOnto }",
+    );
+    assert_eq!(
+        values(&store, animals, &rdfs()),
+        ["<http://example.com/rex>", "<http://example.com/tom>"]
+    );
+
+    // Import cycles end; the imported ontology does not import its importer's targets.
+    load(&store, "GRAPH ex:core { ex:coreOnto owl:imports ex:zoo }");
+    assert_eq!(
+        values(&store, "SELECT ?x WHERE { ?x a ex:Mammal }", &rdfs()),
+        ["<http://example.com/rex>", "<http://example.com/tom>"]
+    );
+
+    // An inactive ontology is not imported; deactivating every ontology silences reasoning
+    // rather than falling back to every graph.
+    store
+        .set_schema_graph_active(graph("http://example.com/core").as_ref(), false)
+        .unwrap();
+    assert!(values(&store, animals, &rdfs()).is_empty());
+    store
+        .set_schema_graph_active(graph("http://example.com/zoo").as_ref(), false)
+        .unwrap();
+    assert_eq!(
+        values(&store, "SELECT ?x WHERE { ?x a ex:Mammal }", &rdfs()),
+        ["<http://example.com/tom>"],
+        "only the asserted mammal"
+    );
+}
+
+// @lat: [[tests#Schema registry#The active flag reads alike everywhere]]
+#[test]
+fn active_flag_reads_alike_everywhere() {
+    let store = store();
+    with_graphs(&store);
+    store
+        .register_schema_graph(
+            graph("http://example.com/o1").as_ref(),
+            SchemaRole::Ontology,
+            &Registration::new().applies_to([graph("http://example.com/a")]),
+        )
+        .unwrap();
+    let set = |o: &str| {
+        store
+            .update(
+                format!(
+                    "PREFIX oxl: <https://oxilite.dev/ns#> PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> \
+                     DELETE WHERE {{ GRAPH <oxilite:schema> {{ <http://example.com/o2> ?p ?v }} }} ; \
+                     INSERT DATA {{ GRAPH <oxilite:schema> {{ \
+                     <http://example.com/o2> a oxl:OntologyGraph ; oxl:appliesTo <http://example.com/b> ; oxl:active {o} }} }}"
+                )
+                .as_str(),
+            )
+            .unwrap();
+    };
+    let plants = "SELECT ?x WHERE { ?x a ex:Plant }";
+    let o2 = |store: &Store| {
+        store
+            .schema_graphs()
+            .unwrap()
+            .into_iter()
+            .find(|e| e.graph == graph("http://example.com/o2"))
+            .unwrap()
+    };
+
+    // A plain "false" is not an xsd:boolean: invalid, and ignored by every reader.
+    set("\"false\"");
+    assert!(o2(&store).registration.active);
+    assert_eq!(
+        values(&store, plants, &rdfs()),
+        ["<http://example.com/fido>"]
+    );
+    let problems = store.registry_problems().unwrap();
+    assert_eq!(problems.len(), 1, "{problems:?}");
+    assert!(problems[0].contains("is not an <http://www.w3.org/2001/XMLSchema#boolean>"));
+
+    // "0"^^xsd:boolean is false, for the API and for reasoning alike.
+    set("\"0\"^^xsd:boolean");
+    assert!(!o2(&store).registration.active);
+    assert!(values(&store, plants, &rdfs()).is_empty());
+    assert!(store.registry_problems().unwrap().is_empty());
+}
+
+// @lat: [[tests#Schema registry#Remapping keeps the description]]
+#[test]
+fn remapping_keeps_roles_and_description() {
+    let store = store();
+    with_graphs(&store);
+    // An ontology that also carries shapes: two roles, one description.
+    store
+        .update(
+            "PREFIX oxl: <https://oxilite.dev/ns#> INSERT DATA { GRAPH <oxilite:schema> { \
+             <http://example.com/o1> a oxl:OntologyGraph , oxl:ShapesGraph ; oxl:version \"3\" ; \
+             oxl:appliesTo <http://example.com/a> } }",
+        )
+        .unwrap();
+    let listed = store.schema_graphs().unwrap();
+    assert_eq!(
+        listed.iter().map(|e| e.role).collect::<Vec<_>>(),
+        [SchemaRole::Ontology, SchemaRole::Shacl]
+    );
+    assert!(store
+        .set_schema_graph_targets(
+            graph("http://example.com/o1").as_ref(),
+            &[graph("http://example.com/b")]
+        )
+        .unwrap());
+    let listed = store.schema_graphs().unwrap();
+    assert_eq!(listed.len(), 2);
+    for e in &listed {
+        assert_eq!(e.registration.applies_to, [graph("http://example.com/b")]);
+        assert_eq!(e.registration.version.as_deref(), Some("3"));
+    }
+    assert_eq!(
+        values(&store, "SELECT ?x WHERE { ?x a ex:Animal }", &rdfs()),
+        ["<http://example.com/fido>"]
+    );
+    // No targets: every graph, written as oxl:AllGraphs.
+    assert!(store
+        .set_schema_graph_targets(graph("http://example.com/o1").as_ref(), &[])
+        .unwrap());
+    assert!(store.schema_graphs().unwrap()[0]
+        .registration
+        .applies_to
+        .is_empty());
+    assert_eq!(
+        values(
+            &store,
+            "SELECT ?t WHERE { GRAPH <oxilite:schema> { <http://example.com/o1> <https://oxilite.dev/ns#appliesTo> ?t } }",
+            &QueryOptions::default()
+        ),
+        ["<https://oxilite.dev/ns#AllGraphs>"]
+    );
+    assert!(!store
+        .set_schema_graph_targets(graph("http://example.com/nope").as_ref(), &[])
+        .unwrap());
+    assert!(store.registry_problems().unwrap().is_empty());
 }

@@ -209,3 +209,11 @@ Term ids are xxh3 hashes computed in Rust, so SQL cannot mint an id for a new IR
 Registrations are triples of `<oxilite:schema>` in the `oxl:` vocabulary, not rows of a table, and each may name the graphs it applies to with `oxl:appliesTo`.
 
 A table is invisible to SPARQL, lost in an N-Quads dump, and only oxilite's SQL can maintain it. As RDF, a registry travels with the dataset, is registered and read by plain SPARQL that runs unchanged on Oxigraph, and can express which data each schema describes. Only the derived caches (`tbox_closure`, the shape index) stay SQL: they read the registry triples in place, so scoping costs no extra round trip. Supersedes the `schema_graphs` table of [[decisions#D22 Schema graphs registered, not separated]]; see [[architecture#Schema registry]].
+
+## D35 Registry vocabulary 2: canonical, self-validating, import-aware
+
+The registry writes canonical forms, ships SHACL shapes for itself, resolves `owl:imports` between registered ontologies, and every reader agrees on edge cases. Keeps the flat "graph IRI as subject" model of [[decisions#D34 The schema registry is RDF in a system graph]].
+
+A review found the Rust reader, the SQL scopes and the SPARQL recipes disagreeing (a plain `"false"`, a graph with two roles), meaning carried by absence (no `appliesTo`, the fallback), a deactivated last ontology letting every graph back in, user-typed system graphs escaping the fallback, and imports recorded but useless. Version 2 writes `oxl:appliesTo oxl:AllGraphs` and an `xsd:boolean` flag, reads short forms leniently, keeps the fallback only while nothing is registered, fixes the system graphs in code, types `appliesTo` targets (`oxl:GraphTarget`), makes `oxl:SystemGraph` disjoint from schema graphs, and aligns with SD, Dublin Core, PROV and SPDX. `sh:shapesGraph` is derived by a recipe, not stored, so there is one source of truth.
+
+Deferred, because they break stored data or IRIs: separate registration resources per role, a dereferenceable namespace and a registered IRI scheme for system graphs, and a per-graph shape index. See [[architecture#Schema registry]].

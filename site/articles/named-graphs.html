@@ -172,7 +172,7 @@ Store::open_with_options(<span class="s">"kg.sqlite"</span>, StoreOptions { syst
       <ul>
         <li><strong>Graphs named by blank nodes cannot be registered.</strong> Another graph has no way to name them.</li>
         <li><strong>Mappings drive query-time reasoning.</strong> OWL 2 RL <code>materialize()</code> still reasons over the merged dataset. The class-keyed shape index behind Cypher ignores shapes mappings; validators can use <code>schema_graphs_for</code>.</li>
-        <li><strong><code>owl:imports</code> is recorded, not followed.</strong></li>
+        <li><strong><code>owl:imports</code> is not fetched.</strong> Since vocabulary 2, an import naming another registered, active ontology brings its axioms into scope; anything else is recorded only.</li>
         <li><strong>On a versioned store, the system graphs and the 0.4 migration are written outside the change log.</strong></li>
         <li><strong>The namespace is <code>https://oxilite.dev/ns#</code></strong> (shared with <code>oxl:textMatch</code> and the history graph). The document describing it lives at <a href="../ns/">oxilitedb.com/ns</a>.</li>
       </ul>

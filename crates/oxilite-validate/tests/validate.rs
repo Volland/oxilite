@@ -254,3 +254,44 @@ fn stored_shapes_need_an_unambiguous_graph() {
         .expect_err("two shapes graphs must be ambiguous");
     assert!(matches!(err, Error::AmbiguousShapesGraph(2, _)), "{err}");
 }
+
+// @lat: [[tests#Validation#The registry shapes check a registry]]
+#[test]
+fn registry_shapes_check_a_registry() {
+    const REGISTRY: &str = r#"
+@prefix oxl: <https://oxilite.dev/ns#> . @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex: <http://example.com/> .
+ex:onto a oxl:OntologyGraph , oxl:ShapesGraph ; oxl:active true ; oxl:appliesTo ex:data ;
+    oxl:sha256 "9f2c0000000000000000000000000000000000000000000000000000000000ab" ;
+    oxl:loadedAt "2026-09-26T10:00:00Z"^^xsd:dateTime .
+ex:all a oxl:ShapesGraph ; oxl:active "0"^^xsd:boolean ; oxl:appliesTo oxl:AllGraphs .
+"#;
+    let validate = |extra: &str| {
+        let s = Store::new().unwrap();
+        s.load_from_slice(RdfFormat::Turtle, format!("{REGISTRY}{extra}").as_bytes())
+            .unwrap();
+        validate_shacl(
+            &s,
+            oxilite::schema::VOCABULARY,
+            &ShaclValidationMode::Native,
+        )
+        .unwrap()
+    };
+    let good = validate("");
+    assert!(good.conforms(), "{:?}", focus_nodes(&good));
+    // A plain "false", a short digest, and a registration with no role class.
+    let bad = validate(
+        r#"ex:x a oxl:OntologyGraph ; oxl:active "false" .
+           ex:y a oxl:ShapesGraph ; oxl:sha256 "abc" .
+           ex:z oxl:appliesTo ex:data ."#,
+    );
+    assert!(!bad.conforms());
+    assert_eq!(
+        focus_nodes(&bad),
+        [
+            "http://example.com/x",
+            "http://example.com/y",
+            "http://example.com/z"
+        ]
+    );
+}

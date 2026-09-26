@@ -25,7 +25,8 @@ pub struct Registration {
     pub version: Option<String>,
     /// Digest of the document the graph was loaded from, for drift detection.
     pub sha256: Option<String>,
-    /// `owl:imports` targets, recorded but not resolved.
+    /// `owl:imports` targets. Imports naming another active registered ontology bring its
+    /// axioms into this one's reasoning scopes.
     pub imports: Vec<NamedNode>,
     /// The graphs the schema applies to (`oxl:appliesTo`); empty means every graph.
     pub applies_to: Vec<GraphName>,
@@ -144,6 +145,13 @@ fn entries(out: QueryOutput) -> Vec<RegisteredGraph> {
     }
 }
 
+fn problems(out: QueryOutput) -> Vec<String> {
+    match out {
+        QueryOutput::Solutions { rows, .. } => registry::problems(&rows),
+        _ => Vec::new(),
+    }
+}
+
 fn boolean(out: QueryOutput) -> bool {
     matches!(out, QueryOutput::Boolean(true))
 }
@@ -226,6 +234,27 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
         Ok(boolean(
             self.registry_query(&registry::registered_query(graph)?)?,
         ))
+    }
+
+    /// Sets the graphs a registration applies to (empty: every graph), keeping the rest of its
+    /// description; returns whether one was found.
+    pub fn set_schema_graph_targets<'a>(
+        &self,
+        graph: impl Into<GraphNameRef<'a>>,
+        applies_to: &[GraphName],
+    ) -> Result<bool> {
+        let graph = graph.into();
+        if !self.is_registered(graph)? {
+            return Ok(false);
+        }
+        self.registry_update(&registry::remap_update(graph, applies_to)?)?;
+        Ok(true)
+    }
+
+    /// What is wrong with the registry: the violations of its SHACL shapes
+    /// (`oxl:RegistrationShape`), one message each. Empty means valid.
+    pub fn registry_problems(&self) -> Result<Vec<String>> {
+        Ok(problems(self.registry_query(&registry::entries_query())?))
     }
 
     /// Activates or deactivates a registration; returns whether one was found.
@@ -336,6 +365,29 @@ impl<B: AsyncBackend> AsyncStore<B> {
         Ok(boolean(
             self.registry_query(&registry::registered_query(graph)?)
                 .await?,
+        ))
+    }
+
+    /// Sets the graphs a registration applies to (empty: every graph), keeping the rest of its
+    /// description; returns whether one was found.
+    pub async fn set_schema_graph_targets<'a>(
+        &self,
+        graph: impl Into<GraphNameRef<'a>>,
+        applies_to: &[GraphName],
+    ) -> Result<bool> {
+        let graph = graph.into().into_owned();
+        if !self.is_registered(graph.as_ref()).await? {
+            return Ok(false);
+        }
+        self.registry_update(&registry::remap_update(graph.as_ref(), applies_to)?)
+            .await?;
+        Ok(true)
+    }
+
+    /// What is wrong with the registry: the violations of its SHACL shapes, one message each.
+    pub async fn registry_problems(&self) -> Result<Vec<String>> {
+        Ok(problems(
+            self.registry_query(&registry::entries_query()).await?,
         ))
     }
 
