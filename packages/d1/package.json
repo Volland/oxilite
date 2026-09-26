@@ -1,6 +1,6 @@
 {
   "name": "@oxilite/d1",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "oxilite on Cloudflare D1 and Durable Objects: an Oxigraph-compatible SPARQL 1.1 and openCypher store (WebAssembly core)",
   "license": "MIT OR Apache-2.0",
   "type": "module",
@@ -32,7 +32,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@oxilite/common": "0.4.0"
+    "@oxilite/common": "0.5.0"
   },
   "devDependencies": {
     "miniflare": "^4"
