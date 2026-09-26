@@ -1,71 +1,142 @@
-//! The schema registry: which named graphs hold schema rather than data.
+//! The schema registry: which named graphs hold schema rather than data, and which graphs each
+//! one applies to — kept as RDF in the system graph `<oxilite:schema>`.
 //!
-//! A schema graph is an ordinary named graph whose triples stay in `quads`; `schema_graphs`
-//! only labels it with a [`SchemaRole`]. Registering an ontology narrows the TBox closure to
-//! the active ontology graphs ([`crate::reason`]); registering a shapes graph narrows the
-//! compiled shape index ([`crate::shapes`]). While nothing is registered for a role, every
-//! graph may contribute to it, so a store that uses no registry behaves as it always did.
+//! Each registered graph is a resource of `<oxilite:schema>` with the graph's IRI as subject
+//! (`oxl:DefaultGraph` for the default graph), typed with its role and described with the
+//! `oxl:` vocabulary ([`VOCABULARY`]). Registry operations are plain SPARQL updates built here,
+//! so they run unchanged on Oxigraph or any SPARQL store; the stores run them through their
+//! update path. The SQL fragments below read the same triples to scope the derived caches
+//! (`tbox_closure`, the shape index). While nothing is registered for a role, every graph may
+//! contribute to it, so a store that uses no registry behaves as it always did.
 //!
 // @lat: [[architecture#Schema registry]]
 
-use crate::encoding::DEFAULT_GRAPH_ID;
-use crate::error::Result;
-use crate::sql::{col, sql_str, Capabilities, Request, Response, Statement};
+use crate::encoding::{named_node_id, term_id, DEFAULT_GRAPH_ID};
+use crate::error::{Error, Result};
+use crate::sql::Statement;
+use oxrdf::vocab::{rdf, xsd};
+use oxrdf::{GraphName, GraphNameRef, Literal, NamedNode, QuadRef, Term, TermRef};
+use spargebra::term::{GraphNamePattern, NamedNodePattern};
+use spargebra::{GraphUpdateOperation, Update};
+use std::collections::BTreeMap;
+
+/// The system graph holding the registry.
+pub const SCHEMA_GRAPH: &str = "oxilite:schema";
+
+/// The system graph holding the oxilite vocabulary (installed by [`system_quads`]).
+pub const VOCABULARY_GRAPH: &str = "oxilite:vocabulary";
+
+/// The version of the vocabulary that [`system_quads`] installs (`oxl:version` of
+/// `<oxilite:vocabulary>` in the registry).
+pub const VOCABULARY_VERSION: &str = "1";
+
+/// The oxilite namespace (`oxl:`).
+pub const NS: &str = "https://oxilite.dev/ns#";
+
+/// The oxilite vocabulary as Turtle: the registry's classes and properties, and the terms of
+/// the history graph.
+pub const VOCABULARY: &str = include_str!("../vocab/oxl.ttl");
+
+/// IRIs of the registry vocabulary.
+pub mod vocab {
+    pub const SCHEMA_GRAPH: &str = "https://oxilite.dev/ns#SchemaGraph";
+    pub const SYSTEM_GRAPH: &str = "https://oxilite.dev/ns#SystemGraph";
+    pub const ONTOLOGY_GRAPH: &str = "https://oxilite.dev/ns#OntologyGraph";
+    pub const SHAPES_GRAPH: &str = "https://oxilite.dev/ns#ShapesGraph";
+    pub const SHEX_GRAPH: &str = "https://oxilite.dev/ns#ShExGraph";
+    pub const APPLIES_TO: &str = "https://oxilite.dev/ns#appliesTo";
+    pub const ACTIVE: &str = "https://oxilite.dev/ns#active";
+    pub const ONTOLOGY_IRI: &str = "https://oxilite.dev/ns#ontologyIri";
+    pub const VERSION: &str = "https://oxilite.dev/ns#version";
+    pub const SHA256: &str = "https://oxilite.dev/ns#sha256";
+    pub const LOADED_AT: &str = "https://oxilite.dev/ns#loadedAt";
+    pub const DEFAULT_GRAPH: &str = "https://oxilite.dev/ns#DefaultGraph";
+    pub const ALL_GRAPHS: &str = "https://oxilite.dev/ns#AllGraphs";
+    pub const IMPORTS: &str = "http://www.w3.org/2002/07/owl#imports";
+}
 
 /// What a registered graph holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "kebab-case"))]
-#[repr(i64)]
 pub enum SchemaRole {
     /// An OWL / RDFS ontology: it feeds `tbox_closure`.
-    Ontology = 1,
-    /// A SHACL shapes graph: it feeds `shapes_index`.
-    Shacl = 2,
+    Ontology,
+    /// A SHACL shapes graph: it feeds the shape index.
+    Shacl,
     /// A ShEx schema. Recorded and hidden like the others; nothing compiles it yet.
-    Shex = 3,
+    Shex,
 }
 
 impl SchemaRole {
-    pub fn from_i64(v: i64) -> Option<Self> {
-        Some(match v {
-            1 => Self::Ontology,
-            2 => Self::Shacl,
-            3 => Self::Shex,
-            _ => return None,
-        })
+    pub const ALL: [Self; 3] = [Self::Ontology, Self::Shacl, Self::Shex];
+
+    /// The role's name: `ontology`, `shacl` or `shex`.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Ontology => "ontology",
+            Self::Shacl => "shacl",
+            Self::Shex => "shex",
+        }
     }
 
-    pub const fn as_i64(self) -> i64 {
-        self as i64
+    /// The class typing a registered graph of this role.
+    pub const fn class(self) -> &'static str {
+        match self {
+            Self::Ontology => vocab::ONTOLOGY_GRAPH,
+            Self::Shacl => vocab::SHAPES_GRAPH,
+            Self::Shex => vocab::SHEX_GRAPH,
+        }
+    }
+
+    /// The role a class names.
+    pub fn from_class(iri: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|r| r.class() == iri)
     }
 }
 
-/// One row of `schema_graphs`.
-#[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+impl std::str::FromStr for SchemaRole {
+    type Err = Error;
+
+    /// Parses a role name (`shapes` is accepted for `shacl`), ignoring case.
+    fn from_str(s: &str) -> Result<Self> {
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "ontology" => Self::Ontology,
+            "shacl" | "shapes" => Self::Shacl,
+            "shex" => Self::Shex,
+            _ => {
+                return Err(Error::Other(format!(
+                    "unknown schema role {s}: one of ontology, shacl, shex"
+                )))
+            }
+        })
+    }
+}
+
+/// One registered graph, as `<oxilite:schema>` describes it.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SchemaGraph {
-    /// Term id of the graph name (0 is the default graph).
-    pub graph: i64,
+    pub graph: GraphName,
     pub role: SchemaRole,
     /// The `owl:Ontology` IRI, when it differs from the graph name.
-    pub iri: Option<String>,
-    /// `owl:versionIRI`, a version string, or anything the caller wants to pin.
+    pub iri: Option<NamedNode>,
+    /// A version to pin (`owl:versionIRI`, a tag…).
     pub version: Option<String>,
-    /// Digest of the loaded document, for drift detection by the caller.
+    /// Digest of the document the graph was loaded from, for drift detection.
     pub sha256: Option<String>,
-    /// `owl:imports` targets, as the caller recorded them.
-    pub imports: Vec<String>,
+    /// `owl:imports` targets, recorded but not resolved.
+    pub imports: Vec<NamedNode>,
+    /// The graphs the schema applies to; empty means every graph.
+    pub applies_to: Vec<GraphName>,
     /// Inactive graphs stay registered (and hidden) but stop contributing.
     pub active: bool,
-    /// Seconds since the Unix epoch, as the caller recorded them.
-    pub loaded_at: f64,
+    /// When the graph was registered (`xsd:dateTime` lexical form).
+    pub loaded_at: Option<String>,
 }
 
 impl SchemaGraph {
-    /// A registration with only the required fields filled in.
-    pub fn new(graph: i64, role: SchemaRole) -> Self {
+    /// An active registration applying to every graph, with nothing else recorded.
+    pub fn new(graph: GraphName, role: SchemaRole) -> Self {
         Self {
             graph,
             role,
@@ -73,120 +144,333 @@ impl SchemaGraph {
             version: None,
             sha256: None,
             imports: Vec::new(),
+            applies_to: Vec::new(),
             active: true,
-            loaded_at: 0.0,
+            loaded_at: None,
         }
     }
-}
 
-fn opt_str(v: Option<&String>) -> String {
-    v.map_or_else(|| "NULL".into(), |s| sql_str(s))
-}
-
-/// Registers (or replaces the registration of) one graph.
-pub fn register_statements(entry: &SchemaGraph) -> Vec<Statement> {
-    // `imports` is stored as newline-separated IRIs: an IRI cannot contain a newline, so no
-    // escaping is needed and no JSON parser is pulled into the core.
-    let imports = if entry.imports.is_empty() {
-        "NULL".to_string()
-    } else {
-        sql_str(&entry.imports.join("\n"))
-    };
-    vec![Statement::new(format!(
-        "INSERT OR REPLACE INTO schema_graphs(g, role, iri, version, sha256, imports, active, loaded_at) \
-         VALUES ({g}, {role}, {iri}, {version}, {sha}, {imports}, {active}, {loaded_at})",
-        g = entry.graph,
-        role = entry.role.as_i64(),
-        iri = opt_str(entry.iri.as_ref()),
-        version = opt_str(entry.version.as_ref()),
-        sha = opt_str(entry.sha256.as_ref()),
-        active = i64::from(entry.active),
-        loaded_at = entry.loaded_at,
-    ))]
-}
-
-/// Removes a registration, leaving the graph's triples alone.
-pub fn unregister_statements(graph: i64) -> Vec<Statement> {
-    vec![Statement::new(format!(
-        "DELETE FROM schema_graphs WHERE g = {graph}"
-    ))]
-}
-
-/// Activates or deactivates a registration.
-pub fn set_active_statements(graph: i64, active: bool) -> Vec<Statement> {
-    vec![Statement::new(format!(
-        "UPDATE schema_graphs SET active = {} WHERE g = {graph}",
-        i64::from(active)
-    ))]
-}
-
-/// Removes a registration together with every quad of its graph.
-pub fn drop_statements(graph: i64) -> Vec<Statement> {
-    let mut s = vec![Statement::new(format!(
-        "DELETE FROM quads WHERE g = {graph}"
-    ))];
-    if graph != DEFAULT_GRAPH_ID {
-        s.push(Statement::new(format!(
-            "DELETE FROM graphs WHERE id = {graph}"
-        )));
+    /// Does this schema apply to `target`?
+    pub fn applies(&self, target: GraphNameRef<'_>) -> bool {
+        self.applies_to.is_empty() || self.applies_to.iter().any(|g| g.as_ref() == target)
     }
-    s.extend(unregister_statements(graph));
-    s
 }
 
-/// Reads the whole registry.
-pub fn load_request(caps: &Capabilities) -> Request {
-    let g = if caps.int64_as_text {
-        "CAST(g AS TEXT)"
-    } else {
-        "g"
-    };
-    Request::read(vec![Statement::new(format!(
-        "SELECT {g}, role, iri, version, sha256, imports, active, loaded_at FROM schema_graphs ORDER BY role, g"
-    ))])
-}
+// ---------------------------------------------------------------------------------- SPARQL
 
-/// Decodes the response of [`load_request`].
-pub fn from_response(response: &Response) -> Result<Vec<SchemaGraph>> {
-    let Some(rs) = response.first() else {
-        return Ok(Vec::new());
-    };
-    let mut out = Vec::with_capacity(rs.rows.len());
-    for row in &rs.rows {
-        let (Some(graph), Some(role)) = (col(row, 0)?.as_i64(), col(row, 1)?.as_i64()) else {
-            continue;
-        };
-        let Some(role) = SchemaRole::from_i64(role) else {
-            continue;
-        };
-        let text = |i: usize| -> Result<Option<String>> {
-            Ok(col(row, i)?.clone().into_string().filter(|s| !s.is_empty()))
-        };
-        out.push(SchemaGraph {
-            graph,
-            role,
-            iri: text(2)?,
-            version: text(3)?,
-            sha256: text(4)?,
-            imports: text(5)?
-                .map(|s| s.split('\n').map(str::to_owned).collect())
-                .unwrap_or_default(),
-            active: col(row, 6)?.as_i64().unwrap_or(1) != 0,
-            loaded_at: col(row, 7)?.as_f64().unwrap_or(0.0),
-        });
+/// The IRI naming a graph in the registry (`oxl:DefaultGraph` for the default graph).
+pub fn graph_node(g: GraphNameRef<'_>) -> Result<NamedNode> {
+    match g {
+        GraphNameRef::NamedNode(n) => Ok(n.into_owned()),
+        GraphNameRef::DefaultGraph => Ok(NamedNode::new_unchecked(vocab::DEFAULT_GRAPH)),
+        GraphNameRef::BlankNode(_) => Err(Error::Other(
+            "a graph named by a blank node cannot be registered as schema".into(),
+        )),
     }
+}
+
+/// The graph a registry IRI names (`oxl:DefaultGraph` is the default graph).
+pub fn node_graph(n: &NamedNode) -> GraphName {
+    if n.as_str() == vocab::DEFAULT_GRAPH {
+        GraphName::DefaultGraph
+    } else {
+        n.clone().into()
+    }
+}
+
+fn iri(s: &str) -> String {
+    format!("<{s}>")
+}
+
+fn describe_delete(node: &NamedNode) -> String {
+    format!(
+        "DELETE WHERE {{ GRAPH {} {{ {node} ?p ?o }} }}",
+        iri(SCHEMA_GRAPH)
+    )
+}
+
+/// The `xsd:dateTime` of now, where a clock is available.
+fn now() -> Option<String> {
+    Some(oxsdatatypes::DateTime::now().to_string())
+}
+
+/// SPARQL registering a graph: its old description, if any, is replaced. A named graph is
+/// created (`CREATE SILENT GRAPH`) so the registry never names a graph the store lacks.
+/// `loaded_at` is set to now when absent.
+pub fn register_update(entry: &SchemaGraph) -> Result<String> {
+    let node = graph_node(entry.graph.as_ref())?;
+    let mut out = String::new();
+    if let GraphName::NamedNode(n) = &entry.graph {
+        out.push_str(&format!("CREATE SILENT GRAPH {n} ;\n"));
+    }
+    out.push_str(&describe_delete(&node));
+    out.push_str(" ;\nINSERT DATA { GRAPH ");
+    out.push_str(&iri(SCHEMA_GRAPH));
+    out.push_str(" {\n");
+    let mut triple = |p: &str, o: String| out.push_str(&format!("  {node} {} {o} .\n", iri(p)));
+    triple(rdf::TYPE.as_str(), iri(entry.role.class()));
+    triple(vocab::ACTIVE, Literal::from(entry.active).to_string());
+    for g in &entry.applies_to {
+        triple(vocab::APPLIES_TO, graph_node(g.as_ref())?.to_string());
+    }
+    if let Some(i) = &entry.iri {
+        triple(vocab::ONTOLOGY_IRI, i.to_string());
+    }
+    if let Some(v) = &entry.version {
+        triple(vocab::VERSION, Literal::new_simple_literal(v).to_string());
+    }
+    if let Some(h) = &entry.sha256 {
+        triple(vocab::SHA256, Literal::new_simple_literal(h).to_string());
+    }
+    for i in &entry.imports {
+        triple(vocab::IMPORTS, i.to_string());
+    }
+    if let Some(t) = entry.loaded_at.clone().or_else(now) {
+        triple(
+            vocab::LOADED_AT,
+            Literal::new_typed_literal(t, xsd::DATE_TIME).to_string(),
+        );
+    }
+    out.push_str("} }");
     Ok(out)
 }
 
+/// SPARQL removing a registration (the graph's triples stay).
+pub fn unregister_update(graph: GraphNameRef<'_>) -> Result<String> {
+    Ok(describe_delete(&graph_node(graph)?))
+}
+
+/// SPARQL activating or deactivating a registration (nothing happens to an unregistered graph).
+pub fn set_active_update(graph: GraphNameRef<'_>, active: bool) -> Result<String> {
+    let node = graph_node(graph)?;
+    let (g, a) = (iri(SCHEMA_GRAPH), iri(vocab::ACTIVE));
+    Ok(format!(
+        "DELETE {{ GRAPH {g} {{ {node} {a} ?a }} }} INSERT {{ GRAPH {g} {{ {node} {a} {} }} }} \
+         WHERE {{ GRAPH {g} {{ {node} a ?role OPTIONAL {{ {node} {a} ?a }} }} }}",
+        Literal::from(active)
+    ))
+}
+
+/// SPARQL removing a registration and every triple of its graph.
+pub fn drop_update(graph: GraphNameRef<'_>) -> Result<String> {
+    let node = graph_node(graph)?;
+    let drop = match graph {
+        GraphNameRef::NamedNode(n) => format!("DROP SILENT GRAPH {n}"),
+        _ => "CLEAR SILENT DEFAULT".to_owned(),
+    };
+    Ok(format!("{} ;\n{drop}", describe_delete(&node)))
+}
+
+/// SPARQL asking whether a graph is registered.
+pub fn registered_query(graph: GraphNameRef<'_>) -> Result<String> {
+    Ok(format!(
+        "ASK {{ GRAPH {} {{ {} a ?role }} }}",
+        iri(SCHEMA_GRAPH),
+        graph_node(graph)?
+    ))
+}
+
+/// SPARQL counting the triples of a graph (`?n`).
+pub fn size_query(graph: GraphNameRef<'_>) -> String {
+    match graph {
+        GraphNameRef::NamedNode(n) => {
+            format!("SELECT (COUNT(*) AS ?n) WHERE {{ GRAPH {n} {{ ?s ?p ?o }} }}")
+        }
+        _ => "SELECT (COUNT(*) AS ?n) WHERE { ?s ?p ?o }".to_owned(),
+    }
+}
+
+/// SPARQL reading the registry: `?g ?p ?o` rows, parsed by [`entries_from_rows`].
+pub fn entries_query() -> String {
+    format!(
+        "SELECT ?g ?p ?o WHERE {{ GRAPH {} {{ ?g ?p ?o }} }}",
+        iri(SCHEMA_GRAPH)
+    )
+}
+
+/// The registrations described by `?g ?p ?o` rows, ordered by role and graph. Subjects
+/// without a role class are ignored.
+pub fn entries_from_rows(rows: &[Vec<Option<Term>>]) -> Vec<SchemaGraph> {
+    let mut by: BTreeMap<String, (NamedNode, Vec<(String, Term)>)> = BTreeMap::new();
+    for row in rows {
+        let (Some(Term::NamedNode(s)), Some(Term::NamedNode(p)), Some(o)) = (
+            row.first().cloned().flatten(),
+            row.get(1).cloned().flatten(),
+            row.get(2).cloned().flatten(),
+        ) else {
+            continue;
+        };
+        by.entry(s.as_str().to_owned())
+            .or_insert_with(|| (s.clone(), Vec::new()))
+            .1
+            .push((p.into_string(), o));
+    }
+    let mut out = Vec::new();
+    for (_, (node, props)) in by {
+        let role = props.iter().find_map(|(p, o)| match o {
+            Term::NamedNode(c) if p == rdf::TYPE.as_str() => SchemaRole::from_class(c.as_str()),
+            _ => None,
+        });
+        let Some(role) = role else { continue };
+        let mut e = SchemaGraph::new(node_graph(&node), role);
+        let mut all = false;
+        for (p, o) in props {
+            match (p.as_str(), o) {
+                (vocab::ACTIVE, Term::Literal(l)) if matches!(l.value(), "false" | "0") => {
+                    e.active = false;
+                }
+                (vocab::APPLIES_TO, Term::NamedNode(n)) if n.as_str() == vocab::ALL_GRAPHS => {
+                    all = true;
+                }
+                (vocab::APPLIES_TO, Term::NamedNode(n)) => e.applies_to.push(node_graph(&n)),
+                (vocab::ONTOLOGY_IRI, Term::NamedNode(n)) => e.iri = Some(n),
+                (vocab::VERSION, Term::Literal(l)) => e.version = Some(l.value().to_owned()),
+                (vocab::SHA256, Term::Literal(l)) => e.sha256 = Some(l.value().to_owned()),
+                (vocab::LOADED_AT, Term::Literal(l)) => e.loaded_at = Some(l.value().to_owned()),
+                (vocab::IMPORTS, Term::NamedNode(n)) => e.imports.push(n),
+                _ => {}
+            }
+        }
+        if all {
+            e.applies_to.clear();
+        }
+        e.applies_to.sort_by_key(ToString::to_string);
+        e.imports.sort();
+        out.push(e);
+    }
+    out.sort_by_key(|e| (e.role, e.graph.to_string()));
+    out
+}
+
+// ------------------------------------------------------------------------ change detection
+
+fn registry_graph(g: GraphNameRef<'_>) -> bool {
+    matches!(g, GraphNameRef::NamedNode(n) if n.as_str() == SCHEMA_GRAPH)
+}
+
+/// Does writing this quad change what the registry says? (Any quad of `<oxilite:schema>`.)
+pub fn is_registry_quad(q: QuadRef<'_>) -> bool {
+    registry_graph(q.graph_name)
+}
+
+/// Can this update change the registry? (Conservative: a variable graph counts when the
+/// predicate is a variable or a registry predicate.)
+pub fn update_touches_registry(update: &Update) -> bool {
+    let named = |g: &GraphNamePattern| match g {
+        GraphNamePattern::NamedNode(n) => n.as_str() == SCHEMA_GRAPH,
+        GraphNamePattern::DefaultGraph => false,
+        GraphNamePattern::Variable(_) => true,
+    };
+    let registry_predicate = |p: &NamedNodePattern| match p {
+        NamedNodePattern::Variable(_) => true,
+        NamedNodePattern::NamedNode(n) => n.as_str().starts_with(NS) || n.as_ref() == rdf::TYPE,
+    };
+    update.operations.iter().any(|op| match op {
+        GraphUpdateOperation::InsertData { data } => data.iter().any(|q| {
+            matches!(&q.graph_name, spargebra::term::GraphName::NamedNode(n) if n.as_str() == SCHEMA_GRAPH)
+        }),
+        GraphUpdateOperation::DeleteData { data } => data.iter().any(|q| {
+            matches!(&q.graph_name, spargebra::term::GraphName::NamedNode(n) if n.as_str() == SCHEMA_GRAPH)
+        }),
+        GraphUpdateOperation::DeleteInsert { delete, insert, .. } => {
+            delete
+                .iter()
+                .any(|q| named(&q.graph_name) && registry_predicate(&q.predicate))
+                || insert
+                    .iter()
+                    .any(|q| named(&q.graph_name) && registry_predicate(&q.predicate))
+        }
+        GraphUpdateOperation::Create { .. } => false,
+        GraphUpdateOperation::Load { .. }
+        | GraphUpdateOperation::Clear { .. }
+        | GraphUpdateOperation::Drop { .. } => true,
+    })
+}
+
+// -------------------------------------------------------------------------------------- SQL
+
+/// Term ids the SQL fragments need.
+struct Ids {
+    reg: i64,
+    ty: i64,
+    applies: i64,
+    active: i64,
+    false_: i64,
+    dflt: i64,
+    all: i64,
+    system: i64,
+}
+
+fn ids() -> Ids {
+    Ids {
+        reg: named_node_id(SCHEMA_GRAPH),
+        ty: named_node_id(rdf::TYPE.as_str()),
+        applies: named_node_id(vocab::APPLIES_TO),
+        active: named_node_id(vocab::ACTIVE),
+        false_: term_id(TermRef::Literal(Literal::from(false).as_ref())),
+        dflt: named_node_id(vocab::DEFAULT_GRAPH),
+        all: named_node_id(vocab::ALL_GRAPHS),
+        system: named_node_id(vocab::SYSTEM_GRAPH),
+    }
+}
+
+/// The scope of the closure that applies to every graph (the id of `oxl:AllGraphs`).
+pub fn all_scope() -> i64 {
+    named_node_id(vocab::ALL_GRAPHS)
+}
+
+/// The graph id of the registry graph.
+pub fn registry_graph_id() -> i64 {
+    named_node_id(SCHEMA_GRAPH)
+}
+
+/// SQL: the graph id a registry node names (`oxl:DefaultGraph` is 0).
+fn graph_of(i: &Ids, col: &str) -> String {
+    format!(
+        "(CASE {col} WHEN {} THEN {DEFAULT_GRAPH_ID} ELSE {col} END)",
+        i.dflt
+    )
+}
+
+/// SQL: the registry nodes (column `s`) of the active graphs of these roles.
+fn active_nodes(i: &Ids, roles: &[SchemaRole]) -> String {
+    let classes = roles
+        .iter()
+        .map(|r| named_node_id(r.class()).to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "SELECT r.s AS s FROM quads r WHERE r.g = {reg} AND r.p = {ty} AND r.o IN ({classes}) \
+         AND NOT EXISTS (SELECT 1 FROM quads z WHERE z.g = {reg} AND z.s = r.s AND z.p = {active} AND z.o = {f})",
+        reg = i.reg,
+        ty = i.ty,
+        active = i.active,
+        f = i.false_
+    )
+}
+
+/// SQL: the ids of the system graphs (`oxl:SystemGraph` in the registry).
+fn system_graphs(i: &Ids) -> String {
+    format!(
+        "SELECT {} FROM quads y WHERE y.g = {} AND y.p = {} AND y.o = {}",
+        graph_of(i, "y.s"),
+        i.reg,
+        i.ty,
+        i.system
+    )
+}
+
 /// SQL: the graphs that may contribute to `role` — the active registered ones, or every graph
-/// while none is registered for it.
+/// but the system graphs while none is registered for it.
 ///
 /// `column` is the graph column of the quad source being filtered (e.g. `"g"`, `"x.g"`).
 pub fn scope(role: SchemaRole, column: &str) -> String {
-    let r = role.as_i64();
+    let i = ids();
+    let nodes = active_nodes(&i, &[role]);
     format!(
-        "(NOT EXISTS (SELECT 1 FROM schema_graphs WHERE role = {r} AND active = 1) \
-         OR {column} IN (SELECT g FROM schema_graphs WHERE role = {r} AND active = 1))"
+        "((NOT EXISTS ({nodes}) AND {column} NOT IN ({})) OR {column} IN (SELECT {} FROM ({nodes}) an))",
+        system_graphs(&i),
+        graph_of(&i, "an.s")
     )
 }
 
@@ -195,13 +479,305 @@ pub fn scoped_quads(role: SchemaRole) -> String {
     format!("(SELECT s, p, o, g FROM quads WHERE {})", scope(role, "g"))
 }
 
-/// SQL: a quad source with every registered schema graph removed, whatever its role and
-/// whether or not it is active (see `QueryOptions::include_schema_graphs`).
-pub fn quads_without_schema_graphs() -> &'static str {
-    "(SELECT s, p, o, g FROM quads WHERE g NOT IN (SELECT g FROM schema_graphs))"
+/// SQL: the ids of every registered schema graph, whatever its role and whether or not it is
+/// active.
+fn registered_graphs(i: &Ids) -> String {
+    let classes = SchemaRole::ALL
+        .iter()
+        .map(|r| named_node_id(r.class()))
+        .chain([i.system])
+        .map(|id| id.to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "SELECT {} FROM quads r WHERE r.g = {} AND r.p = {} AND r.o IN ({classes})",
+        graph_of(i, "r.s"),
+        i.reg,
+        i.ty
+    )
 }
 
-/// SQL: `source` (a quad table) with every registered schema graph removed.
+/// SQL: a quad source without the registry graph and the graphs it registers (see
+/// `QueryOptions::include_schema_graphs`).
+pub fn quads_without_schema_graphs() -> String {
+    without_schema_graphs("quads")
+}
+
+/// SQL: `source` (a quad table) without the registry graph and the graphs it registers.
 pub fn without_schema_graphs(source: &str) -> String {
-    format!("(SELECT s, p, o, g FROM {source} WHERE g NOT IN (SELECT g FROM schema_graphs))")
+    let i = ids();
+    format!(
+        "(SELECT s, p, o, g FROM {source} WHERE g <> {} AND g NOT IN ({}))",
+        i.reg,
+        registered_graphs(&i)
+    )
+}
+
+/// SQL: the ontology axioms as `(s, p, o, scope)`, restricted by `cond` (on alias `q`).
+///
+/// The axioms of the active ontology graphs that apply to every graph come with the scope
+/// [`all_scope`] and again with every specific scope; those of an ontology mapped to graph G
+/// with scope G. While no ontology is registered, every graph's triples count, with scope
+/// [`all_scope`].
+pub fn ontology_axioms(cond: &str) -> String {
+    let i = ids();
+    let act = active_nodes(&i, &[SchemaRole::Ontology]);
+    // Specific targets of registry nodes (not oxl:AllGraphs).
+    let targets = format!(
+        "SELECT a.s AS n, {} AS t FROM quads a WHERE a.g = {} AND a.p = {} AND a.o <> {}",
+        graph_of(&i, "a.o"),
+        i.reg,
+        i.applies,
+        i.all
+    );
+    let to_all = format!(
+        "SELECT a.s FROM quads a WHERE a.g = {} AND a.p = {} AND a.o = {}",
+        i.reg, i.applies, i.all
+    );
+    // Active ontologies applying to every graph: no specific target, or oxl:AllGraphs.
+    let global = format!(
+        "SELECT ac.s AS s FROM ({act}) ac WHERE ac.s NOT IN (SELECT n FROM ({targets})) OR ac.s IN ({to_all})"
+    );
+    let specific = format!("SELECT st.n AS n, st.t AS t FROM ({targets}) st WHERE st.n IN ({act})");
+    let map = format!(
+        "SELECT {g} AS g, {all} AS scope FROM ({global}) gl \
+         UNION SELECT {g}, sp.t FROM ({global}) gl JOIN ({specific}) sp \
+         UNION SELECT {n}, sp.t FROM ({specific}) sp",
+        g = graph_of(&i, "gl.s"),
+        n = graph_of(&i, "sp.n"),
+        all = i.all
+    );
+    format!(
+        "(SELECT q.s AS s, q.p AS p, q.o AS o, m.scope AS scope FROM quads q JOIN ({map}) m ON m.g = q.g WHERE {cond} \
+         UNION ALL SELECT q.s, q.p, q.o, {all} FROM quads q WHERE {cond} AND NOT EXISTS ({act}) AND q.g NOT IN ({sys}))",
+        all = i.all,
+        sys = system_graphs(&i)
+    )
+}
+
+/// Loads the specific closure scopes (graphs with ontologies of their own), kept in memory with
+/// the planner statistics.
+pub fn scopes_statement(id_col: impl Fn(&str) -> String) -> Statement {
+    Statement::new(format!(
+        "SELECT DISTINCT {} FROM tbox_closure WHERE scope <> {}",
+        id_col("scope"),
+        all_scope()
+    ))
+}
+
+// ---------------------------------------------------------------------------- system graphs
+
+/// The system graphs a new store starts with: the vocabulary in `<oxilite:vocabulary>`, and in
+/// `<oxilite:schema>` a description of both system graphs (`oxl:SystemGraph`, with the
+/// vocabulary's version). System graphs never narrow reasoning or the shape index.
+pub fn system_quads() -> Vec<oxrdf::Quad> {
+    let vocabulary = NamedNode::new_unchecked(VOCABULARY_GRAPH);
+    let registry = NamedNode::new_unchecked(SCHEMA_GRAPH);
+    let mut out: Vec<oxrdf::Quad> = oxrdfio::RdfParser::from_format(oxrdfio::RdfFormat::Turtle)
+        .for_slice(VOCABULARY.as_bytes())
+        .map(|q| {
+            let q = q.expect("the bundled vocabulary is valid Turtle");
+            oxrdf::Quad::new(q.subject, q.predicate, q.object, vocabulary.clone())
+        })
+        .collect();
+    let t = |s: &NamedNode, p: &str, o: Term| {
+        oxrdf::Quad::new(s.clone(), NamedNode::new_unchecked(p), o, registry.clone())
+    };
+    let system: Term = NamedNode::new_unchecked(vocab::SYSTEM_GRAPH).into();
+    let label = "http://www.w3.org/2000/01/rdf-schema#label";
+    out.extend([
+        t(&registry, rdf::TYPE.as_str(), system.clone()),
+        t(
+            &registry,
+            label,
+            Literal::new_simple_literal("schema registry").into(),
+        ),
+        t(&vocabulary, rdf::TYPE.as_str(), system),
+        t(
+            &vocabulary,
+            label,
+            Literal::new_simple_literal("oxilite vocabulary").into(),
+        ),
+        t(&vocabulary, vocab::APPLIES_TO, registry.clone().into()),
+        t(
+            &vocabulary,
+            vocab::ONTOLOGY_IRI,
+            NamedNode::new_unchecked(NS).into(),
+        ),
+        t(
+            &vocabulary,
+            vocab::VERSION,
+            Literal::new_simple_literal(VOCABULARY_VERSION).into(),
+        ),
+    ]);
+    out
+}
+
+/// SPARQL installing (or refreshing) the system graphs on any store: the vocabulary graph is
+/// replaced and the system graphs' descriptions rewritten; registrations are untouched.
+pub fn system_graphs_update() -> String {
+    let (reg, voc) = (iri(SCHEMA_GRAPH), iri(VOCABULARY_GRAPH));
+    let mut out = format!(
+        "CREATE SILENT GRAPH {reg} ;\nCREATE SILENT GRAPH {voc} ;\nCLEAR SILENT GRAPH {voc} ;\n\
+         DELETE WHERE {{ GRAPH {reg} {{ {reg} ?p ?o }} }} ;\n\
+         DELETE WHERE {{ GRAPH {reg} {{ {voc} ?p ?o }} }} ;\nINSERT DATA {{\n"
+    );
+    for q in system_quads() {
+        out.push_str(&format!(
+            "  GRAPH {} {{ {} {} {} . }}\n",
+            q.graph_name, q.subject, q.predicate, q.object
+        ));
+    }
+    out.push('}');
+    out
+}
+
+/// SPARQL `ASK`: are the system graphs installed at the current vocabulary version?
+pub fn system_graphs_ready_query() -> String {
+    format!(
+        "ASK {{ GRAPH {} {{ {} {} {} }} }}",
+        iri(SCHEMA_GRAPH),
+        iri(VOCABULARY_GRAPH),
+        iri(vocab::VERSION),
+        Literal::new_simple_literal(VOCABULARY_VERSION)
+    )
+}
+
+// -------------------------------------------------------------------------------- migration
+
+/// Schema version 1 kept registrations in a `schema_graphs` table: reads its rows with the
+/// graph IRIs (`g`, `lex`, `role`, `iri`, `version`, `sha256`, `imports`, `active`).
+pub fn legacy_rows_statement() -> Statement {
+    Statement::new(
+        "SELECT sg.g, t.lex, sg.role, sg.iri, sg.version, sg.sha256, sg.imports, sg.active \
+         FROM schema_graphs sg LEFT JOIN terms t ON t.id = sg.g",
+    )
+}
+
+/// The registrations of legacy rows (see [`legacy_rows_statement`]). Graphs named by blank
+/// nodes, which the registry graph cannot name, are skipped.
+pub fn legacy_entries(response: &crate::sql::Response) -> Result<Vec<SchemaGraph>> {
+    use crate::sql::col;
+    let Some(rs) = response.first() else {
+        return Ok(Vec::new());
+    };
+    let mut out = Vec::new();
+    for row in &rs.rows {
+        let g = col(row, 0)?.as_i64();
+        let text = |i: usize| -> Result<Option<String>> {
+            Ok(col(row, i)?.clone().into_string().filter(|s| !s.is_empty()))
+        };
+        let graph = if g == Some(DEFAULT_GRAPH_ID) {
+            GraphName::DefaultGraph
+        } else {
+            match text(1)?.and_then(|l| NamedNode::new(l).ok()) {
+                Some(n) if g == Some(named_node_id(n.as_str())) => n.into(),
+                _ => continue,
+            }
+        };
+        let role = match col(row, 2)?.as_i64() {
+            Some(1) => SchemaRole::Ontology,
+            Some(2) => SchemaRole::Shacl,
+            Some(3) => SchemaRole::Shex,
+            _ => continue,
+        };
+        let mut e = SchemaGraph::new(graph, role);
+        e.iri = text(3)?.and_then(|s| NamedNode::new(s).ok());
+        e.version = text(4)?;
+        e.sha256 = text(5)?;
+        e.imports = text(6)?
+            .map(|s| {
+                s.split('\n')
+                    .filter_map(|i| NamedNode::new(i).ok())
+                    .collect()
+            })
+            .unwrap_or_default();
+        e.active = col(row, 7)?.as_i64().unwrap_or(1) != 0;
+        out.push(e);
+    }
+    Ok(out)
+}
+
+/// The registry triples of a registration, as quads of `<oxilite:schema>` (for writers that
+/// cannot run SPARQL, like the migration).
+pub fn entry_quads(entry: &SchemaGraph) -> Result<Vec<oxrdf::Quad>> {
+    let node = graph_node(entry.graph.as_ref())?;
+    let g = NamedNode::new_unchecked(SCHEMA_GRAPH);
+    let q = |p: &str, o: Term| {
+        oxrdf::Quad::new(node.clone(), NamedNode::new_unchecked(p), o, g.clone())
+    };
+    let mut out = vec![
+        q(
+            rdf::TYPE.as_str(),
+            NamedNode::new_unchecked(entry.role.class()).into(),
+        ),
+        q(vocab::ACTIVE, Literal::from(entry.active).into()),
+    ];
+    for t in &entry.applies_to {
+        out.push(q(vocab::APPLIES_TO, graph_node(t.as_ref())?.into()));
+    }
+    if let Some(i) = &entry.iri {
+        out.push(q(vocab::ONTOLOGY_IRI, i.clone().into()));
+    }
+    if let Some(v) = &entry.version {
+        out.push(q(vocab::VERSION, Literal::new_simple_literal(v).into()));
+    }
+    if let Some(h) = &entry.sha256 {
+        out.push(q(vocab::SHA256, Literal::new_simple_literal(h).into()));
+    }
+    for i in &entry.imports {
+        out.push(q(vocab::IMPORTS, i.clone().into()));
+    }
+    if let Some(t) = &entry.loaded_at {
+        out.push(q(
+            vocab::LOADED_AT,
+            Literal::new_typed_literal(t, xsd::DATE_TIME).into(),
+        ));
+    }
+    Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn register_update_parses_and_reads_back() {
+        let mut e = SchemaGraph::new(
+            NamedNode::new_unchecked("http://ex.org/onto").into(),
+            SchemaRole::Ontology,
+        );
+        e.version = Some("v \"1\"".into());
+        e.applies_to = vec![
+            NamedNode::new_unchecked("http://ex.org/data").into(),
+            GraphName::DefaultGraph,
+        ];
+        e.imports = vec![NamedNode::new_unchecked("http://ex.org/base")];
+        e.loaded_at = Some("2026-09-26T10:00:00Z".into());
+        let u = register_update(&e).unwrap();
+        spargebra::SparqlParser::new().parse_update(&u).unwrap();
+        for s in [
+            unregister_update(e.graph.as_ref()).unwrap(),
+            set_active_update(e.graph.as_ref(), false).unwrap(),
+            drop_update(e.graph.as_ref()).unwrap(),
+            drop_update(GraphNameRef::DefaultGraph).unwrap(),
+        ] {
+            spargebra::SparqlParser::new().parse_update(&s).unwrap();
+        }
+        let rows: Vec<Vec<Option<Term>>> = entry_quads(&e)
+            .unwrap()
+            .into_iter()
+            .map(|q| {
+                vec![
+                    Some(q.subject.into()),
+                    Some(q.predicate.into()),
+                    Some(q.object),
+                ]
+            })
+            .collect();
+        let back = entries_from_rows(&rows);
+        let mut want = e.clone();
+        want.applies_to.sort_by_key(ToString::to_string);
+        assert_eq!(back, vec![want]);
+    }
 }

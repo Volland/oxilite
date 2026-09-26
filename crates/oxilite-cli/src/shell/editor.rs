@@ -252,7 +252,16 @@ pub fn complete_command(session: &Session, line: &str, pos: usize) -> Option<(us
     let typed = &before[arg_start..];
     match command {
         ".mode" => Some(pairs(arg_start, typed, Mode::NAMES.iter().copied())),
-        ".timer" => Some(pairs(arg_start, typed, ["on", "off"])),
+        ".timer" | ".inferred" | ".schemagraphs" => Some(pairs(arg_start, typed, ["on", "off"])),
+        ".reasoning" => Some(pairs(arg_start, typed, ["none", "rdfs", "owl-ql"])),
+        ".materialize" => Some(pairs(arg_start, typed, ["clear"])),
+        // The role is the first argument.
+        ".register"
+            if before[lead + space..].split_whitespace().count()
+                <= usize::from(!typed.is_empty()) =>
+        {
+            Some(pairs(arg_start, typed, ["ontology", "shacl", "shex"]))
+        }
         ".prefix" => {
             let names: Vec<String> = session
                 .prefixes

@@ -6,7 +6,16 @@ use crate::encoding::{Tag, INT_OFFSET, PAYLOAD_BITS};
 use crate::sql::{Request, Statement};
 
 /// Current schema version stored in `oxilite_meta`.
-pub const SCHEMA_VERSION: &str = "1";
+/// Version 2 keeps the schema registry as RDF in `<oxilite:schema>` (no `schema_graphs`
+/// table) and scopes `tbox_closure`; opening a version 1 store migrates it (`ops::open_job`).
+pub const SCHEMA_VERSION: &str = "2";
+
+/// The TBox closure cache, one closure per scope (see `reason::closure_statements`).
+pub const TBOX_TABLE: &str = "CREATE TABLE IF NOT EXISTS tbox_closure (\
+    kind INTEGER NOT NULL, scope INTEGER NOT NULL, sub INTEGER NOT NULL, sup INTEGER NOT NULL, \
+    PRIMARY KEY (kind, scope, sup, sub)) WITHOUT ROWID, STRICT";
+pub const TBOX_INDEX: &str =
+    "CREATE INDEX IF NOT EXISTS tbox_closure_sub ON tbox_closure(kind, scope, sub, sup)";
 
 /// Options chosen when a store is created.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,6 +36,10 @@ pub struct StoreOptions {
     /// With `log`: index the change log by predicate and object too (fast as-of queries on
     /// any pattern, two more rows written per change).
     pub as_of_index: bool,
+    /// Install the system graphs in a blank store: the oxilite vocabulary in
+    /// `<oxilite:vocabulary>` and the registry's own description in `<oxilite:schema>` (see
+    /// `registry::system_quads`). Off by default, so a new store is empty as in Oxigraph.
+    pub system_graphs: bool,
 }
 
 impl Default for StoreOptions {
@@ -37,6 +50,7 @@ impl Default for StoreOptions {
             versioning: crate::version::Versioning::Off,
             stamp_index: false,
             as_of_index: false,
+            system_graphs: false,
         }
     }
 }
@@ -82,7 +96,22 @@ pub fn create_schema(options: &StoreOptions) -> Request {
         .expect("versioning from off is always possible");
         r.statements.extend(change);
     }
+    if options.system_graphs {
+        r.statements
+            .extend(system_graph_statements(&crate::sql::Capabilities::d1()));
+    }
     r
+}
+
+/// Statements writing the system graphs (see `StoreOptions::system_graphs`) and rebuilding the
+/// schema caches they scope.
+pub fn system_graph_statements(caps: &crate::sql::Capabilities) -> Vec<Statement> {
+    let quads = crate::registry::system_quads();
+    let mut s = crate::writer::EncodedQuads::new(quads.iter().map(oxrdf::Quad::as_ref))
+        .insert_statements(caps);
+    s.extend(crate::reason::closure_statements());
+    s.extend(crate::shapes::refresh_statements());
+    s
 }
 
 /// DDL statements creating (idempotently) the oxilite schema without versioning.
@@ -123,9 +152,9 @@ pub fn base_schema(options: &StoreOptions) -> Request {
         "CREATE TABLE IF NOT EXISTS stats_po (p INTEGER NOT NULL, o INTEGER NOT NULL, n INTEGER NOT NULL, PRIMARY KEY (p, o)) WITHOUT ROWID, STRICT",
         // Reasoning: the schema closure (see `reason::closure_statements`) and materialized
         // OWL 2 RL inferences, kept apart from asserted quads.
-        "CREATE TABLE IF NOT EXISTS tbox_closure (\
-            kind INTEGER NOT NULL, sub INTEGER NOT NULL, sup INTEGER NOT NULL, PRIMARY KEY (kind, sup, sub)) WITHOUT ROWID, STRICT",
-        "CREATE INDEX IF NOT EXISTS tbox_closure_sub ON tbox_closure(kind, sub, sup)",
+        // `scope`: the graph a closure applies to, or the id of `oxl:AllGraphs` (see `registry`).
+        TBOX_TABLE,
+        TBOX_INDEX,
         "CREATE TABLE IF NOT EXISTS quads_inf (\
             s INTEGER NOT NULL, p INTEGER NOT NULL, o INTEGER NOT NULL, g INTEGER NOT NULL DEFAULT 0, \
             PRIMARY KEY (s, p, o, g)) WITHOUT ROWID, STRICT",
@@ -137,12 +166,6 @@ pub fn base_schema(options: &StoreOptions) -> Request {
             src INTEGER NOT NULL, s INTEGER NOT NULL, p INTEGER NOT NULL, o INTEGER NOT NULL, g INTEGER NOT NULL DEFAULT 0, \
             PRIMARY KEY (s, p, o, g, src)) WITHOUT ROWID, STRICT",
         "CREATE TABLE IF NOT EXISTS inf_producers (id INTEGER PRIMARY KEY, name TEXT NOT NULL) STRICT",
-        // Schema registry: which named graphs hold an ontology, SHACL shapes or a ShEx schema
-        // (see `registry`). The RDF itself stays in `quads`; this only labels a graph.
-        "CREATE TABLE IF NOT EXISTS schema_graphs (\
-            g INTEGER PRIMARY KEY, role INTEGER NOT NULL, iri TEXT, version TEXT, sha256 TEXT, \
-            imports TEXT, active INTEGER NOT NULL DEFAULT 1, loaded_at REAL NOT NULL) STRICT",
-        "CREATE INDEX IF NOT EXISTS schema_graphs_role ON schema_graphs(role, active)",
         // The compiled SHACL property shapes of the registered shapes graphs, and the values of
         // their `sh:in` lists (see `shapes`). Both are caches, rebuilt from `quads`.
         "CREATE TABLE IF NOT EXISTS shapes_index (\

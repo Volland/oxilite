@@ -27,6 +27,7 @@ pub struct SqlDataset<'a, B: SyncBackend> {
     inferred: bool,
     hide_schema: bool,
     transitive: BTreeSet<i64>,
+    scopes: BTreeSet<i64>,
     /// Read the store as it was at this tick (see `version`).
     as_of: Option<i64>,
 }
@@ -40,6 +41,7 @@ impl<'a, B: SyncBackend> SqlDataset<'a, B> {
             inferred: false,
             hide_schema: false,
             transitive: BTreeSet::new(),
+            scopes: BTreeSet::new(),
             as_of: None,
         }
     }
@@ -55,6 +57,14 @@ impl<'a, B: SyncBackend> SqlDataset<'a, B> {
             for row in self.rows(stmt.sql)? {
                 if let Some(p) = row.first().and_then(SqlValue::as_i64) {
                     self.transitive.insert(p);
+                }
+            }
+        }
+        if self.reasoning != crate::reason::Reasoning::None {
+            let stmt = crate::registry::scopes_statement(|c| self.id_col(c));
+            for row in self.rows(stmt.sql)? {
+                if let Some(g) = row.first().and_then(SqlValue::as_i64) {
+                    self.scopes.insert(g);
                 }
             }
         }
@@ -158,6 +168,7 @@ impl<'a, B: SyncBackend> QueryableDataset<'a> for SqlDataset<'a, B> {
             hide_schema: self.hide_schema,
             as_of: self.as_of,
             transitive: &self.transitive,
+            scopes: &self.scopes,
             max_compound: self.backend.capabilities().max_compound_select,
         };
         let source = if ent.active() {

@@ -81,7 +81,7 @@ Contexts can also be persisted with `docs.putContext(iri, context)`. Errors are 
 | Method | Does |
 |---|---|
 | `new Store(path? \| quads? \| options?)` | Open a SQLite file, an in-memory store, or one filled with quads. Options: `path`, `library` (a `libsqlite3` to load), `graphIndex`, `textIndex` |
-| `query(sparql, options?)` | SPARQL 1.1 query. Options as in Oxigraph, plus `reasoning: "rdfs" \| "owl-ql"` and `include_inferred` |
+| `query(sparql, options?)` | SPARQL 1.1 query. Options as in Oxigraph, plus `reasoning: "rdfs" \| "owl-ql"`, `include_inferred` and `include_schema_graphs` |
 | `update(sparql)` | SPARQL 1.1 Update, atomically |
 | `load(data, options)` / `bulkLoad(data, options)` | Parse Turtle, N-Triples, N-Quads, TriG, RDF/XML, JSON-LD… |
 | `dump(options)` | Serialize the store or one graph |
@@ -91,6 +91,7 @@ Contexts can also be persisted with `docs.putContext(iri, context)`. Errors are 
 | `credentials(options?)` | Verifiable Credentials: `put`, `putPresentation`, `get`, `remove`, `find`, and `documents` for the rest |
 | `explain(sparql)`, `explainUpdate`, `explainCypher` | The SQL a statement compiles to, with the planner's notes |
 | `materialize({ engine? })`, `clearInferences()` | OWL 2 RL closure (`"sql"` or `"reasonable"`) |
+| `registerSchemaGraph(graph, role, { appliesTo?, version?, … })`, `schemaGraphs()`, `setSchemaGraphActive`, `unregisterSchemaGraph`, `dropSchemaGraph`, `shapeIndex()` | The [schema registry](https://github.com/Volland/oxilite/blob/main/docs/schema-registry.md): which graphs hold ontologies (`"ontology"`), SHACL shapes (`"shacl"`) or ShEx (`"shex"`), and which graphs each applies to; RDF in `<oxilite:schema>`. Query option `include_schema_graphs: false` hides them. `new Store({ systemGraphs: true })` starts a blank store with the `oxl:` vocabulary and the registry's description; `installSystemGraphs()` adds them later |
 | `optimize()`, `backup(path)`, `clear()` | Refresh planner statistics, `VACUUM INTO` a copy, empty the store |
 | `new Store({ versioning: "log" })`, `query(q, { as_of: "HEAD~1" })`, `cypher(q, {}, { asOf })`, `datalog(p, { asOf })` | Versioning: a store clock (`"stamped"`) or an immutable change log (`"log"`) with time travel; `GRAPH <oxilite:history>` and Datalog's `commit`/`added`/`removed` read the history |
 | `withCommit`, `setCommitInfo`, `history`, `changes`, `diff`, `purge`, `versioning`, `setVersioning` | Commit author and message, the history, net changes between versions, erasure, the level |

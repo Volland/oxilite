@@ -43,6 +43,15 @@ import {
   type LevelChange,
   type Versioning,
   type VersionStatus,
+  type GraphArg,
+  type PropertyShapeEntry,
+  type SchemaGraphEntry,
+  type SchemaRegistration,
+  type SchemaRole,
+  graphJson,
+  registrationJson,
+  toSchemaGraphs,
+  toShapeIndex,
   toChanges,
   loadDataToString,
   outputToResult,
@@ -93,6 +102,17 @@ export interface WasmEngine {
   clear(): WasmJob;
   materialize(): WasmJob;
   clearInferences(): WasmJob;
+  registerSchemaGraphSparql(graph: string, role: string, registration?: string | null): string;
+  unregisterSchemaGraphSparql(graph: string): string;
+  setSchemaGraphActiveSparql(graph: string, active: boolean): string;
+  dropSchemaGraphSparql(graph: string): string;
+  schemaGraphRegisteredSparql(graph: string): string;
+  graphSizeSparql(graph: string): string;
+  schemaGraphsSparql(): string;
+  schemaGraphsFromOutput(output: string): string;
+  systemGraphsSparql(): string;
+  systemGraphsReadySparql(): string;
+  shapeIndex(): WasmJob;
   schemaSql(): string;
   versioning(): WasmJob;
   setVersioning(level: string, change?: string | null): WasmJob;
@@ -126,6 +146,10 @@ export class OxiliteCollisionError extends Error {}
 function mapError(e: unknown): Error {
   const message = e instanceof Error ? e.message : String(e);
   if (message.includes("oxilite: term hash collision")) return new OxiliteCollisionError(message);
+  if (message.includes("no such column: scope"))
+    return new Error(
+      "this D1 database has the oxilite 0.4 schema: open it once with D1Store.open(db) (without `migrated`) to upgrade it, then regenerate your migration with `npx oxilite-d1 schema`",
+    );
   if (message.includes("graph_does_not_exist")) return new Error("the graph does not exist");
   if (message.includes("graph_already_exists")) return new Error("the graph already exists");
   if (message.includes("jsonld_graphs.g")) {
@@ -154,6 +178,12 @@ export interface D1StoreOptions {
   asOfIndex?: boolean;
   /** With `"stamped"` or `"log"`: index the tick that added each quad. */
   stampIndex?: boolean;
+  /**
+   * Install the system graphs in a blank store: the oxilite vocabulary in `<oxilite:vocabulary>`
+   * and the schema registry's own description in `<oxilite:schema>` (default false, so a new
+   * store is empty as in Oxigraph).
+   */
+  systemGraphs?: boolean;
 }
 
 
@@ -173,6 +203,7 @@ export class D1Store {
         versioning: options.versioning ?? "off",
         asOfIndex: options.asOfIndex ?? false,
         stampIndex: options.stampIndex ?? false,
+        systemGraphs: options.systemGraphs ?? false,
       }),
     );
     const store = new D1Store(db, engine);
@@ -469,6 +500,64 @@ export class D1Store {
   /** Removes every materialized inference. */
   async clearInferences(): Promise<void> {
     await this.run(this.engine.clearInferences());
+  }
+
+  // The schema registry is RDF in <oxilite:schema>: the core builds the portable SPARQL, and
+  // this driver runs it like any other query or update.
+
+  /**
+   * Declares a graph to hold an ontology, SHACL shapes or a ShEx schema, and (`appliesTo`) the
+   * graphs it describes. One atomic batch that also rebuilds the reasoning closure and the
+   * shape index; the graph's triples stay where they are.
+   */
+  async registerSchemaGraph(graph: GraphArg, role: SchemaRole, registration: SchemaRegistration = {}): Promise<void> {
+    await this.update(this.engine.registerSchemaGraphSparql(graphJson(graph), role, registrationJson(registration)));
+  }
+
+  /** The schema registry, ordered by role and graph. */
+  async schemaGraphs(): Promise<SchemaGraphEntry[]> {
+    const out = await this.run(this.engine.query(this.engine.schemaGraphsSparql()));
+    return toSchemaGraphs(JSON.parse(this.engine.schemaGraphsFromOutput(JSON.stringify(out))));
+  }
+
+  private async registered(graph: GraphArg): Promise<boolean> {
+    return (await this.query(this.engine.schemaGraphRegisteredSparql(graphJson(graph)))) === true;
+  }
+
+  /** Activates or deactivates a registration; returns whether one was found. */
+  async setSchemaGraphActive(graph: GraphArg, active: boolean): Promise<boolean> {
+    if (!(await this.registered(graph))) return false;
+    await this.update(this.engine.setSchemaGraphActiveSparql(graphJson(graph), active));
+    return true;
+  }
+
+  /** Removes a registration, keeping the graph's triples; returns whether one was found. */
+  async unregisterSchemaGraph(graph: GraphArg): Promise<boolean> {
+    if (!(await this.registered(graph))) return false;
+    await this.update(this.engine.unregisterSchemaGraphSparql(graphJson(graph)));
+    return true;
+  }
+
+  /** Removes a registration and every quad of its graph; returns how many quads it held. */
+  async dropSchemaGraph(graph: GraphArg): Promise<number> {
+    const rows = (await this.query(this.engine.graphSizeSparql(graphJson(graph)))) as Map<string, Term>[];
+    await this.update(this.engine.dropSchemaGraphSparql(graphJson(graph)));
+    return Number(rows[0]?.get("n")?.value ?? 0);
+  }
+
+  /**
+   * Installs or refreshes the system graphs (`<oxilite:vocabulary>`, `<oxilite:schema>`'s own
+   * description) in an existing database; returns `false` when they were already current.
+   */
+  async installSystemGraphs(): Promise<boolean> {
+    if ((await this.query(this.engine.systemGraphsReadySparql())) === true) return false;
+    await this.update(this.engine.systemGraphsSparql());
+    return true;
+  }
+
+  /** The compiled SHACL property shapes of the registered shapes graphs. */
+  async shapeIndex(): Promise<PropertyShapeEntry[]> {
+    return toShapeIndex(await this.run(this.engine.shapeIndex()));
   }
 
   /** Refreshes planner statistics (run after large imports). */

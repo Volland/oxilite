@@ -1,0 +1,97 @@
+@prefix oxl:  <https://oxilite.dev/ns#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+# The oxilite vocabulary: the schema registry kept in the system graph <oxilite:schema>, and the
+# terms of the history graph <oxilite:history>. Everything here is plain RDF: a store without
+# oxilite (Oxigraph, any SPARQL 1.1 store) can hold, query and update it.
+
+<https://oxilite.dev/ns#> a owl:Ontology ;
+    rdfs:label "oxilite vocabulary" ;
+    owl:versionInfo "1" ;
+    rdfs:seeAlso <https://oxilitedb.com/ns/> ;
+    rdfs:comment "Terms oxilite uses in its system graphs: <oxilite:schema> (which named graphs hold ontologies, SHACL shapes or ShEx schemas, and which graphs they apply to) and <oxilite:history>." .
+
+# ------------------------------------------------------------------------------ schema registry
+
+oxl:SchemaGraph a owl:Class ;
+    rdfs:label "schema graph" ;
+    rdfs:comment "A named graph holding schema rather than data. Described in <oxilite:schema> with the graph's own IRI as subject; the default graph is oxl:DefaultGraph." .
+
+oxl:SystemGraph a owl:Class ;
+    rdfs:subClassOf oxl:SchemaGraph ;
+    rdfs:label "system graph" ;
+    rdfs:comment "A graph oxilite maintains itself: <oxilite:schema> (the registry) and <oxilite:vocabulary> (this vocabulary). Hidden with the schema graphs; never narrows reasoning or the shape index." .
+
+oxl:OntologyGraph a owl:Class ;
+    rdfs:subClassOf oxl:SchemaGraph ;
+    rdfs:label "ontology graph" ;
+    rdfs:comment "An RDFS / OWL ontology. Its axioms drive query-time reasoning over the graphs it applies to." .
+
+oxl:ShapesGraph a owl:Class ;
+    rdfs:subClassOf oxl:SchemaGraph ;
+    rdfs:label "SHACL shapes graph" ;
+    rdfs:comment "SHACL shapes for validating the graphs it applies to." .
+
+oxl:ShExGraph a owl:Class ;
+    rdfs:subClassOf oxl:SchemaGraph ;
+    rdfs:label "ShEx schema graph" ;
+    rdfs:comment "A ShEx schema (in RDF) for validating the graphs it applies to." .
+
+oxl:appliesTo a owl:ObjectProperty ;
+    rdfs:domain oxl:SchemaGraph ;
+    rdfs:label "applies to" ;
+    rdfs:comment "A graph the schema describes: a graph IRI, oxl:DefaultGraph, or oxl:AllGraphs. A schema graph without oxl:appliesTo applies to all graphs." .
+
+oxl:active a owl:DatatypeProperty ;
+    rdfs:domain oxl:SchemaGraph ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "active" ;
+    rdfs:comment "false keeps the graph registered (and hidden as schema) but stops it contributing. Absent means true." .
+
+oxl:ontologyIri a owl:ObjectProperty ;
+    rdfs:domain oxl:SchemaGraph ;
+    rdfs:label "ontology IRI" ;
+    rdfs:comment "The owl:Ontology IRI of the graph's content, when it differs from the graph name." .
+
+oxl:version a owl:DatatypeProperty ;
+    rdfs:domain oxl:SchemaGraph ;
+    rdfs:range xsd:string ;
+    rdfs:label "version" ;
+    rdfs:comment "A version pinned at registration: an owl:versionIRI, a tag, a release number." .
+
+oxl:sha256 a owl:DatatypeProperty ;
+    rdfs:domain oxl:SchemaGraph ;
+    rdfs:range xsd:string ;
+    rdfs:label "SHA-256" ;
+    rdfs:comment "Hex SHA-256 of the document the graph was loaded from, for drift detection." .
+
+oxl:loadedAt a owl:DatatypeProperty ;
+    rdfs:domain oxl:SchemaGraph ;
+    rdfs:range xsd:dateTime ;
+    rdfs:label "loaded at" ;
+    rdfs:comment "When the graph was registered." .
+
+oxl:DefaultGraph a owl:NamedIndividual ;
+    rdfs:label "default graph" ;
+    rdfs:comment "Names the default graph where an IRI is needed: as a registered schema graph, or as a target of oxl:appliesTo." .
+
+oxl:AllGraphs a owl:NamedIndividual ;
+    rdfs:label "all graphs" ;
+    rdfs:comment "As a target of oxl:appliesTo: every graph of the dataset." .
+
+# ------------------------------------------------------------------------------ history graph
+
+oxl:added a rdf:Property ;
+    rdfs:label "added" ;
+    rdfs:comment "In <oxilite:history>: a triple (as a triple term) the commit added." .
+
+oxl:removed a rdf:Property ;
+    rdfs:label "removed" ;
+    rdfs:comment "In <oxilite:history>: a triple (as a triple term) the commit removed." .
+
+oxl:textMatch a rdf:Property ;
+    rdfs:label "text match" ;
+    rdfs:comment "A SPARQL function: oxl:textMatch(?literal, \"query\") is true when the literal matches the full-text query." .

@@ -193,7 +193,8 @@ fn save_copies_the_store() {
     .unwrap();
     let out = saved
         .query(
-            "SELECT * { { ?s ?p ?o } UNION { GRAPH ?g { ?s ?p ?o } } }",
+            // The data; the system graphs (vocabulary, registry) are copied too.
+            "SELECT * { { ?s ?p ?o } UNION { GRAPH ?g { ?s ?p ?o } FILTER(!STRSTARTS(STR(?g), \"oxilite:\")) } }",
             &[],
             &[],
         )
@@ -203,4 +204,140 @@ fn save_copies_the_store() {
     };
     assert_eq!(rows.len(), 2);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+// @lat: [[tests#Shell#Schema registry commands]]
+#[test]
+fn schema_registry_commands() {
+    let dir = std::env::temp_dir().join(format!("oxilite-shell-registry-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let onto = dir.join("onto.ttl");
+    std::fs::write(
+        &onto,
+        "@prefix ex: <http://ex.org/> . @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n\
+         ex:Dog rdfs:subClassOf ex:Animal .\n",
+    )
+    .unwrap();
+    let (mut s, out, err) = session();
+    feed(&mut s, "PREFIX ex: <http://ex.org/>");
+    out.take();
+    feed(
+        &mut s,
+        &format!(".register ontology ex:onto {}", onto.display()),
+    );
+    assert!(err.take().is_empty());
+    assert!(out.take().contains("Registered ex:onto as ontology"));
+    feed(&mut s, ".registry");
+    let table = out.take();
+    assert!(
+        table.contains("ex:onto") && table.contains("ontology"),
+        "{table}"
+    );
+    assert!(table.contains("yes"), "active: {table}");
+    // A role the registry does not know is refused.
+    feed(&mut s, ".register taxonomy ex:other");
+    assert!(err.take().contains("one of ontology, shacl, shex"));
+
+    feed(
+        &mut s,
+        "INSERT DATA { GRAPH ex:shapes { ex:S a <http://www.w3.org/ns/shacl#NodeShape> ; \
+         <http://www.w3.org/ns/shacl#targetClass> ex:Person ; \
+         <http://www.w3.org/ns/shacl#property> [ <http://www.w3.org/ns/shacl#path> ex:age ; \
+         <http://www.w3.org/ns/shacl#maxCount> 1 ] } }",
+    );
+    feed(&mut s, ".register shacl ex:shapes");
+    out.take();
+    feed(&mut s, ".shapes");
+    let shapes = out.take();
+    assert!(
+        shapes.contains("ex:Person") && shapes.contains("maxCount 1"),
+        "{shapes}"
+    );
+
+    feed(&mut s, ".map ex:onto ex:data DEFAULT");
+    feed(&mut s, ".registry");
+    let mapped = out.take();
+    assert!(
+        mapped.contains("ex:data") && mapped.contains("DEFAULT"),
+        "{mapped}"
+    );
+    feed(&mut s, ".map ex:onto ALL");
+    feed(&mut s, ".registry");
+    assert!(out.take().contains("all graphs"));
+    feed(&mut s, ".map ex:nothing ex:data");
+    assert!(err.take().contains("is not registered"));
+    feed(&mut s, ".deactivate ex:onto");
+    feed(&mut s, ".registry");
+    assert!(out.take().contains("no"));
+    feed(&mut s, ".activate ex:onto");
+    feed(&mut s, ".unregister ex:shapes --drop");
+    assert!(out.take().contains("Dropped ex:shapes"));
+    feed(&mut s, ".unregister ex:onto");
+    feed(&mut s, ".unregister ex:onto");
+    assert!(err.take().contains("is not registered"));
+    feed(&mut s, ".registry");
+    assert!(out.take().contains("No schema graph registered"));
+    std::fs::remove_dir_all(dir).ok();
+}
+
+// @lat: [[tests#Shell#Session query options]]
+#[test]
+fn session_query_options() {
+    let (mut s, out, err) = session();
+    feed(
+        &mut s,
+        "INSERT DATA { <http://ex.org/Dog> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <http://ex.org/Animal> . \
+         <http://ex.org/rex> a <http://ex.org/Dog> }",
+    );
+    let animals = "SELECT ?x WHERE { ?x a <http://ex.org/Animal> }";
+    out.take();
+    feed(&mut s, animals);
+    assert!(out.take().contains("0 rows"));
+    feed(&mut s, ".reasoning");
+    assert!(out.take().contains("none"));
+    feed(&mut s, ".reasoning rdfs");
+    feed(&mut s, animals);
+    assert!(out.take().contains("rex"));
+    feed(&mut s, ".explain");
+    assert!(
+        out.take().contains("tbox_closure"),
+        "explain uses the session options"
+    );
+    // The shell's own reads keep the default options: a dump holds asserted quads only.
+    feed(&mut s, ".dump");
+    let dump = out.take();
+    assert!(
+        !dump.contains("<http://ex.org/rex> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://ex.org/Animal>"),
+        "{dump}"
+    );
+    feed(&mut s, ".reasoning none");
+    feed(&mut s, animals);
+    assert!(out.take().contains("0 rows"));
+    feed(&mut s, ".reasoning maybe");
+    assert!(err.take().contains("one of none, rdfs, owl-ql"));
+
+    feed(
+        &mut s,
+        "INSERT DATA { <http://ex.org/a> <http://www.w3.org/2002/07/owl#sameAs> <http://ex.org/b> . \
+         <http://ex.org/a> <http://ex.org/name> \"A\" }",
+    );
+    feed(&mut s, ".materialize");
+    assert!(out.take().contains("inferred triple"));
+    let b = "SELECT ?n WHERE { <http://ex.org/b> <http://ex.org/name> ?n }";
+    feed(&mut s, b);
+    assert!(out.take().contains("0 rows"));
+    feed(&mut s, ".inferred on");
+    feed(&mut s, b);
+    let r = out.take();
+    assert!(r.contains("1 row"), "{r}");
+    feed(&mut s, ".inferred");
+    assert!(out.take().contains("on"));
+    feed(&mut s, ".materialize clear");
+    feed(&mut s, b);
+    assert!(out.take().contains("0 rows"));
+
+    feed(&mut s, ".schemagraphs off");
+    feed(&mut s, ".schemagraphs");
+    assert!(out.take().contains("off"));
+    assert!(err.take().is_empty());
 }

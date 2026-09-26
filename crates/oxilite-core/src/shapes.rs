@@ -46,7 +46,8 @@ fn sh(local: &str) -> i64 {
 
 /// Does writing this quad invalidate the shape index?
 pub fn is_shape_quad(q: QuadRef<'_>) -> bool {
-    is_shape_iri(q.predicate.as_str())
+    // The registry graph decides which graphs are shapes graphs.
+    crate::registry::is_registry_quad(q) || is_shape_iri(q.predicate.as_str())
 }
 
 fn is_shape_iri(p: &str) -> bool {
@@ -56,6 +57,10 @@ fn is_shape_iri(p: &str) -> bool {
 
 /// Can this update invalidate the shape index? (Conservative: variables count as shapes.)
 pub fn update_touches_shapes(update: &Update) -> bool {
+    crate::registry::update_touches_registry(update) || touches_shape_triples(update)
+}
+
+fn touches_shape_triples(update: &Update) -> bool {
     let pattern = |p: &NamedNodePattern| match p {
         NamedNodePattern::Variable(_) => true,
         NamedNodePattern::NamedNode(n) => is_shape_iri(n.as_str()),

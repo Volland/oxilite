@@ -477,16 +477,22 @@ impl Project {
         Ok(())
     }
 
-    /// With a manifest, ontology graphs are registered so reasoning reads their axioms only.
+    /// With a manifest, ontology graphs are registered so reasoning reads their axioms only,
+    /// each for the graphs its `applies_to` names (every graph without it).
     fn register_ontologies(&self) -> Result<()> {
         let Some(m) = self.manifest() else {
             return Ok(());
         };
         for g in m.graphs.iter().filter(|g| g.role == Role::Ontology) {
+            let applies_to = g
+                .applies_to
+                .iter()
+                .map(|t| Ok(NamedNode::new(t.as_str())?.into()))
+                .collect::<Result<Vec<GraphName>>>()?;
             self.store.register_schema_graph(
                 &NamedNode::new(g.iri.as_str())?,
                 SchemaRole::Ontology,
-                &Registration::new(),
+                &Registration::new().applies_to(applies_to),
             )?;
         }
         Ok(())

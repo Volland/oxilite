@@ -98,7 +98,7 @@ The same store runs on a Durable Object's embedded SQLite through a small adapte
 
 ## API
 
-`D1Store` mirrors Oxigraph's JavaScript `Store`, asynchronously: `query`, `queryJson`, `update`, `load`, `bulkLoad`, `dump`, `add`, `delete`, `has`, `match`, `size`, `clear`, plus `cypher`, `explain`, `explainUpdate`, `explainCypher`, `optimize`, `materialize` (OWL 2 RL as SQL rules), `clearInferences`, `jsonld(options)` and `credentials(options)`. Query options add `reasoning: "rdfs" | "owl-ql"` and `include_inferred`; create the store with `textIndex: true` for FTS5 search with `oxl:textMatch`.
+`D1Store` mirrors Oxigraph's JavaScript `Store`, asynchronously: `query`, `queryJson`, `update`, `load`, `bulkLoad`, `dump`, `add`, `delete`, `has`, `match`, `size`, `clear`, plus `cypher`, `explain`, `explainUpdate`, `explainCypher`, `optimize`, `materialize` (OWL 2 RL as SQL rules), `clearInferences`, `jsonld(options)` and `credentials(options)`. The [schema registry](https://github.com/Volland/oxilite/blob/main/docs/schema-registry.md) is there too: `registerSchemaGraph(graph, role, { appliesTo })`, `schemaGraphs()`, `setSchemaGraphActive`, `unregisterSchemaGraph`, `dropSchemaGraph`, `shapeIndex()`; registrations are RDF in `<oxilite:schema>`, written with the same portable SPARQL as on Oxigraph. `D1Store.open(db, { systemGraphs: true })` (or `npx oxilite-d1 schema --system-graphs`) starts a blank database with the `oxl:` vocabulary in `<oxilite:vocabulary>`; `installSystemGraphs()` adds it to an existing one. Query options add `reasoning: "rdfs" | "owl-ql"`, `include_inferred` and `include_schema_graphs`; create the store with `textIndex: true` for FTS5 search with `oxl:textMatch`.
 
 | Import | Use |
 |---|---|
@@ -120,6 +120,10 @@ const log = await store.history(20);                                // [{ tick, 
 ```
 
 `versioning()`, `setVersioning(level, { allowLoss })`, `setCommitInfo`, `changes(after)`, `resolveVersion` and `purge(pattern, reason)` complete the API. `SERVICE <oxilite:version/HEAD~1> { … }` compares versions inside one query, `GRAPH <oxilite:history>` reads commits and changes as RDF, and `cypher(q, {}, { asOf: "HEAD~1" })` matches the past. Measured on D1: `stamped` writes 4.82 rows per triple against 4.81 for a plain store, `log` 6.82 and `log` with `asOfIndex` 8.82. A store keeps its level: change an existing database with a migration.
+
+### Upgrading a 0.4 database
+
+0.5 moves the schema registry into the RDF graph `<oxilite:schema>` and adds a scope column to the reasoning cache. `D1Store.open(env.DB, { wasm })` (without `migrated: true`) upgrades a 0.4 database in one batch: registrations become triples, the `schema_graphs` table goes, and the cache is rebuilt. Do it once (for example from a one-off script or a deploy step), then keep opening with `migrated: true`; `openExisting` on a database that was not upgraded fails with a message saying so. New databases: regenerate `migrations/0001_oxilite.sql` with `npx oxilite-d1 schema`.
 
 ## Tips
 

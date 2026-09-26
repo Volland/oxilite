@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Usage:
 //   npx oxilite-d1 schema [--no-graph-index] [--jsonld] [--no-metadata-indexes]
-//                         [--versioning off|stamped|log] [--as-of-index] [--stamp-index] > migrations/0001_oxilite.sql
+//                         [--versioning off|stamped|log] [--as-of-index] [--stamp-index]
+//                         [--system-graphs] > migrations/0001_oxilite.sql
 //   npx oxilite-d1 versioning-migration --from off --to log [--as-of-index] [--stamp-index]
 //                         [--allow-loss] [--stamp-column] [--frozen-history] > migrations/0002_versioning.sql
 import { D1Store } from "../dist/node.js";
@@ -12,7 +13,7 @@ const value = (name) => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 const usage = `usage:
-  oxilite-d1 schema [--no-graph-index] [--jsonld] [--no-metadata-indexes] [--versioning off|stamped|log] [--as-of-index] [--stamp-index]
+  oxilite-d1 schema [--no-graph-index] [--jsonld] [--no-metadata-indexes] [--versioning off|stamped|log] [--as-of-index] [--stamp-index] [--system-graphs]
   oxilite-d1 versioning-migration --from LEVEL --to LEVEL [--as-of-index] [--stamp-index] [--allow-loss] [--stamp-column] [--frozen-history]`;
 
 if (command === "schema") {
@@ -28,6 +29,7 @@ if (command === "schema") {
       versioning: value("--versioning") ?? "off",
       asOfIndex: args.includes("--as-of-index"),
       stampIndex: args.includes("--stamp-index"),
+      systemGraphs: args.includes("--system-graphs"),
     }),
   );
 } else if (command === "versioning-migration") {

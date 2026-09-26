@@ -39,6 +39,10 @@ fn graph(json: Option<String>) -> Result<Option<GraphName>> {
         .transpose()
 }
 
+fn required_graph(json: &str) -> Result<GraphName> {
+    json_to_graph(&parse::<Value>(json)?).map_err(err)
+}
+
 fn datalog_args(options: Option<String>) -> Result<oxilite::datalog::Options> {
     let value = match options {
         Some(o) => serde_json::from_str::<serde_json::Value>(&o).map_err(err)?,
@@ -455,6 +459,82 @@ impl NativeStore {
     #[napi]
     pub fn clear_inferences(&self) -> Result<()> {
         with_store!(self, s => s.clear_inferences()).map_err(err)
+    }
+
+    /// Declares a graph (JSON term) to hold an ontology, SHACL shapes or a ShEx schema;
+    /// `role` is `ontology`, `shacl` or `shex`, `registration` JSON (`{iri, version, sha256,
+    /// imports, appliesTo, active}`, all optional).
+    #[napi]
+    pub fn register_schema_graph(
+        &self,
+        graph_json: String,
+        role: String,
+        registration: Option<String>,
+    ) -> Result<()> {
+        let graph = required_graph(&graph_json)?;
+        let role: oxilite::schema::SchemaRole = role.parse().map_err(err)?;
+        let v: Value = registration
+            .as_deref()
+            .map(parse)
+            .transpose()?
+            .unwrap_or(Value::Null);
+        let e = oxilite_core::json::schema_graph_from_json(graph.clone(), role, &v).map_err(err)?;
+        let r = oxilite::schema::Registration {
+            iri: e.iri,
+            version: e.version,
+            sha256: e.sha256,
+            imports: e.imports,
+            applies_to: e.applies_to,
+            active: e.active,
+        };
+        with_store!(self, s => s.register_schema_graph(&graph, role, &r)).map_err(err)
+    }
+
+    /// The registry as JSON: `[{graph, role, iri, version, sha256, imports, appliesTo, active,
+    /// loadedAt}]`.
+    #[napi]
+    pub fn schema_graphs(&self) -> Result<String> {
+        let rows = with_store!(self, s => s.schema_graphs()).map_err(err)?;
+        let v: Vec<Value> = rows
+            .iter()
+            .map(|e| oxilite_core::json::schema_graph_to_json(&e.to_entry()))
+            .collect();
+        Ok(Value::Array(v).to_string())
+    }
+
+    /// Activates or deactivates a registration; returns whether one was found.
+    #[napi]
+    pub fn set_schema_graph_active(&self, graph_json: String, active: bool) -> Result<bool> {
+        let graph = required_graph(&graph_json)?;
+        with_store!(self, s => s.set_schema_graph_active(&graph, active)).map_err(err)
+    }
+
+    /// Removes a registration, keeping the triples; returns whether one was found.
+    #[napi]
+    pub fn unregister_schema_graph(&self, graph_json: String) -> Result<bool> {
+        let graph = required_graph(&graph_json)?;
+        with_store!(self, s => s.unregister_schema_graph(&graph)).map_err(err)
+    }
+
+    /// Removes a registration and every quad of its graph; returns the number of quads removed.
+    #[napi]
+    pub fn drop_schema_graph(&self, graph_json: String) -> Result<f64> {
+        let graph = required_graph(&graph_json)?;
+        Ok(with_store!(self, s => s.drop_schema_graph(&graph)).map_err(err)? as f64)
+    }
+
+    /// The compiled SHACL property shapes as JSON: `[{target, path, datatype, minCount,
+    /// maxCount, pattern, in, relationship}]`.
+    #[napi]
+    pub fn shape_index(&self) -> Result<String> {
+        let i = with_store!(self, s => s.shape_index()).map_err(err)?;
+        Ok(oxilite_core::json::shape_index_to_json(&i).to_string())
+    }
+
+    /// Installs or refreshes the system graphs; returns `false` when they were already current.
+    #[napi]
+    pub fn install_system_graphs(&self) -> Result<bool> {
+        with_store!(self, s => s.install_system_graphs()).map_err(err)
     }
 
     /// Refreshes planner statistics (run after large imports).

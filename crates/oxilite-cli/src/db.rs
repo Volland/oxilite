@@ -4,7 +4,8 @@ use crate::Location;
 use oxilite::dylib::DylibBackend;
 use oxilite::io::{RdfFormat, RdfParser};
 use oxilite::model::{GraphName, NamedNode, NamedOrBlankNode, Term};
-use oxilite::sparql::{QueryOptions, SparqlParser};
+use oxilite::schema::{RegisteredGraph, Registration, SchemaRole, ShapeIndex};
+use oxilite::sparql::{QueryOptions, Reasoning, SparqlParser};
 use oxilite::store::Store;
 use oxilite::version::{Change, CommitInfo, CommitRecord, LevelChange, VersionStatus, Versioning};
 use oxilite::AsyncStore;
@@ -39,6 +40,70 @@ impl AsyncBackend for SidecarD1 {
     fn capabilities(&self) -> &Capabilities {
         &self.caps
     }
+}
+
+/// How queries match: the reasoning regime, materialized inferences and schema graphs.
+/// Flattened into `query`, `explain` and `serve`, and kept per session by the shell.
+#[derive(clap::Args, Clone, Debug, PartialEq, Eq)]
+pub struct QueryFlags {
+    /// Query-time entailment: `none` (default), `rdfs` or `owl-ql`.
+    #[arg(long, value_name = "MODE", default_value = "none", value_parser = parse_reasoning)]
+    pub reasoning: Reasoning,
+    /// Also match the inferences stored by `oxilite materialize`.
+    #[arg(long)]
+    pub inferred: bool,
+    /// Hide the triples of registered schema graphs (ontologies, shapes) from the query.
+    #[arg(long = "no-schema-graphs", action = clap::ArgAction::SetFalse)]
+    pub schema_graphs: bool,
+}
+
+impl Default for QueryFlags {
+    fn default() -> Self {
+        Self {
+            reasoning: Reasoning::None,
+            inferred: false,
+            schema_graphs: true,
+        }
+    }
+}
+
+impl QueryFlags {
+    fn apply(&self, options: &mut QueryOptions) {
+        options.reasoning = self.reasoning;
+        options.include_inferred = self.inferred;
+        options.include_schema_graphs = self.schema_graphs;
+    }
+}
+
+/// A reasoning regime by name: `none`, `rdfs` or `owl-ql` (`owlql`).
+pub fn parse_reasoning(s: &str) -> std::result::Result<Reasoning, String> {
+    match s.to_ascii_lowercase().as_str() {
+        "none" => Ok(Reasoning::None),
+        "rdfs" => Ok(Reasoning::Rdfs),
+        "owl-ql" | "owlql" => Ok(Reasoning::OwlQl),
+        _ => Err(format!("unknown reasoning {s}: one of none, rdfs, owl-ql")),
+    }
+}
+
+/// The name `parse_reasoning` reads back.
+pub fn reasoning_name(r: Reasoning) -> &'static str {
+    match r {
+        Reasoning::None => "none",
+        Reasoning::Rdfs => "rdfs",
+        Reasoning::OwlQl => "owl-ql",
+    }
+}
+
+/// A graph argument: `DEFAULT`, `<iri>` or a bare IRI.
+pub fn parse_graph(s: &str) -> Result<GraphName> {
+    if s.eq_ignore_ascii_case("default") {
+        return Ok(GraphName::DefaultGraph);
+    }
+    let iri = s
+        .strip_prefix('<')
+        .and_then(|t| t.strip_suffix('>'))
+        .unwrap_or(s);
+    Ok(NamedNode::new(iri)?.into())
 }
 
 pub enum Db {
@@ -85,6 +150,8 @@ impl Db {
             },
             as_of_index: l.as_of_index,
             stamp_index: l.stamp_index,
+            // A blank store opened by the command line starts with the system graphs.
+            system_graphs: !l.no_system_graphs,
         };
         let db = Self::open_with(l, &options)?;
         if l.author.is_some() || l.message.is_some() {
@@ -123,41 +190,58 @@ impl Db {
         default_graphs: &[String],
         named_graphs: &[String],
     ) -> Result<QueryOutput> {
-        self.query_at(query, default_graphs, named_graphs, None)
+        self.query_at(
+            query,
+            default_graphs,
+            named_graphs,
+            None,
+            &QueryFlags::default(),
+        )
     }
 
-    /// Runs a query, optionally on a past version of the store.
+    /// Runs a query with `flags`, optionally on a past version of the store.
     pub fn query_at(
         &self,
         query: &str,
         default_graphs: &[String],
         named_graphs: &[String],
         as_of: Option<&str>,
+        flags: &QueryFlags,
     ) -> Result<QueryOutput> {
         let q = SparqlParser::new().parse_query(query)?;
-        let options = QueryOptions {
+        let mut options = QueryOptions {
             default_graph: graph_ids(default_graphs)?,
             named_graphs: graph_ids(named_graphs)?,
             as_of: as_of.map(str::to_owned),
             ..QueryOptions::default()
         };
+        flags.apply(&mut options);
         Ok(sync_store!(self, s => s.query_output(q, &options), s => s.query_output(q, &options))?)
     }
 
-    pub fn explain(&self, query: &str) -> Result<String> {
-        self.explain_at(query, None)
-    }
-
-    pub fn explain_at(&self, query: &str, as_of: Option<&str>) -> Result<String> {
-        let options = QueryOptions {
+    /// The SQL a query compiles to with `flags` (on D1, only with the default options).
+    pub fn explain_at(
+        &self,
+        query: &str,
+        as_of: Option<&str>,
+        flags: &QueryFlags,
+    ) -> Result<String> {
+        let mut options = QueryOptions {
             as_of: as_of.map(str::to_owned),
             ..QueryOptions::default()
         };
+        flags.apply(&mut options);
         Ok(match self {
             Db::Native(s) => s.explain_opt(query, &options)?,
             Db::Library(s) => s.explain_opt(query, &options)?,
             Db::D1(_) if as_of.is_some() => {
                 return Err("explain --as-of is not available on D1; run the query instead".into())
+            }
+            Db::D1(_) if *flags != QueryFlags::default() => {
+                return Err(
+                    "explain with query options is not available on D1; run the query instead"
+                        .into(),
+                )
             }
             Db::D1(m) => m
                 .lock()
@@ -319,5 +403,56 @@ impl Db {
 
     pub fn optimize(&self) -> Result<()> {
         Ok(sync_store!(self, s => s.optimize(), s => s.optimize())?)
+    }
+
+    // -------------------------------------------------------------------- schema registry
+
+    pub fn register_schema_graph(
+        &self,
+        graph: &GraphName,
+        role: SchemaRole,
+        registration: &Registration,
+    ) -> Result<()> {
+        Ok(sync_store!(self,
+            s => s.register_schema_graph(graph, role, registration),
+            s => s.register_schema_graph(graph, role, registration))?)
+    }
+
+    pub fn schema_graphs(&self) -> Result<Vec<RegisteredGraph>> {
+        Ok(sync_store!(self, s => s.schema_graphs(), s => s.schema_graphs())?)
+    }
+
+    pub fn set_schema_graph_active(&self, graph: &GraphName, active: bool) -> Result<bool> {
+        Ok(sync_store!(self,
+            s => s.set_schema_graph_active(graph, active),
+            s => s.set_schema_graph_active(graph, active))?)
+    }
+
+    pub fn unregister_schema_graph(&self, graph: &GraphName) -> Result<bool> {
+        Ok(sync_store!(self,
+            s => s.unregister_schema_graph(graph),
+            s => s.unregister_schema_graph(graph))?)
+    }
+
+    pub fn drop_schema_graph(&self, graph: &GraphName) -> Result<u64> {
+        Ok(sync_store!(self, s => s.drop_schema_graph(graph), s => s.drop_schema_graph(graph))?)
+    }
+
+    /// Installs or refreshes the system graphs; `false` when they were already current.
+    pub fn install_system_graphs(&self) -> Result<bool> {
+        Ok(sync_store!(self, s => s.install_system_graphs(), s => s.install_system_graphs())?)
+    }
+
+    pub fn shape_index(&self) -> Result<ShapeIndex> {
+        Ok(sync_store!(self, s => s.shape_index(), s => s.shape_index())?)
+    }
+
+    /// Computes the OWL 2 RL closure into the inference table; returns the inferred triples.
+    pub fn materialize(&self) -> Result<u64> {
+        Ok(sync_store!(self, s => s.materialize(), s => s.materialize())?)
+    }
+
+    pub fn clear_inferences(&self) -> Result<()> {
+        Ok(sync_store!(self, s => s.clear_inferences(), s => s.clear_inferences())?)
     }
 }
