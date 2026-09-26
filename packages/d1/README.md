@@ -121,6 +121,10 @@ const log = await store.history(20);                                // [{ tick, 
 
 `versioning()`, `setVersioning(level, { allowLoss })`, `setCommitInfo`, `changes(after)`, `resolveVersion` and `purge(pattern, reason)` complete the API. `SERVICE <oxilite:version/HEAD~1> { … }` compares versions inside one query, `GRAPH <oxilite:history>` reads commits and changes as RDF, and `cypher(q, {}, { asOf: "HEAD~1" })` matches the past. Measured on D1: `stamped` writes 4.82 rows per triple against 4.81 for a plain store, `log` 6.82 and `log` with `asOfIndex` 8.82. A store keeps its level: change an existing database with a migration.
 
+### Upgrading a 0.4 database
+
+0.5 moves the schema registry into the RDF graph `<oxilite:schema>` and adds a scope column to the reasoning cache. `D1Store.open(env.DB, { wasm })` (without `migrated: true`) upgrades a 0.4 database in one batch: registrations become triples, the `schema_graphs` table goes, and the cache is rebuilt. Do it once (for example from a one-off script or a deploy step), then keep opening with `migrated: true`; `openExisting` on a database that was not upgraded fails with a message saying so. New databases: regenerate `migrations/0001_oxilite.sql` with `npx oxilite-d1 schema`.
+
 ## Tips
 
 - Run `store.optimize()` after large imports, not on every request: it refreshes planner statistics.

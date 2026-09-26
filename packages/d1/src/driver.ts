@@ -146,6 +146,10 @@ export class OxiliteCollisionError extends Error {}
 function mapError(e: unknown): Error {
   const message = e instanceof Error ? e.message : String(e);
   if (message.includes("oxilite: term hash collision")) return new OxiliteCollisionError(message);
+  if (message.includes("no such column: scope"))
+    return new Error(
+      "this D1 database has the oxilite 0.4 schema: open it once with D1Store.open(db) (without `migrated`) to upgrade it, then regenerate your migration with `npx oxilite-d1 schema`",
+    );
   if (message.includes("graph_does_not_exist")) return new Error("the graph does not exist");
   if (message.includes("graph_already_exists")) return new Error("the graph already exists");
   if (message.includes("jsonld_graphs.g")) {
