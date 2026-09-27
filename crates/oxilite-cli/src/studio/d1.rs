@@ -3,7 +3,8 @@
 //!
 // @lat: [[architecture#Studio server#D1 connections]]
 
-use oxilite::model::{GraphNameRef, NamedNodeRef, NamedOrBlankNodeRef, Quad, TermRef};
+use oxilite::model::{GraphName, GraphNameRef, NamedNodeRef, NamedOrBlankNodeRef, Quad, TermRef};
+use oxilite::schema::{RegisteredGraph, Registration, SchemaRole};
 use oxilite::sparql::{Query, QueryOptions, Update};
 use oxilite::store::Store;
 use oxilite_core::{
@@ -249,6 +250,55 @@ impl Handle {
         options: &oxilite::cypher::CypherOptions,
     ) -> std::result::Result<String, oxilite::cypher::CypherError> {
         each!(self, s => s.explain_cypher(text, params, options))
+    }
+
+    pub fn schema_graphs(&self) -> oxilite_core::Result<Vec<RegisteredGraph>> {
+        each!(self, s => s.schema_graphs())
+    }
+
+    pub fn register_schema_graph(
+        &self,
+        graph: GraphNameRef<'_>,
+        role: SchemaRole,
+        registration: &Registration,
+    ) -> oxilite_core::Result<()> {
+        each!(self, s => s.register_schema_graph(graph, role, registration))
+    }
+
+    pub fn set_schema_graph_targets(
+        &self,
+        graph: GraphNameRef<'_>,
+        applies_to: &[GraphName],
+    ) -> oxilite_core::Result<bool> {
+        each!(self, s => s.set_schema_graph_targets(graph, applies_to))
+    }
+
+    pub fn set_schema_graph_active(
+        &self,
+        graph: GraphNameRef<'_>,
+        active: bool,
+    ) -> oxilite_core::Result<bool> {
+        each!(self, s => s.set_schema_graph_active(graph, active))
+    }
+
+    pub fn unregister_schema_graph(&self, graph: GraphNameRef<'_>) -> oxilite_core::Result<bool> {
+        each!(self, s => s.unregister_schema_graph(graph))
+    }
+
+    pub fn drop_schema_graph(&self, graph: GraphNameRef<'_>) -> oxilite_core::Result<u64> {
+        each!(self, s => s.drop_schema_graph(graph))
+    }
+
+    pub fn registry_problems(&self) -> oxilite_core::Result<Vec<String>> {
+        each!(self, s => s.registry_problems())
+    }
+
+    pub fn system_graphs_installed(&self) -> oxilite_core::Result<bool> {
+        each!(self, s => s.system_graphs_installed())
+    }
+
+    pub fn install_system_graphs(&self) -> oxilite_core::Result<bool> {
+        each!(self, s => s.install_system_graphs())
     }
 
     pub fn load(&self, parser: oxilite::io::RdfParser, data: &[u8]) -> Result<()> {

@@ -103,18 +103,23 @@ pub fn children(
                 "SELECT ?g (COUNT(*) AS ?n) WHERE { GRAPH ?g { ?s ?p ?o } } GROUP BY ?g ORDER BY ?g",
                 &plain,
             )?;
+            // Registered graphs show their role and targets (see `registry::roles`).
+            let roles = super::registry::roles(target, &short);
             json!(r
                 .iter()
                 .filter_map(|row| {
                     let g = iri(&row[0])?;
-                    let mut n = node(
-                        format!("graph:{g}"),
-                        short(&g),
-                        format!("{} triples", count(&row[1])),
-                        "graph",
-                        false,
-                    );
+                    let mut description = format!("{} triples", count(&row[1]));
+                    if let Some((role, to)) = roles.get(&g) {
+                        description = format!("{description} · {role} {to}")
+                            .trim_end()
+                            .to_string();
+                    }
+                    let mut n = node(format!("graph:{g}"), short(&g), description, "graph", false);
                     n["iri"] = json!(g);
+                    if let Some((role, _)) = roles.get(&g) {
+                        n["role"] = json!(role);
+                    }
                     Some(n)
                 })
                 .collect::<Vec<_>>())
