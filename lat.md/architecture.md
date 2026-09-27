@@ -344,6 +344,14 @@ A test runs against the Project store as it is, or an overlay: its `data` fixtur
 
 `--json` prints the report as JSON for CI annotations. It shares every code path with the editor's live diagnostics, so CI and the studio agree.
 
+### Schema registry view
+
+`oxilite/registry` returns a connection's schema registry for the studio's registry view, and `oxilite/registryEdit` changes it through the registry API. See [[crates/oxilite-cli/src/studio/registry.rs#read]] and [[crates/oxilite-cli/src/studio/registry.rs#edit]].
+
+The read gives the entries from `schema_graphs` (the JSON of `schema_graph_to_json`, with `graph` as an IRI string and `oxl:DefaultGraph` for the default graph), every graph with its triple count (`null` on remote D1, where counting is a billed scan), the `owl:imports` asserted inside registered ontology graphs, `registry_problems`, which system graphs hold triples and whether they are current, and the connection's `ephemeral` and `readOnly` flags. The studio derives the effective mapping per graph itself.
+
+Edits are `register`, `addRole` (one `rdf:type` triple, since `register_schema_graph` replaces the whole description), `map`, `activate`, `deactivate`, `unregister`, `drop` and `installSystemGraphs`. Like an update, an edit on an attached store needs `confirmed` (code 1001) and a read-only connection refuses it; on the Project store it is marked ephemeral, since the manifest rebuilds the registry on reload. The Store Explorer's graphs carry their registry role and targets ([[crates/oxilite-cli/src/studio/registry.rs#roles]]). OpenSpec change `studio-server-registry`.
+
 ### D1 connections
 
 An attached store can be a Cloudflare D1 database over its HTTP API, run through a blocking backend so every studio request works on it unchanged. See [[crates/oxilite-cli/src/studio/d1.rs#D1Http]].

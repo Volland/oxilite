@@ -1074,6 +1074,18 @@ The explorer lists its folders, roots the class tree at the superclass with its 
 
 A manifest ontology graph with `applies_to` makes employees of the mapped graph persons, not those of another graph, and the mapping is visible in `<oxilite:schema>`.
 
+### Registry lists the manifest mapping
+
+`oxilite/registry` on the Project store lists a manifest ontology with its role and `applies_to` targets, the data graph with its size, and the store as ephemeral.
+
+The explorer shows the role and targets next to the graph's size.
+
+### Registry edits follow the update rules
+
+On an attached store an unconfirmed `registryEdit` fails with 1001, and a read-only connection refuses edits.
+
+Confirmed, it registers, adds a second role sharing the targets, remaps to every graph, deactivates, installs the system graphs and drops a graph with its triples.
+
 ## Versioning
 
 The store clock, the immutable change log and time travel ([[architecture#Versioning]]), on bundled SQLite, the system SQLite, the D1 code path and Miniflare D1.

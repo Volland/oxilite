@@ -14,6 +14,7 @@ pub(crate) mod lang;
 pub mod manifest;
 pub mod mcp;
 mod project;
+mod registry;
 pub(crate) mod scanner;
 #[cfg(test)]
 mod tests;
@@ -479,6 +480,13 @@ impl Server<'_> {
                 .map(|p| p.display().to_string())
                 .collect::<Vec<_>>())),
             "oxilite/ontology" => explorer::ontology(&self.target(p["connection"].as_str())?),
+            "oxilite/registry" => registry::read(&self.target(p["connection"].as_str())?),
+            "oxilite/registryEdit" => {
+                let id = p["connection"].as_str().map(str::to_string);
+                let out = registry::edit(&self.target(id.as_deref())?, &p)?;
+                self.after_write(id.as_deref())?;
+                Ok(out)
+            }
             "oxilite/datalogDebug" => {
                 let program = p["program"]
                     .as_str()

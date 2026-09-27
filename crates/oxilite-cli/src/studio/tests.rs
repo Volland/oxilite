@@ -1222,3 +1222,124 @@ fn attaching_without_activating() {
         "unnamed requests use the active one"
     );
 }
+
+// @lat: [[tests#Studio server#Registry lists the manifest mapping]]
+#[test]
+fn registry_lists_the_manifest_mapping() {
+    let manifest = "reasoning = \"rdfs\"\n[[graph]]\niri = \"https://ex.org/g/staff\"\nfiles = [\"staff.ttl\"]\n[[graph]]\niri = \"https://ex.org/g/onto\"\nfiles = [\"onto.ttl\"]\nrole = \"ontology\"\napplies_to = [\"https://ex.org/g/staff\"]\n";
+    let mut c = Client::start(workspace(&[
+        ("oxilite.toml", manifest),
+        ("onto.ttl", ONTOLOGY),
+        ("staff.ttl", STAFF),
+    ]));
+    let r = c.ok("oxilite/registry", json!({}));
+    let entries = r["entries"].as_array().unwrap();
+    assert_eq!(entries.len(), 1, "{r}");
+    assert_eq!(entries[0]["graph"], "https://ex.org/g/onto");
+    assert_eq!(entries[0]["role"], "ontology");
+    assert_eq!(entries[0]["active"], true);
+    assert_eq!(entries[0]["appliesTo"], json!(["https://ex.org/g/staff"]));
+    let staff = r["graphs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|g| g["graph"] == "https://ex.org/g/staff")
+        .unwrap();
+    assert_eq!(staff["triples"], 3);
+    assert_eq!(r["ephemeral"], true);
+    assert_eq!(r["problems"], json!([]));
+    // The explorer shows the role and targets next to the size.
+    let graphs = c.ok("oxilite/explorer", json!({"node": "graphs"}));
+    let onto = graphs
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["iri"] == "https://ex.org/g/onto")
+        .unwrap();
+    assert_eq!(onto["role"], "ontology");
+    assert!(
+        onto["description"]
+            .as_str()
+            .unwrap()
+            .ends_with("ontology → https://ex.org/g/staff"),
+        "{onto}"
+    );
+}
+
+// @lat: [[tests#Studio server#Registry edits follow the update rules]]
+#[test]
+fn registry_edits_follow_the_update_rules() {
+    let mut c = Client::start(workspace(&[("people.ttl", PEOPLE)]));
+    let db = c.dir.join("reg.sqlite").display().to_string();
+    c.ok("oxilite/attach", json!({"path": db}));
+    let onto = "https://ex.org/onto/zoo";
+    let load = json!({"query": format!("INSERT DATA {{ GRAPH <{onto}> {{ <https://ex.org/zoo#> <http://www.w3.org/2002/07/owl#imports> <https://ex.org/core#> }} GRAPH <https://ex.org/data/zoo> {{ <http://ex.org/rex> a <http://ex.org/Dog> }} }}"), "confirmed": true});
+    c.ok("oxilite/query", load);
+    let register = json!({"op": "register", "graph": onto, "role": "ontology", "appliesTo": ["https://ex.org/data/zoo"]});
+    let r = c.call("oxilite/registryEdit", register.clone());
+    assert_eq!(r.error.unwrap().code, NEEDS_CONFIRMATION);
+    let mut confirmed = register;
+    confirmed["confirmed"] = json!(true);
+    let r = c.ok("oxilite/registryEdit", confirmed);
+    assert_eq!(r["changed"], true);
+    assert_eq!(r["ephemeral"], false);
+    // A second role keeps the first and shares the targets.
+    c.ok(
+        "oxilite/registryEdit",
+        json!({"op": "addRole", "graph": onto, "role": "shacl", "confirmed": true}),
+    );
+    let reg = c.ok("oxilite/registry", json!({}));
+    let roles: Vec<&str> = reg["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["role"].as_str().unwrap())
+        .collect();
+    assert_eq!(roles, ["ontology", "shacl"], "{reg}");
+    assert!(reg["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|e| e["appliesTo"] == json!(["https://ex.org/data/zoo"])));
+    assert_eq!(
+        reg["ownImports"],
+        json!([{"graph": onto, "imports": ["https://ex.org/core#"]}])
+    );
+    // Remap to every graph, deactivate, and install the system graphs.
+    for edit in [
+        json!({"op": "map", "graph": onto, "appliesTo": ["https://oxilite.dev/ns#AllGraphs"], "confirmed": true}),
+        json!({"op": "deactivate", "graph": onto, "confirmed": true}),
+        json!({"op": "installSystemGraphs", "confirmed": true}),
+    ] {
+        assert_eq!(c.ok("oxilite/registryEdit", edit)["changed"], true);
+    }
+    let reg = c.ok("oxilite/registry", json!({}));
+    let e = &reg["entries"][0];
+    assert_eq!(e["appliesTo"], json!([]), "{reg}");
+    assert_eq!(e["active"], false);
+    assert_eq!(reg["systemGraphs"]["current"], true);
+    assert_eq!(
+        reg["systemGraphs"]["present"],
+        json!(["oxilite:schema", "oxilite:vocabulary"])
+    );
+    // Dropping removes the registration and the graph's triples.
+    let r = c.ok(
+        "oxilite/registryEdit",
+        json!({"op": "drop", "graph": onto, "confirmed": true}),
+    );
+    assert_eq!(r["dropped"], 1);
+    let reg = c.ok("oxilite/registry", json!({}));
+    assert_eq!(reg["entries"], json!([]));
+    assert!(!reg["graphs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|g| g["graph"] == onto));
+    // A read-only connection refuses edits.
+    c.ok("oxilite/attach", json!({"path": db, "readOnly": true}));
+    let r = c.call(
+        "oxilite/registryEdit",
+        json!({"op": "unregister", "graph": onto, "confirmed": true}),
+    );
+    assert!(r.error.unwrap().message.contains("read-only"));
+}
