@@ -580,6 +580,10 @@ A store with `text_index=True` answers `oxl:textMatch`, the schema SQL creates t
 
 A store opened with `library=` (the system SQLite) reads and writes a file that the bundled SQLite then opens.
 
+### Examples and README run as written
+
+Every script in `examples/python/` and the tutorial's `tour.py` exits 0 (each asserts its own output), and the package README's code blocks run in order, so the docs PyPI shows cannot drift from the API.
+
 ## Cypher
 
 openCypher over the RDF store ([[architecture#Property graph frontend]]). Unless noted, each test runs on the bundled SQLite, the system `libsqlite3` (dylib), a D1-capability async store, and Miniflare D1 when `OXILITE_D1_URL` points at `testsuite/d1-sidecar`.

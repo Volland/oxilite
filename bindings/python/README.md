@@ -66,11 +66,11 @@ print(r.records)                          # [{'friend': 'Ada'}]
 
 program = """
 @prefix ex: <http://example.com/> .
-reach(?x, ?y) :- ex:knows(?x, ?y).
-reach(?x, ?z) :- ex:knows(?x, ?y), reach(?y, ?z).
+reach(?x, ?y) :- ex:KNOWS(?x, ?y).
+reach(?x, ?z) :- ex:KNOWS(?x, ?y), reach(?y, ?z).
 ?- reach(?a, ?b).
 """
-print(store.datalog(program).records)
+print(store.datalog(program).records)     # [{'a': <NamedNode …>, 'b': <NamedNode …>}]
 ```
 
 Nodes are IRIs, labels are `rdf:type`, properties are literal triples, and relationships are triples,
@@ -80,19 +80,48 @@ program whose recursion is linear runs as one recursive SQL statement.
 ## Reasoning, schemas, documents, history
 
 ```python
-store.query("ASK { ex:rex a ex:Animal }", reasoning="rdfs", prefixes={"ex": "http://example.com/"})
+from datetime import datetime, timezone
+from oxilite import DefaultGraph, NamedNode, RdfFormat, Store
+
+store = Store()
+store.load("@prefix ex: <http://example.com/> . ex:rex a ex:Dog .", RdfFormat.TURTLE)
+onto = NamedNode("http://example.com/onto")
+store.load("@prefix ex: <http://example.com/> . @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n"
+           "ex:Dog rdfs:subClassOf ex:Animal .", RdfFormat.TURTLE, to_graph=onto)
+store.register_schema_graph(onto, "ontology", applies_to=[DefaultGraph()])   # the schema registry
+
+assert store.query("ASK { ex:rex a ex:Animal }", reasoning="rdfs", prefixes={"ex": "http://example.com/"})
 store.materialize(engine="reasonable")            # OWL 2 RL closure; query it with include_inferred=True
-store.register_schema_graph(NamedNode("http://example.com/onto"), "ontology")
 
 docs = store.jsonld()                             # JSON-LD stored byte for byte, RDF in a named graph
 docs.put('{"@context": {"name": "http://schema.org/name"}, "@id": "urn:uuid:1", "name": "Ada"}')
-vcs = store.credentials()                         # Verifiable Credentials 1.1 and 2.0, indexed
+vcs = store.credentials()                         # Verifiable Credentials 1.1 and 2.0, indexed by
+vcs.find(issuer="did:example:academy", valid_at=datetime.now(timezone.utc))  # issuer, subject, validity
 
-versioned = Store("history.sqlite", versioning="log")
+versioned = Store(versioning="log")               # an immutable change log
 with versioned.commit(author="ada", message="import"):
-    versioned.load(path="people.ttl")
-versioned.query("SELECT * WHERE { ?s ?p ?o }", as_of="HEAD~1")
+    versioned.update('INSERT DATA { <urn:t1> <urn:status> "open" }')
+with versioned.commit(author="grace", message="close"):
+    versioned.update('DELETE DATA { <urn:t1> <urn:status> "open" } ; INSERT DATA { <urn:t1> <urn:status> "done" }')
+print([s["s"].value for s in versioned.query("SELECT ?s { <urn:t1> <urn:status> ?s }", as_of="HEAD~1")])  # ['open']
 ```
+
+## Examples
+
+Each example is a short script that runs top to bottom, prints what it does and asserts its output. CI
+runs all of them against every build.
+
+| Example | Shows |
+|---|---|
+| [`01_quickstart.py`](https://github.com/Volland/oxilite/blob/main/examples/python/01_quickstart.py) | A store in one file: load, add, `SELECT` / `ASK` / `CONSTRUCT`, results as CSV or dicts, dump, reopen |
+| [`02_cypher_property_graph.py`](https://github.com/Volland/oxilite/blob/main/examples/python/02_cypher_property_graph.py) | openCypher writes and reads, parameters, paths, aggregation, and SPARQL over the same data |
+| [`03_datalog.py`](https://github.com/Volland/oxilite/blob/main/examples/python/03_datalog.py) | Recursive rules, negation, aggregation, and materialized inferences |
+| [`04_reasoning_and_schemas.py`](https://github.com/Volland/oxilite/blob/main/examples/python/04_reasoning_and_schemas.py) | RDFS at query time, OWL 2 RL materialization, registered ontologies and SHACL shapes |
+| [`05_jsonld_and_credentials.py`](https://github.com/Volland/oxilite/blob/main/examples/python/05_jsonld_and_credentials.py) | JSON-LD documents and Verifiable Credentials, found by issuer, subject and validity |
+| [`06_time_travel.py`](https://github.com/Volland/oxilite/blob/main/examples/python/06_time_travel.py) | Commits, queries at past versions, history, diffs, and purging |
+| [`07_full_text_search.py`](https://github.com/Volland/oxilite/blob/main/examples/python/07_full_text_search.py) | FTS5 full-text search from SPARQL |
+| [`08_threads_and_asyncio.py`](https://github.com/Volland/oxilite/blob/main/examples/python/08_threads_and_asyncio.py) | Thread pools, `asyncio.to_thread`, and read-only handles |
+| [`python-tour/tour.py`](https://github.com/Volland/oxilite/blob/main/examples/python-tour/tour.py) | Everything above in one script: the code of the [Python tutorial](https://oxilitedb.com/articles/oxilite-python) |
 
 ## API at a glance
 

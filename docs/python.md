@@ -3,6 +3,7 @@
 This page is the reference for the `oxilite` Python package: every class, method, option and result type,
 with the exceptions each can raise.
 - For a guided introduction, read [How to use oxilite with Python](https://oxilitedb.com/articles/oxilite-python).
+- For short scripts that run as written, one per feature, see [examples/python](../examples/python).
 - To build the package or publish it to PyPI, read [python-publishing.md](python-publishing.md).
 
 ```bash
