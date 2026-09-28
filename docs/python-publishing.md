@@ -210,3 +210,4 @@ means a new version.
 | `readme path … does not exist` during `maturin sdist` | Every workspace crate needs the README its manifest names. The sdist includes the workspace |
 | The `publish` job fails with `invalid-publisher` | The trusted publisher on PyPI does not match. Check the owner, repository, workflow file name and environment (`pypi`) |
 | `File already exists` on upload | That version is already on PyPI. Bump the version |
+| `ARM assembler must define __ARM_ARCH` (ring) in the aarch64 wheel | manylinux2014's aarch64 cross compiler is too old for ring. Build that wheel with `manylinux: "2_28"` (glibc 2.28 or later) |
