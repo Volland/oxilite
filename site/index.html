@@ -19,17 +19,33 @@
     <div class="wrap">
       <a class="brand" href="./"><img src="assets/logo.svg" alt=""><span>oxi<b>lite</b></span></a>
       <nav class="nav" aria-label="Main">
-        <a href="#features" class="hide-sm">Features</a>
         <a href="#start" class="hide-sm">Get started</a>
-        <a href="#python" class="hide-sm">Python</a>
-        <a href="#d1" class="hide-sm">Cloudflare D1</a>
-        <a href="#versioning" class="hide-sm">Versioning</a>
-        <a href="#datalog" class="hide-sm">Datalog</a>
-        <a href="#credentials" class="hide-sm">Credentials</a>
-        <a href="#studio" class="hide-sm">Studio</a>
+        <details class="nav-menu">
+          <summary>Features</summary>
+          <div class="nav-panel">
+            <div>
+              <span class="nav-label">Run it on</span>
+              <a href="#python">Python<small>pyoxigraph's API, one file</small></a>
+              <a href="#vectors">Turso &amp; vectors<span class="badge">new</span><small>Vector search in SPARQL</small></a>
+              <a href="#d1">Cloudflare D1<small>SPARQL at the edge</small></a>
+            </div>
+            <div>
+              <span class="nav-label">Capabilities</span>
+              <a href="#features">How it works<small>One SQL statement per query</small></a>
+              <a href="#versioning">Versioning<small>History and time travel</small></a>
+              <a href="#datalog">Datalog<small>Recursive rules</small></a>
+              <a href="#credentials">Credentials<small>JSON-LD and VCs</small></a>
+            </div>
+            <div>
+              <span class="nav-label">Tools &amp; reference</span>
+              <a href="#studio">Studio<small>VS Code workbench, MCP</small></a>
+              <a href="ns/">Vocabulary<small>The oxl: namespace</small></a>
+              <a href="articles/">All articles<small>Guides and design notes</small></a>
+            </div>
+          </div>
+        </details>
         <a href="articles/">Articles</a>
-        <a href="ns/">Vocabulary</a>
-        <a href="https://github.com/Volland/oxilite">GitHub</a>
+        <a href="https://github.com/Volland/oxilite" class="hide-xs">GitHub</a>
       </nav>
     </div>
   </header>
@@ -53,10 +69,11 @@
     <section class="band-black">
       <div class="wrap">
         <h2>Oxigraph semantics, SQLite everywhere<span class="dot">.</span></h2>
-        <p class="sub">Oxigraph stores data in RocksDB, which needs native code and a filesystem. oxilite keeps the same data model, the same SPARQL semantics and the same Rust API, but uses only plain SQL on a standard SQLite. No extensions and no custom functions are required.</p>
-        <div class="backends">
+        <p class="sub">Oxigraph stores data in RocksDB, which needs native code and a filesystem. oxilite keeps the same data model, the same SPARQL semantics and the same Rust API, but uses only plain SQL on a standard SQLite. No extensions and no custom functions are required. On Turso, SQLite rewritten in Rust, it also gets vector search.</p>
+        <div class="backends backends-5">
           <div class="backend"><strong>rusqlite</strong><span>Bundled SQLite, in process. The default for Rust.</span></div>
           <div class="backend"><strong>dylib</strong><span>Your own <em>libsqlite3</em>, loaded at runtime. Any SQLite ≥ 3.37.</span></div>
+          <div class="backend"><strong>Turso</strong><span>SQLite rewritten in Rust, in process, with <a href="#vectors">vector indexes</a>.</span></div>
           <div class="backend"><strong>D1 · Rust</strong><span>A Rust Worker talking to <em>worker::D1</em>.</span></div>
           <div class="backend"><strong>D1 · wasm</strong><span>The core compiled to WebAssembly with a TypeScript driver on <em>env.DB</em>.</span></div>
         </div>
@@ -75,6 +92,7 @@
           <div class="card"><h3>Its own planner</h3><p>Per-predicate and per-class statistics drive join order, enforced with <code>CROSS JOIN</code>. <code>explain()</code> shows the SQL.</p></div>
           <div class="card"><h3>Atomic writes</h3><p>Every update, including <code>DELETE/INSERT … WHERE</code>, is one self-reading batch. That fits D1, where <code>batch()</code> is the only transaction.</p></div>
           <div class="card"><h3>Time travel, opt-in</h3><p>Turn versioning on per store, and every write becomes a commit you can query, diff and attribute. With it off, the store is unchanged. <a href="#versioning">Versioning →</a></p></div>
+          <div class="card"><h3>Vectors in the graph</h3><p>On Turso, nearest-neighbour search is a <code>SERVICE</code> in SPARQL, compiled into the query's one statement with the graph patterns around it. <a href="#vectors">Vector search →</a></p></div>
         </div>
       </div>
     </section>
@@ -104,11 +122,11 @@
         </div>
 
         <div class="panel" role="tabpanel" id="p-rust" aria-labelledby="tab-rust">
-<pre><code><span class="c"># Cargo.toml: oxilite = "0.1"   (features: rusqlite (default), dylib, d1, reasonable)</span>
+<pre><code><span class="c"># Cargo.toml: oxilite = "0.8"   (features: rusqlite (default), dylib, turso, d1, cypher, datalog, reasonable)</span>
 <span class="k">use</span> oxilite::store::Store;             <span class="c">// was: use oxigraph::store::Store;</span>
 <span class="k">use</span> oxilite::io::RdfFormat;
 
-<span class="k">let</span> store = Store::open(<span class="s">"data.sqlite"</span>)?;
+<span class="k">let</span> store = Store::open(<span class="s">"data.sqlite"</span>)?;   <span class="c">// Store::open_turso(…) for vector search</span>
 store.load_from_reader(RdfFormat::Turtle, TURTLE.as_bytes())?;
 store.query(<span class="s">"SELECT ?s WHERE { ?s a &lt;http://schema.org/Person&gt; }"</span>)?;
 store.update(<span class="s">"INSERT DATA { &lt;http://ex/a&gt; &lt;http://ex/p&gt; 42 }"</span>)?;
@@ -145,6 +163,30 @@ oxilite query   -l data.sqlite -q <span class="s">'SELECT * WHERE { ?s ?p ?o } L
 oxilite explain -l data.sqlite -q <span class="s">'…'</span>              <span class="c"># the SQL and the join order</span>
 oxilite serve   -l data.sqlite -b 127.0.0.1:7879     <span class="c"># /query, /update, /store</span></code></pre>
         </div>
+      </div>
+    </section>
+
+    <section id="vectors" class="band-soft">
+      <div class="wrap">
+        <span class="eyebrow">New · Turso · Vector search</span>
+        <h2>Vectors inside the knowledge graph<span class="dot">.</span></h2>
+        <p class="sub">AI agents need to recall what <em>sounds like</em> a question and what is <em>connected</em> to it. On Turso, SQLite rewritten in Rust, oxilite indexes embeddings stored as ordinary RDF literals. Nearest-neighbour search is a <code>SERVICE</code> in SPARQL, a procedure in Cypher and a relation in Datalog, and it compiles into the same SQL statement as the graph patterns around it.</p>
+<pre><code>PREFIX oxl: &lt;https://oxilite.dev/ns#&gt;
+SELECT ?text ?score WHERE {
+  SERVICE &lt;oxilite:vector/memories&gt; {                     <span class="c"># the 20 nearest memories…</span>
+    [] oxl:query <span class="s">"[0.85, 0.2, 0.05, 0.1]"</span> ; oxl:k 20 ; oxl:node ?m ; oxl:score ?score .
+  }
+  ?m ex:visibleTo ex:alice ; ex:text ?text ; ex:at ?at .   <span class="c"># …that Alice may see…</span>
+  FILTER(?at &gt;= <span class="s">"2026-09-14"</span>^^xsd:date)                  <span class="c"># …from the last two weeks</span>
+}
+ORDER BY DESC(?score) LIMIT 5</code></pre>
+        <div class="grid" style="margin-top:24px">
+          <div class="card"><h3>Filters inside the search</h3><p>Access control, recency and scoping run in the same statement as the search, so rows the agent may not see never leave the database.</p></div>
+          <div class="card"><h3>Recall that follows edges</h3><p>Start from the nearest memories, then walk to the people and events they're about, and to what else the agent knows about them.</p></div>
+          <div class="card"><h3>Indexes that can't drift</h3><p>Definitions are RDF in <code>&lt;oxilite:vectors&gt;</code>. Triggers update the index in the transaction of every write, and a bad embedding fails the write.</p></div>
+        </div>
+        <p style="margin-top:20px">Cosine, Euclidean, dot product and sparse Jaccard · float32, float64, int8 and 1-bit vectors · host functions callable from every language · one file, in process. <code>cargo add oxilite --features turso</code>, or <code>oxilite serve --turso</code> for agents in any language.</p>
+        <p><a href="articles/agent-memory-turso.html">Guide: agent memory on Turso →</a> · <a href="articles/turso-vectors.html">Design note →</a></p>
       </div>
     </section>
 
@@ -239,6 +281,7 @@ SELECT ?t ?old ?new WHERE {                                     <span class="c">
               <tr><td>SHACL / ShEx</td><td>rudof validators, unchanged, in <code>oxilite-validate</code>. Results match rudof's in-memory graph.</td></tr>
               <tr><td>Your own rules</td><td>Datalog with stratified negation, compiled to one SQL statement. <code>datalog_materialize()</code> stores what it derives beside the OWL inferences. <a href="#datalog">See below</a>.</td></tr>
               <tr><td>Full-text search</td><td>FTS5 behind <code>oxl:textMatch</code>, on D1 too.</td></tr>
+              <tr><td>Vector search</td><td>On Turso: k-nearest-neighbour search from SPARQL, Cypher and Datalog, inside the query's single statement. <a href="#vectors">See above</a>.</td></tr>
               <tr><td>JSON-LD / Verifiable Credentials</td><td>Documents kept byte for byte, RDF in a named graph each, via <em>json-ld</em> and <em>ssi-vc</em> in <code>oxilite-jsonld</code> and <code>oxilite-vc</code>.</td></tr>
             </tbody>
           </table>
@@ -334,6 +377,18 @@ code --install-extension pavlyshyn.oxilite-studio
         <h2>Articles<span class="dot">.</span></h2>
         <p class="sub">Guides and design notes: what you can build with oxilite and how it works inside. <a href="articles/">All articles →</a></p>
         <div class="articles">
+          <a class="article-card" href="articles/agent-memory-turso.html">
+            <span class="kicker">Turso · Vector search · Agents · Guide · New</span>
+            <h3>Agent memory on Turso: vector search inside your knowledge graph</h3>
+            <p>Model memories as a graph, index their embeddings, and recall with SPARQL: access control, recency, graph expansion, provenance, deduplication, agent tools and an HTTP endpoint.</p>
+            <span class="more">Start the guide →</span>
+          </a>
+          <a class="article-card" href="articles/turso-vectors.html">
+            <span class="kicker">Turso · Vector search · Design · New</span>
+            <h3>Vectors that know where they are: oxilite on Turso</h3>
+            <p>Why the vector index is RDF, why one nearest-neighbour statement serves SPARQL, Cypher and Datalog, and what Turso needed to run oxilite.</p>
+            <span class="more">Read the design note →</span>
+          </a>
           <a class="article-card" href="articles/oxilite-python.html">
             <span class="kicker">Python · Tutorial · New</span>
             <h3>How to use oxilite with Python</h3>
@@ -437,6 +492,24 @@ code --install-extension pavlyshyn.oxilite-studio
   </footer>
 
   <script>
+    (function () {
+      // The Features menu closes on a pick, on Escape and on a click elsewhere.
+      var menu = document.querySelector('.nav-menu');
+      if (menu) {
+        menu.addEventListener('click', function (e) {
+          if (e.target.closest('.nav-panel a')) menu.open = false;
+        });
+        document.addEventListener('click', function (e) {
+          if (menu.open && !menu.contains(e.target)) menu.open = false;
+        });
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape' && menu.open) {
+            menu.open = false;
+            menu.querySelector('summary').focus();
+          }
+        });
+      }
+    })();
     (function () {
       var tabs = Array.prototype.slice.call(document.querySelectorAll('[role="tab"]'));
       function select(tab) {

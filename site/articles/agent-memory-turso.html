@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent memory on Turso: vector search with SPARQL – oxilite</title>
+  <meta name="description" content="A practical guide to oxilite on Turso: store an AI agent's memories as a knowledge graph with embeddings, create a vector index, and recall with SPARQL, Cypher and Datalog. Includes access control, recency, graph expansion, deduplication, agent tools and an HTTP endpoint.">
+  <meta property="og:title" content="Agent memory on Turso: vector search with SPARQL">
+  <meta property="og:description" content="Store an agent's memories as a knowledge graph with embeddings, and recall them with SPARQL, Cypher and Datalog in one SQL statement. A tested, step-by-step guide.">
+  <meta property="og:image" content="../assets/logo.png">
+  <meta name="theme-color" content="#0a0a0a">
+  <link rel="canonical" href="https://oxilitedb.com/articles/agent-memory-turso">
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg">
+  <link rel="icon" type="image/png" href="../assets/logo.png">
+  <link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt=""><span>oxi<b>lite</b></span></a>
+      <nav class="nav" aria-label="Main">
+        <a href="../">Home</a>
+        <a href="./">Articles</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="article">
+    <article class="wrap">
+      <span class="kicker">Turso · Vector search · SPARQL · Agents · Guide</span>
+      <h1>Agent memory on Turso: vector search inside your knowledge graph</h1>
+      <p class="standfirst">An AI agent's memory needs two lookups: <em>what sounds like this</em>, and <em>what is connected to it</em>. On Turso, oxilite does both in one store and one query. This guide builds an agent's long-term memory step by step: model memories as a graph, index their embeddings, recall them with SPARQL, then turn that into tools an agent can call.</p>
+      <p class="meta">A guide · oxilite 0.8 · Rust, the CLI and HTTP · Every query and answer on this page is asserted by <a href="https://github.com/Volland/oxilite/blob/main/crates/oxilite/tests/agent_memory_guide.rs"><code>agent_memory_guide.rs</code></a> · For the design behind it, read <a href="turso-vectors.html">Vectors that know where they are</a></p>
+
+      <nav class="toc" aria-label="On this page">
+        <b>On this page</b>
+        <ol>
+          <li><a href="#why">Why Turso, and what you get</a></li>
+          <li><a href="#install">Install</a></li>
+          <li><a href="#model">Model memory as a graph</a></li>
+          <li><a href="#index">Create the vector index</a></li>
+          <li><a href="#recall">Recall with SPARQL: eight recipes</a></li>
+          <li><a href="#write">Remember, consolidate, forget</a></li>
+          <li><a href="#tools">Turn it into agent tools</a></li>
+          <li><a href="#http">Agents in Python, TypeScript, anything</a></li>
+          <li><a href="#cypher-datalog">The same index from Cypher and Datalog</a></li>
+          <li><a href="#operate">Running it</a></li>
+          <li><a href="#limits">Limits</a></li>
+        </ol>
+      </nav>
+
+      <h2 id="why">Why Turso, and what you get</h2>
+      <p><a href="https://github.com/tursodatabase/turso">Turso</a> is SQLite rewritten in Rust. It speaks SQLite's SQL, runs in-process, and adds what SQLite never had: vector types (<code>vector32</code>, <code>vector64</code>, <code>vector8</code>, <code>vector1bit</code>, sparse vectors) and distance functions (cosine, Euclidean, dot product, Jaccard). oxilite compiles SPARQL, openCypher and Datalog into SQL, and <code>oxilite-turso</code> is the backend that runs that SQL on Turso. On that backend, and only there, oxilite has <strong>vector indexes</strong>.</p>
+      <p>A vector index is not a separate system. Embeddings are ordinary RDF literals on your nodes, and a nearest-neighbour search is one more table in the query's <code>FROM</code> list. Everything around the search (who may see a memory, when it was written, who it is about, what else those people are connected to) is compiled into the <strong>same SQL statement</strong>.</p>
+      <div class="flow" data-label="Recall, end to end" role="img" aria-label="Recall pipeline: your model embeds the question outside oxilite; then, in one SQL statement, the vector service finds the k nearest memories and graph patterns filter and expand them; the rows go back to the agent.">
+        <div class="flow-step outside"><b>Embed the question</b><span>Your model, outside oxilite: text in, <code>[0.85, 0.2, …]</code> out</span></div>
+        <div class="flow-step"><b>k nearest</b><span><code>SERVICE &lt;oxilite:vector/memories&gt;</code> ranks embeddings by distance…</span></div>
+        <div class="flow-step"><b>Graph patterns</b><span>…in the same SQL statement: visible to this user, recent, about whom, connected to what</span></div>
+        <div class="flow-step"><b>Rows for the prompt</b><span>text, score, provenance: context the agent can explain</span></div>
+      </div>
+      <p>What this gives an agent:</p>
+      <ul>
+        <li><strong>One file, in-process.</strong> Facts, embeddings, index definitions and (optionally) history live in one database file inside the agent's process. There's no vector service to run and nothing to keep in sync.</li>
+        <li><strong>Filters in the query, not after it.</strong> Access control, recency and scoping run in the same statement as the search, so rows the agent may not see never leave the database.</li>
+        <li><strong>Recall that follows relationships.</strong> The search finds <em>where</em> to start, and the graph walks to the people, events and decisions those memories are about.</li>
+        <li><strong>Indexes that can't drift.</strong> Triggers update the index in the same transaction as every write, whichever language made it.</li>
+      </ul>
+
+      <h2 id="install"><span class="step">1</span>Install</h2>
+      <p>For Rust, turn on the <code>turso</code> feature. <code>cypher</code> and <code>datalog</code> are optional, and this guide uses both:</p>
+<pre><code><span class="c"># Cargo.toml</span>
+[dependencies]
+oxilite = { version = <span class="s">"0.8"</span>, features = [<span class="s">"turso"</span>, <span class="s">"cypher"</span>, <span class="s">"datalog"</span>] }</code></pre>
+<pre><code><span class="k">use</span> oxilite::store::Store;
+
+<span class="k">let</span> store = Store::open_turso(<span class="s">"agent-memory.db"</span>)?;   <span class="c">// or Store::new_turso() in memory</span></code></pre>
+      <p>The command line includes Turso. Every command takes <code>--turso</code>:</p>
+<pre><code>cargo install oxilite-cli
+oxilite --turso agent-memory.db                 <span class="c"># interactive shell</span>
+oxilite query --turso -l agent-memory.db -q <span class="s">'…'</span>  <span class="c"># one query</span>
+oxilite serve --turso -l agent-memory.db        <span class="c"># SPARQL endpoint over HTTP</span></code></pre>
+      <p>The rest of oxilite works unchanged on Turso: the Rust API, SPARQL 1.1, Cypher, Datalog, reasoning and versioning. The exceptions are listed under <a href="#limits">Limits</a>.</p>
+
+      <h2 id="model"><span class="step">2</span>Model memory as a graph</h2>
+      <p>A memory is a node with its text, its embedding, and edges to what it is about. Everything an agent will later want to filter or follow is a triple: the people and events a memory concerns, who may see it, when it was written, and which conversation it came from.</p>
+<span class="filename">memory.ttl</span>
+<pre><code>@prefix ex:  &lt;http://example.com/&gt; .
+@prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+
+<span class="c"># Who and what the agent knows about</span>
+ex:alice   a ex:Person  ; ex:name <span class="s">"Alice"</span> ; ex:worksFor ex:acme .
+ex:bob     a ex:Person  ; ex:name <span class="s">"Bob"</span>   ; ex:worksFor ex:acme .
+ex:carol   a ex:Person  ; ex:name <span class="s">"Carol"</span> ; ex:worksFor ex:globex .
+ex:acme    a ex:Company ; ex:name <span class="s">"ACME"</span> .
+ex:globex  a ex:Company ; ex:name <span class="s">"Globex"</span> .
+ex:offsite a ex:Event   ; ex:name <span class="s">"ACME offsite"</span> ; ex:city <span class="s">"Lisbon"</span> ; ex:on <span class="s">"2026-10-05"</span>^^xsd:date .
+
+<span class="c"># Where memories came from</span>
+ex:chat12  a ex:Conversation ; ex:channel <span class="s">"slack"</span> .
+ex:mail7   a ex:Conversation ; ex:channel <span class="s">"email"</span> .
+
+<span class="c"># What the agent remembers</span>
+ex:m1 a ex:Memory ; ex:text <span class="s">"Alice prefers aisle seats on long flights"</span> ;
+  ex:about ex:alice ; ex:visibleTo ex:alice ; ex:at <span class="s">"2026-09-01"</span>^^xsd:date ;
+  ex:source ex:chat12 ; ex:embedding <span class="s">"[0.9, 0.1, 0.0, 0.4]"</span> .
+ex:m2 a ex:Memory ; ex:text <span class="s">"Alice is flying to Lisbon for the ACME offsite"</span> ;
+  ex:about ex:alice , ex:offsite ; ex:visibleTo ex:alice , ex:bob ; ex:at <span class="s">"2026-09-20"</span>^^xsd:date ;
+  ex:source ex:mail7 ; ex:embedding <span class="s">"[0.8, 0.3, 0.1, 0.0]"</span> .
+ex:m3 a ex:Memory ; ex:text <span class="s">"Bob is allergic to peanuts"</span> ;
+  ex:about ex:bob ; ex:visibleTo ex:alice , ex:bob ; ex:at <span class="s">"2026-08-11"</span>^^xsd:date ;
+  ex:source ex:chat12 ; ex:embedding <span class="s">"[0.0, 0.9, 0.1, 0.2]"</span> .
+ex:m4 a ex:Memory ; ex:text <span class="s">"Bob is also going to the ACME offsite"</span> ;
+  ex:about ex:bob , ex:offsite ; ex:visibleTo ex:alice , ex:bob ; ex:at <span class="s">"2026-09-21"</span>^^xsd:date ;
+  ex:source ex:chat12 ; ex:embedding <span class="s">"[0.7, 0.2, 0.2, 0.1]"</span> .
+ex:m5 a ex:Memory ; ex:text <span class="s">"Carol booked a trip to Lisbon in October"</span> ;
+  ex:about ex:carol ; ex:visibleTo ex:carol ; ex:at <span class="s">"2026-09-18"</span>^^xsd:date ;
+  ex:source ex:mail7 ; ex:embedding <span class="s">"[0.85, 0.15, 0.0, 0.1]"</span> .
+ex:m6 a ex:Memory ; ex:text <span class="s">"The offsite agenda is due on Friday"</span> ;
+  ex:about ex:offsite ; ex:visibleTo ex:alice , ex:bob ; ex:at <span class="s">"2026-09-24"</span>^^xsd:date ;
+  ex:source ex:mail7 ; ex:embedding <span class="s">"[0.3, 0.0, 0.9, 0.0]"</span> .</code></pre>
+<pre><code>oxilite load --turso -l agent-memory.db -f memory.ttl</code></pre>
+      <p>Real embeddings have hundreds or thousands of dimensions. Four keep the example readable. Here they roughly mean <em>travel, health, work, preferences</em>.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Modelling choice</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr><td>An embedding is a JSON array in a plain literal</td><td>It's ordinary RDF: it dumps, loads, versions and backs up with everything else. The index reads it and checks its length.</td></tr>
+            <tr><td>Keep <code>ex:text</code> next to the embedding</td><td>The agent needs words for its prompt, not numbers. Recall returns the text directly.</td></tr>
+            <tr><td><code>ex:about</code> edges to people and events</td><td>This is what lets recall <em>expand</em>: from a memory to the people involved to everything else about them.</td></tr>
+            <tr><td><code>ex:visibleTo</code> on every memory</td><td>Access control becomes a graph pattern, so it runs inside the search's query.</td></tr>
+            <tr><td>Typed dates (<code>xsd:date</code>)</td><td>oxilite stores dates in a typed column, so recency filters compare numbers and never parse strings.</td></tr>
+            <tr><td>One embedding property per model</td><td>An index has a fixed dimension count. When you change embedding models, write <code>ex:embedding_v2</code> and give it its own index (see <a href="#operate">Running it</a>).</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="index"><span class="step">3</span>Create the vector index</h2>
+      <p>An index definition is RDF too. It lives in the system graph <code>&lt;oxilite:vectors&gt;</code>, and inserting it builds the index, back-filled from the embeddings already in the store:</p>
+<pre><code>PREFIX oxl: &lt;https://oxilite.dev/ns#&gt;
+PREFIX ex:  &lt;http://example.com/&gt;
+
+INSERT DATA { GRAPH &lt;oxilite:vectors&gt; {
+  &lt;oxilite:vector/memories&gt; a oxl:VectorIndex ;
+    oxl:indexName  <span class="s">"memories"</span> ;
+    oxl:property   ex:embedding ;
+    oxl:dimensions 4 ;
+    oxl:metric     oxl:Cosine ;
+    oxl:class      ex:Memory .        <span class="c"># optional: only memories are candidates</span>
+} }</code></pre>
+      <p>The same index from Rust, from Cypher (Neo4j 5 syntax), or from the shell:</p>
+<pre><code><span class="k">use</span> oxilite::model::NamedNode;
+<span class="k">use</span> oxilite::vector::{Metric, VectorIndex};
+
+store.create_vector_index(
+    &amp;VectorIndex::new(<span class="s">"memories"</span>, NamedNode::new(<span class="s">"http://example.com/embedding"</span>)?, 4)
+        .metric(Metric::Cosine)
+        .class(NamedNode::new(<span class="s">"http://example.com/Memory"</span>)?),
+)?;</code></pre>
+<pre><code>CREATE VECTOR INDEX memories IF NOT EXISTS FOR (m:Memory) ON (m.embedding)
+OPTIONS { indexConfig: { `vector.dimensions`: 4, `vector.similarity_function`: <span class="s">'cosine'</span> } }</code></pre>
+<pre><code>oxilite&gt; .prefix ex: &lt;http://example.com/&gt;
+oxilite&gt; .vector create memories ex:embedding 4 cosine --class ex:Memory
+oxilite&gt; .vector list
+┌──────────┬────────────────────────────────┬──────┬────────┬─────────┬─────────────────────────────┬──────┬───────┐
+│ name     │ property                       │ dims │ metric │ element │ class                       │ rows │ built │
+├──────────┼────────────────────────────────┼──────┼────────┼─────────┼─────────────────────────────┼──────┼───────┤
+│ memories │ &lt;http://example.com/embedding&gt; │ 4    │ cosine │ float32 │ &lt;http://example.com/Memory&gt; │ 6    │ yes   │
+└──────────┴────────────────────────────────┴──────┴────────┴─────────┴─────────────────────────────┴──────┴───────┘</code></pre>
+      <h3>Choosing a metric and an element type</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Option</th><th>Values</th><th>Use it when</th></tr></thead>
+          <tbody>
+            <tr><td><code>oxl:metric</code></td><td><code>oxl:Cosine</code> (default)</td><td>Most text embedding models. Direction matters, length doesn't.</td></tr>
+            <tr><td></td><td><code>oxl:Euclidean</code></td><td>Embeddings where magnitude carries meaning, or the model says to use L2.</td></tr>
+            <tr><td></td><td><code>oxl:DotProduct</code></td><td>Normalized embeddings, or models trained for inner product.</td></tr>
+            <tr><td></td><td><code>oxl:Jaccard</code></td><td>Sparse bag-of-words vectors, with element type <code>SparseFloat32</code>. This one uses Turso's inverted-file index.</td></tr>
+            <tr><td><code>oxl:elementType</code></td><td><code>oxl:Float32</code> (default), <code>Float64</code></td><td>Full precision.</td></tr>
+            <tr><td></td><td><code>oxl:Int8</code>, <code>oxl:Bit1</code></td><td>Quantized: about 4× and 32× smaller, for large memories where a little recall loss is acceptable.</td></tr>
+            <tr><td></td><td><code>oxl:SparseFloat32</code></td><td>Only non-zero elements are stored.</td></tr>
+            <tr><td><code>oxl:class</code></td><td>any class IRI</td><td>Only instances of the class are candidates, so a search never returns a user or a document when you asked for memories.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="recall"><span class="step">4</span>Recall with SPARQL: eight recipes</h2>
+      <p>A search is a <code>SERVICE</code> clause naming the index. Its body is a set of triples on one blank node:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Predicate</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>oxl:query</code></td><td>The query vector as a JSON array literal, <em>or</em> a node IRI, meaning "near this node's own embedding".</td></tr>
+            <tr><td><code>oxl:k</code></td><td>How many nearest nodes the search returns. The default is 10.</td></tr>
+            <tr><td><code>oxl:node</code></td><td>Binds each result node. Join it with the rest of the query.</td></tr>
+            <tr><td><code>oxl:distance</code></td><td>The metric's distance as <code>xsd:double</code>. Lower is nearer.</td></tr>
+            <tr><td><code>oxl:score</code></td><td>A similarity where higher is nearer, as Neo4j defines it: cosine <code>1 − d/2</code>, Euclidean <code>1/(1 + d²)</code>, dot product <code>−d</code>, Jaccard <code>1 − d</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The agent embeds its question ("what do I know about upcoming travel?") and gets <code>[0.85, 0.2, 0.05, 0.1]</code>. All the recipes below use that vector and these prefixes:</p>
+<pre><code>PREFIX oxl: &lt;https://oxilite.dev/ns#&gt;
+PREFIX ex:  &lt;http://example.com/&gt;
+PREFIX xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt;</code></pre>
+
+      <h3>1. Nearest memories</h3>
+<pre><code>SELECT ?memory ?text ?score WHERE {
+  SERVICE &lt;oxilite:vector/memories&gt; {
+    [] oxl:query <span class="s">"[0.85, 0.2, 0.05, 0.1]"</span> ; oxl:k 5 ;
+       oxl:node ?memory ; oxl:score ?score .
+  }
+  ?memory ex:text ?text .
+}
+ORDER BY DESC(?score)</code></pre>
+<pre><code>memory  text                                             score
+ex:m5   Carol booked a trip to Lisbon in October         0.9984
+ex:m2   Alice is flying to Lisbon for the ACME offsite   0.9919
+ex:m4   Bob is also going to the ACME offsite            0.9885
+ex:m1   Alice prefers aisle seats on long flights        0.9733
+ex:m6   The offsite agenda is due on Friday              0.6796</code></pre>
+      <p>This is all that a standalone vector database can give you, and it has already gone wrong. The top hit is <strong>Carol's private memory</strong>, and the agent is talking to Alice.</p>
+
+      <h3>2. Only what this user may see</h3>
+<pre><code>SELECT ?text ?score WHERE {
+  SERVICE &lt;oxilite:vector/memories&gt; {
+    [] oxl:query <span class="s">"[0.85, 0.2, 0.05, 0.1]"</span> ; oxl:k 20 ;
+       oxl:node ?m ; oxl:score ?score .
+  }
+  ?m ex:visibleTo ex:alice ; ex:text ?text .
+}
+ORDER BY DESC(?score) LIMIT 3</code></pre>
+<pre><code>text                                             score
+Alice is flying to Lisbon for the ACME offsite   0.9919
+Bob is also going to the ACME offsite            0.9885
+Alice prefers aisle seats on long flights        0.9733</code></pre>
+      <div class="callout">
+        <p><strong>Over-fetch, then cut.</strong> <code>oxl:k</code> is applied <em>inside</em> the search, before the graph patterns around it. With <code>oxl:k 3</code> this query would return two rows: the three nearest are m5, m2 and m4, and Alice may not see m5. Ask the index for more than you need (here 20), filter with the graph, and cut with <code>LIMIT</code>. If one class of node is always the target, <code>oxl:class</code> on the index restricts candidates before ranking, at no cost.</p>
+      </div>
+
+      <h3>3. Recent and relevant</h3>
+      <p>Recency and a relevance floor are two more conditions. Dates compare as numbers through oxilite's typed columns:</p>
+<pre><code>SELECT ?text ?at WHERE {
+  SERVICE &lt;oxilite:vector/memories&gt; {
+    [] oxl:query <span class="s">"[0.85, 0.2, 0.05, 0.1]"</span> ; oxl:k 20 ;
+       oxl:node ?m ; oxl:score ?score .
+  }
+  ?m ex:visibleTo ex:alice ; ex:text ?text ; ex:at ?at .
+  FILTER(?at &gt;= <span class="s">"2026-09-14"</span>^^xsd:date &amp;&amp; ?score &gt; 0.8)
+}
+ORDER BY DESC(?score)</code></pre>
+<pre><code>text                                             at
+Alice is flying to Lisbon for the ACME offsite   2026-09-20
+Bob is also going to the ACME offsite            2026-09-21</code></pre>
+
+      <h3>4. Follow the graph</h3>
+      <p>This is the recipe that similarity alone can't do. Start from the relevant memories, find the event they are about, find everyone else involved in it, and bring back what the agent knows about each of them:</p>
+<pre><code>SELECT DISTINCT ?who ?fact WHERE {
+  SERVICE &lt;oxilite:vector/memories&gt; {
+    [] oxl:query <span class="s">"[0.85, 0.2, 0.05, 0.1]"</span> ; oxl:k 20 ;
+       oxl:node ?hit ; oxl:score ?score .
+  }
+  FILTER(?score &gt; 0.9)
+  ?hit ex:visibleTo ex:alice ; ex:about ?event .   <span class="c"># relevant, and Alice may see it</span>
+  ?event a ex:Event .                              <span class="c"># the offsite</span>
+  ?other ex:about ?event , ?person .               <span class="c"># everyone involved in it</span>
+  ?person a ex:Person ; ex:name ?who .
+  ?m ex:about ?person ; ex:text ?fact ; ex:visibleTo ex:alice .
+}</code></pre>
+<pre><code>who    fact
+Alice  Alice is flying to Lisbon for the ACME offsite
+Alice  Alice prefers aisle seats on long flights
+Bob    Bob is allergic to peanuts
+Bob    Bob is also going to the ACME offsite</code></pre>
+      <p>Look at the third row. <em>Bob is allergic to peanuts</em> is the least similar memory in the store (score 0.63, below everything in recipe 1), so no similarity threshold that keeps out noise would return it. But Bob is going to the same offsite, and an agent booking the team dinner needs to know. The graph found it by following <em>who</em> the relevant memories were about, not what they sounded like.</p>
+
+      <h3>5. Where did this come from?</h3>
+      <p>Provenance is a join away, so an agent can cite its sources ("you told me by email"):</p>
+<pre><code>SELECT ?text ?channel WHERE {
+  SERVICE &lt;oxilite:vector/memories&gt; {
+    [] oxl:query <span class="s">"[0.85, 0.2, 0.05, 0.1]"</span> ; oxl:k 3 ;
+       oxl:node ?m ; oxl:distance ?d .
+  }
+  ?m ex:text ?text .
+  OPTIONAL { ?m ex:source ?src }
+  OPTIONAL { ?src ex:channel ?channel }
+}
+ORDER BY ?d</code></pre>
+<pre><code>text                                             channel
+Carol booked a trip to Lisbon in October         email
+Alice is flying to Lisbon for the ACME offsite   email
+Bob is also going to the ACME offsite            slack</code></pre>
+      <p>Each <code>OPTIONAL</code> has one triple pattern on purpose. On the current Turso release, an <code>OPTIONAL</code> with several patterns, or with a property path inside it, fails to parse (see <a href="#limits">Limits</a>). Chaining single-pattern <code>OPTIONAL</code>s works on every backend. So does a required property path such as <code>?m ex:source/ex:channel ?channel</code>.</p>
+
+      <h3>6. Who is this about?</h3>
+      <p>Aggregates run on the search results like on any other rows. This is useful for deciding which entity an ambiguous question refers to:</p>
+<pre><code>SELECT ?name (COUNT(?m) AS ?memories) (MAX(?score) AS ?best) WHERE {
+  SERVICE &lt;oxilite:vector/memories&gt; {
+    [] oxl:query <span class="s">"[0.85, 0.2, 0.05, 0.1]"</span> ; oxl:k 10 ;
+       oxl:node ?m ; oxl:score ?score .
+  }
+  ?m ex:about ?p . ?p a ex:Person ; ex:name ?name .
+}
+GROUP BY ?name ORDER BY DESC(?best)</code></pre>
+<pre><code>name   memories  best
+Carol  1         0.9984
+Alice  2         0.9919
+Bob    2         0.9885</code></pre>
+
+      <h3>7. Property paths from each hit</h3>
+<pre><code>SELECT DISTINCT ?text ?company WHERE {
+  SERVICE &lt;oxilite:vector/memories&gt; {
+    [] oxl:query <span class="s">"[0.85, 0.2, 0.05, 0.1]"</span> ; oxl:k 4 ; oxl:node ?m .
+  }
+  ?m ex:text ?text ; ex:about/ex:worksFor/ex:name ?company .
+}</code></pre>
+<pre><code>text                                             company
+Alice is flying to Lisbon for the ACME offsite   ACME
+Alice prefers aisle seats on long flights        ACME
+Bob is also going to the ACME offsite            ACME
+Carol booked a trip to Lisbon in October         Globex</code></pre>
+
+      <h3>8. More like this</h3>
+      <p>Give <code>oxl:query</code> a node instead of a vector, and the search uses that node's stored embedding. The node itself comes first at distance 0, so filter it out:</p>
+<pre><code>SELECT ?similar ?text ?score WHERE {
+  SERVICE &lt;oxilite:vector/memories&gt; {
+    [] oxl:query ex:m2 ; oxl:k 5 ; oxl:node ?similar ; oxl:score ?score .
+  }
+  ?similar ex:text ?text .
+  FILTER(?similar != ex:m2)
+}
+ORDER BY DESC(?score)</code></pre>
+<pre><code>similar  text                                       score
+ex:m4    Bob is also going to the ACME offsite      0.9885
+ex:m5    Carol booked a trip to Lisbon in October   0.9850
+ex:m1    Alice prefers aisle seats on long flights  0.9404
+ex:m6    The offsite agenda is due on Friday        0.7022</code></pre>
+      <p>That is how an agent finds related tickets, links a new entity to one it already knows, and (in the next step) merges duplicate memories.</p>
+
+      <h3>Check the plan</h3>
+      <p><code>explain</code> shows that the search really is part of the one statement. It's a derived table joined like any triple pattern:</p>
+<pre><code>oxilite explain --turso -l agent-memory.db -q <span class="s">'… recipe 1 …'</span>
+<span class="c">-- oxilite: fully compiled to SQL (2 output variable(s))</span>
+<span class="c">-- vector search on memories (cosine, 4 dimensions, k = 3)</span>
+<span class="c">-- join order (statistics): ?m &lt;http://example.com/text&gt; ?text (~6 rows)</span>
+SELECT q2.o AS v1, … FROM (SELECT s, MIN(d) AS d FROM (SELECT v.s AS s,
+  vector_distance_cos(v.e, vector32('[0.85, 0.2, 0.05, 0.1]')) AS d FROM vec_memories v
+  WHERE EXISTS (… rdf:type ex:Memory …)) GROUP BY s ORDER BY d, s LIMIT 3) AS knn1
+JOIN quads q2 … WHERE knn1.s = q2.s AND q2.p = … AND +q2.g = 0</code></pre>
+
+      <h2 id="write"><span class="step">5</span>Remember, consolidate, forget</h2>
+      <h3>Remember</h3>
+      <p>Writing a memory is an ordinary insert. The index trigger picks up the embedding in the same transaction:</p>
+<pre><code>PREFIX ex:  &lt;http://example.com/&gt;
+PREFIX xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt;
+
+INSERT DATA {
+  ex:m7 a ex:Memory ;
+    ex:text <span class="s">"Alice asked for an aisle seat again"</span> ;
+    ex:about ex:alice ; ex:visibleTo ex:alice ;
+    ex:at <span class="s">"2026-09-27"</span>^^xsd:date ; ex:source ex:chat12 ;
+    ex:embedding <span class="s">"[0.9, 0.1, 0.0, 0.38]"</span> .
+}</code></pre>
+      <p>An embedding of the wrong length, or one that isn't a JSON array, fails the <strong>whole write</strong>, so a half-written memory can't exist:</p>
+<pre><code>error: SQL backend error: oxilite: vector index memories expects 4 dimensions</code></pre>
+      <p>An index that silently skipped bad rows would return wrong answers without anyone noticing. This happens most often when someone switches embedding models and forgets the index, and the loud failure catches it on the first write.</p>
+      <h3>Consolidate</h3>
+      <p>Agents repeat themselves. Before (or after) storing a memory, look for a near-duplicate about the same entity:</p>
+<pre><code>SELECT ?older ?text ?score WHERE {
+  SERVICE &lt;oxilite:vector/memories&gt; {
+    [] oxl:query ex:m7 ; oxl:k 3 ; oxl:node ?older ; oxl:score ?score .
+  }
+  ?older ex:text ?text ; ex:about ?who .
+  ex:m7 ex:about ?who .                      <span class="c"># about the same person</span>
+  FILTER(?older != ex:m7 &amp;&amp; ?score &gt; 0.99)
+}</code></pre>
+<pre><code>older  text                                        score
+ex:m1  Alice prefers aisle seats on long flights   0.9999</code></pre>
+      <p>The agent can then keep the older memory and add a timestamp, or replace it with a merged sentence and a new embedding. Both are one SPARQL update.</p>
+      <h3>Forget</h3>
+<pre><code>DELETE WHERE { ex:m7 ?p ?o }</code></pre>
+      <p>The embedding leaves the index with the triple, in the same transaction. This holds for every write path: SPARQL <code>DELETE</code>, <code>CLEAR GRAPH</code>, the bulk loader, and Cypher <code>CREATE</code>/<code>SET</code>/<code>DELETE</code>. There is no re-indexing job to schedule. For a store that must be able to prove what it forgot, turn on <a href="versioning-knowledge-graph-memory.html">versioning</a>, which also works on Turso, and use its audited <code>purge</code> for erasure requests.</p>
+
+      <h2 id="tools"><span class="step">6</span>Turn it into agent tools</h2>
+      <p>An LLM agent needs a few narrow tools, not a SPARQL console. Here are <code>remember</code> and <code>recall</code> in Rust. The recall query is recipe 2 with the user and the vector filled in.</p>
+<pre><code><span class="k">use</span> oxilite::model::{Literal, Term};
+<span class="k">use</span> oxilite::sparql::QueryResults;
+<span class="k">use</span> oxilite::store::Store;
+<span class="k">use</span> oxilite::turso::TursoBackend;
+
+<span class="c">/// An embedding as the JSON array literal the index reads.</span>
+<span class="k">fn</span> vector_literal(v: &amp;[f32]) -&gt; String {
+    <span class="k">let</span> items: Vec&lt;String&gt; = v.iter().map(f32::to_string).collect();
+    format!(<span class="s">"[{}]"</span>, items.join(<span class="s">", "</span>))
+}
+
+<span class="k">fn</span> remember(store: &amp;Store&lt;TursoBackend&gt;, id: &amp;str, user: &amp;str, text: &amp;str,
+            about: &amp;[&amp;str], at: &amp;str, embedding: &amp;[f32]) -&gt; oxilite::Result&lt;()&gt; {
+    <span class="k">let</span> about: Vec&lt;String&gt; = about.iter().map(|a| format!(<span class="s">"&lt;{a}&gt;"</span>)).collect();
+    store.update(format!(<span class="s">r#"PREFIX ex: &lt;http://example.com/&gt;
+        PREFIX xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt;
+        INSERT DATA {{
+          &lt;{id}&gt; a ex:Memory ; ex:text {text} ; ex:about {about} ;
+            ex:visibleTo &lt;{user}&gt; ; ex:at "{at}"^^xsd:date ; ex:embedding "{vector}" .
+        }}"#</span>,
+        text = Literal::new_simple_literal(text),     <span class="c">// quoted and escaped</span>
+        about = about.join(<span class="s">", "</span>),
+        vector = vector_literal(embedding),
+    ))
+}
+
+<span class="k">fn</span> recall(store: &amp;Store&lt;TursoBackend&gt;, user: &amp;str, question: &amp;[f32], k: usize)
+    -&gt; oxilite::Result&lt;Vec&lt;(String, f64)&gt;&gt; {
+    <span class="k">let</span> q = format!(<span class="s">r#"PREFIX oxl: &lt;https://oxilite.dev/ns#&gt;
+        PREFIX ex:  &lt;http://example.com/&gt;
+        SELECT ?text ?score WHERE {{
+          SERVICE &lt;oxilite:vector/memories&gt; {{
+            [] oxl:query "{vector}" ; oxl:k {fetch} ; oxl:node ?m ; oxl:score ?score .
+          }}
+          ?m ex:visibleTo &lt;{user}&gt; ; ex:text ?text .
+        }}
+        ORDER BY DESC(?score) LIMIT {k}"#</span>,
+        vector = vector_literal(question),
+        fetch = k * 4,                                   <span class="c">// over-fetch, then cut</span>
+    );
+    <span class="k">let</span> QueryResults::Solutions(rows) = store.query(q.as_str())? <span class="k">else</span> { unreachable!() };
+    <span class="k">let mut</span> out = Vec::new();
+    <span class="k">for</span> row <span class="k">in</span> rows {
+        <span class="k">let</span> row = row?;
+        <span class="k">if let</span> (Some(Term::Literal(t)), Some(Term::Literal(s))) = (row.get(<span class="s">"text"</span>), row.get(<span class="s">"score"</span>)) {
+            out.push((t.value().to_owned(), s.value().parse().unwrap_or(0.0)));
+        }
+    }
+    Ok(out)
+}</code></pre>
+<pre><code>recall(&amp;store, <span class="s">"http://example.com/alice"</span>, &amp;[0.85, 0.2, 0.05, 0.1], 2)?
+<span class="c">// [("Alice is flying to Lisbon for the ACME offsite", 0.9919),</span>
+<span class="c">//  ("Bob is also going to the ACME offsite", 0.9885)]</span></code></pre>
+      <p>The user comes from your session, not from the model, so the model can't widen its own access. Expose the tools to the model with plain JSON Schema. The wrapper field names differ between LLM APIs, but the schema is the same:</p>
+<pre><code>{
+  <span class="s">"name"</span>: <span class="s">"recall"</span>,
+  <span class="s">"description"</span>: <span class="s">"Search long-term memory for facts relevant to a question. Returns memory texts, most relevant first."</span>,
+  <span class="s">"input_schema"</span>: {
+    <span class="s">"type"</span>: <span class="s">"object"</span>,
+    <span class="s">"properties"</span>: {
+      <span class="s">"question"</span>: { <span class="s">"type"</span>: <span class="s">"string"</span>, <span class="s">"description"</span>: <span class="s">"What to remember, in natural language"</span> },
+      <span class="s">"k"</span>: { <span class="s">"type"</span>: <span class="s">"integer"</span>, <span class="s">"minimum"</span>: 1, <span class="s">"maximum"</span>: 20, <span class="s">"default"</span>: 5 }
+    },
+    <span class="s">"required"</span>: [<span class="s">"question"</span>]
+  }
+}</code></pre>
+      <p>Your tool handler embeds <code>question</code> with the same model that embedded the memories, then calls <code>recall</code>. A <code>remember</code> tool takes <code>text</code> and <code>about</code>, and a <code>related</code> tool can run recipe 4 so the model can ask "what else should I know?" explicitly. A complete turn looks like this:</p>
+      <ol>
+        <li><strong>Recall</strong> before answering: recipe 2 for relevance, recipe 4 for context the question didn't mention.</li>
+        <li><strong>Answer</strong>, citing provenance (recipe 5) when the user asks "how do you know?".</li>
+        <li><strong>Remember</strong> new facts, each with <code>ex:about</code> edges to the entities it mentions.</li>
+        <li><strong>Consolidate</strong> in the background: the near-duplicate query from step 5.</li>
+        <li><strong>Forget</strong> on request, or when a memory expires, with <code>DELETE</code>.</li>
+      </ol>
+      <h3>Rank by relevance and recency: a host function</h3>
+      <p>A <code>FILTER</code> on dates is a hard cut. For a soft preference for fresh memories, register a <strong>host function</strong>: Rust code that SPARQL, Cypher and Datalog can all call, while the rest of the query still compiles to SQL:</p>
+<pre><code><span class="k">use</span> chrono::NaiveDate;
+<span class="k">use</span> oxilite::functions::HostFunction;
+<span class="k">use</span> oxilite::model::{Literal, Term};
+
+<span class="k">fn</span> date(t: &amp;Term) -&gt; Option&lt;NaiveDate&gt; {
+    <span class="k">match</span> t { Term::Literal(l) =&gt; NaiveDate::parse_from_str(l.value(), <span class="s">"%Y-%m-%d"</span>).ok(), _ =&gt; None }
+}
+
+store.register_function(
+    HostFunction::new(<span class="s">"http://example.com/fn#decay"</span>, |args| {
+        <span class="k">let</span> age = (date(args.get(1)?)? - date(args.first()?)?).num_days() <span class="k">as</span> f64;
+        Some(Literal::from(0.5_f64.powf(age / 14.0)).into())   <span class="c">// halves every 14 days</span>
+    })
+    .cypher_name(<span class="s">"fn.decay"</span>)
+    .arity(2, 2)
+    .description(<span class="s">"half-life weighting: 1.0 today, 0.5 after 14 days"</span>),
+)?;</code></pre>
+<pre><code>PREFIX fn: &lt;http://example.com/fn#&gt;
+SELECT ?text ?rank WHERE {
+  SERVICE &lt;oxilite:vector/memories&gt; {
+    [] oxl:query <span class="s">"[0.85, 0.2, 0.05, 0.1]"</span> ; oxl:k 20 ; oxl:node ?m ; oxl:score ?score .
+  }
+  ?m ex:visibleTo ex:alice ; ex:text ?text ; ex:at ?at .
+  BIND(?score * fn:decay(?at, <span class="s">"2026-09-28"</span>^^xsd:date) AS ?rank)
+}
+ORDER BY DESC(?rank) LIMIT 3</code></pre>
+<pre><code>text                                             rank
+Bob is also going to the ACME offsite            0.699
+Alice is flying to Lisbon for the ACME offsite   0.667
+The offsite agenda is due on Friday              0.557</code></pre>
+      <p>The four-day-old agenda reminder now beats the month-old seat preference, which pure similarity ranked higher. Host functions are also a good place for a policy check, a PII redactor, or a re-ranker. A function returns <code>None</code> for "no value", which SPARQL treats like any other evaluation error. Registered functions belong to the store handle and aren't saved in the database.</p>
+
+      <h2 id="http"><span class="step">7</span>Agents in Python, TypeScript, anything</h2>
+      <p>The Python and Node packages don't expose vector indexes yet. Any language can still use them over HTTP: <code>oxilite serve</code> speaks the SPARQL 1.1 protocol, and with <code>--turso</code> every recipe above works as-is.</p>
+<pre><code>oxilite serve --turso -l agent-memory.db -b 127.0.0.1:7879</code></pre>
+<pre><code>curl -s http://127.0.0.1:7879/query \
+  -H <span class="s">'Accept: application/sparql-results+json'</span> \
+  --data-urlencode <span class="s">'query=PREFIX oxl: &lt;https://oxilite.dev/ns#&gt; PREFIX ex: &lt;http://example.com/&gt;
+    SELECT ?text ?score WHERE {
+      SERVICE &lt;oxilite:vector/memories&gt; { [] oxl:query "[0.85, 0.2, 0.05, 0.1]" ; oxl:k 2 ; oxl:node ?m ; oxl:score ?score }
+      ?m ex:text ?text } ORDER BY DESC(?score)'</span></code></pre>
+      <p>From a Python agent, using only the standard library:</p>
+<pre><code><span class="k">import</span> json, urllib.parse, urllib.request
+
+ENDPOINT = <span class="s">"http://127.0.0.1:7879"</span>
+
+<span class="k">def</span> sparql(query: str) -&gt; list[dict]:
+    body = urllib.parse.urlencode({<span class="s">"query"</span>: query}).encode()
+    req = urllib.request.Request(f<span class="s">"{ENDPOINT}/query"</span>, data=body,
+                                 headers={<span class="s">"Accept"</span>: <span class="s">"application/sparql-results+json"</span>})
+    <span class="k">with</span> urllib.request.urlopen(req) <span class="k">as</span> r:
+        <span class="k">return</span> json.load(r)[<span class="s">"results"</span>][<span class="s">"bindings"</span>]
+
+<span class="k">def</span> update(text: str) -&gt; <span class="k">None</span>:
+    req = urllib.request.Request(f<span class="s">"{ENDPOINT}/update"</span>, data=text.encode(),
+                                 headers={<span class="s">"Content-Type"</span>: <span class="s">"application/sparql-update"</span>})
+    urllib.request.urlopen(req).close()          <span class="c"># raises HTTPError (400) on a bad embedding</span>
+
+<span class="k">def</span> recall(user: str, embedding: list[float], k: int = 5) -&gt; list[str]:
+    rows = sparql(f<span class="s">"""PREFIX oxl: &lt;https://oxilite.dev/ns#&gt; PREFIX ex: &lt;http://example.com/&gt;
+      SELECT ?text ?score WHERE {{
+        SERVICE &lt;oxilite:vector/memories&gt; {{
+          [] oxl:query "{json.dumps(embedding)}" ; oxl:k {k * 4} ; oxl:node ?m ; oxl:score ?score }}
+        ?m ex:visibleTo &lt;{user}&gt; ; ex:text ?text .
+      }} ORDER BY DESC(?score) LIMIT {k}"""</span>)
+    <span class="k">return</span> [row[<span class="s">"text"</span>][<span class="s">"value"</span>] <span class="k">for</span> row <span class="k">in</span> rows]</code></pre>
+      <p>Keep the endpoint private to the agent's host. It accepts updates, and it has no authentication of its own.</p>
+
+      <h2 id="cypher-datalog"><span class="step">8</span>The same index from Cypher and Datalog</h2>
+      <p>SPARQL, Cypher and Datalog share one nearest-neighbour statement, so they agree on results by construction. Use whichever language your agent (or your team) already speaks.</p>
+      <p><strong>Cypher</strong> uses Neo4j's procedure, so existing Neo4j queries port unchanged. <code>node</code> is a real graph node, and the pattern keeps going from it:</p>
+<pre><code>CALL db.index.vector.queryNodes(<span class="s">'memories'</span>, 10, $question) YIELD node, score
+MATCH (node)-[:visibleTo]-&gt;(:Person {name: <span class="s">'Alice'</span>})
+MATCH (node)-[:about]-&gt;(p:Person)
+RETURN node.text AS memory, p.name AS about, score
+ORDER BY score DESC LIMIT 3</code></pre>
+<pre><code>memory                                           about  score
+Alice is flying to Lisbon for the ACME offsite   Alice  0.992
+Bob is also going to the ACME offsite            Bob    0.988
+Alice prefers aisle seats on long flights        Alice  0.973</code></pre>
+      <p><strong>Datalog</strong> has a built-in relation, <code>nearest(index, query, k, ?node, ?rank)</code>, that rules use like any other fact. Rules give the "what else should I know?" question a name, and negation drops what the agent has already seen:</p>
+<pre><code>@prefix ex: &lt;http://example.com/&gt; .
+
+recalled(?m)     :- nearest(<span class="s">"memories"</span>, <span class="s">"[0.85, 0.2, 0.05, 0.1]"</span>, 3, ?m, ?rank).
+seen(?m)         :- recalled(?m), ex:visibleTo(?m, ex:alice).
+event(?e)        :- seen(?m), ex:about(?m, ?e), ex:Event(?e).
+attendee(?p)     :- event(?e), ex:about(?m, ?e), ex:about(?m, ?p), ex:Person(?p).
+unseen(?who, ?t) :- attendee(?p), ex:name(?p, ?who), ex:about(?m, ?p), ex:text(?m, ?t),
+                    ex:visibleTo(?m, ex:alice), not seen(?m).
+
+?- unseen(?who, ?t).</code></pre>
+<pre><code>oxilite datalog --turso -l agent-memory.db -f followup.dl
+who    t
+Alice  Alice prefers aisle seats on long flights
+Bob    Bob is allergic to peanuts</code></pre>
+      <p>These are the two facts about the people going to the offsite that the travel search didn't surface. They are exactly what the agent should add to its context. Datalog returns a rank rather than a distance, because in oxilite's Datalog every value is a stored term. See <a href="datalog-rules.html">Rules your SPARQL can't write</a> for the language.</p>
+
+      <h2 id="operate"><span class="step">9</span>Running it</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Task</th><th>How</th></tr></thead>
+          <tbody>
+            <tr><td>See what's indexed</td><td><code>.vector list</code> in the shell, <code>SHOW VECTOR INDEXES</code> in Cypher, <code>store.vector_indexes()</code> in Rust: rows, dimensions, metric, and whether each index is built.</td></tr>
+            <tr><td>Query the definitions</td><td><code>SELECT * WHERE { GRAPH &lt;oxilite:vectors&gt; { ?i ?p ?o } }</code>. Definitions are data.</td></tr>
+            <tr><td>Change the metric</td><td>A SPARQL <code>DELETE/INSERT</code> of <code>oxl:metric</code> in <code>&lt;oxilite:vectors&gt;</code> rebuilds the index with the new metric.</td></tr>
+            <tr><td>Change embedding models</td><td>Write the new vectors to a new property (<code>ex:embedding_v2</code>), create an index on it, switch the <code>SERVICE</code> name in your queries, then drop the old index and <code>DELETE WHERE { ?m ex:embedding ?e }</code>. Both indexes answer queries during the migration.</td></tr>
+            <tr><td>Copy a store</td><td>Dump and load with the Rust API. Definitions travel in <code>&lt;oxilite:vectors&gt;</code>, and <code>store.sync_vector_indexes()</code> builds them on the target.</td></tr>
+            <tr><td>Drop an index</td><td><code>store.drop_vector_index("memories")</code>, <code>DROP INDEX memories</code> in Cypher, or <code>.vector drop memories</code>. The embeddings stay as triples.</td></tr>
+            <tr><td>Audit what the agent knew</td><td>Create the store with <code>--versioning log</code>: every write is a commit with an author and a message, and <code>--as-of HEAD~1</code> queries the graph as it was.</td></tr>
+            <tr><td>Back up</td><td>It's one database file, plus Turso's <code>-wal</code> file beside it. Copy both while no writer is running.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="limits">Limits</h2>
+      <ul>
+        <li><strong>Dense search is an exact scan.</strong> Turso has an approximate index only for sparse vectors (Jaccard). Cosine, Euclidean and dot-product search scan the index table: exact, and quick up to around a hundred thousand vectors, which covers most per-agent memories. It is not an ANN index for a hundred million. When Turso ships a dense index, it plugs into the one place oxilite writes nearest-neighbour SQL.</li>
+        <li><strong>Turso only.</strong> Bundled SQLite, a system <code>libsqlite3</code> and Cloudflare D1 have no vector functions, so creating an index or running a vector <code>SERVICE</code> there fails with an error that names Turso. For agents on Workers, see <a href="agent-memory-durable-objects.html">graph memory on Durable Objects</a>.</li>
+        <li><strong>Multi-pattern <code>OPTIONAL</code> on Turso.</strong> Turso 0.8.0-pre.14 doesn't parse the parenthesized join that an <code>OPTIONAL</code> with more than one pattern (or a path inside one) compiles to. Chain single-pattern <code>OPTIONAL</code>s instead, as in recipe 5.</li>
+        <li><strong>No full-text index on Turso.</strong> FTS5 isn't available there, so <code>oxl:textMatch</code> has no index.</li>
+        <li><strong>A prerelease engine.</strong> oxilite pins Turso <code>0.8.0-pre.14</code> exactly, because recursive queries need it. The pin moves when Turso 0.8.0 is released.</li>
+        <li><strong>Embeddings come from you.</strong> oxilite stores and searches vectors. Your application computes them, with the same model for memories and questions.</li>
+        <li><strong>Rust, the CLI and HTTP.</strong> The Python and Node packages don't expose vector indexes or host functions yet (use <code>oxilite serve --turso</code>), and <code>oxilite mcp</code> doesn't open Turso stores.</li>
+      </ul>
+
+      <div class="callout">
+        <p><strong>The takeaway.</strong> Similarity tells an agent where to look. The graph tells it what's there, who may see it, and what else it should know. On Turso, both run in one query.</p>
+      </div>
+      <p>Further reading: <a href="turso-vectors.html">Vectors that know where they are</a> (why the design looks like this), <a href="versioning-knowledge-graph-memory.html">A knowledge graph with a memory</a> (history for agent memory), <a href="agent-memory-durable-objects.html">Graph memory for AI agents on Durable Objects</a>, the <a href="../ns/">oxl: vocabulary</a>, and the <a href="https://github.com/Volland/oxilite/blob/main/crates/oxilite-turso/README.md"><code>oxilite-turso</code> README</a>.</p>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt="" width="28" height="28"><span>oxilite</span></a>
+      <span>MIT or Apache-2.0</span>
+      <nav aria-label="Rechtliches">
+        <a href="../impressum.html">Impressum</a>
+        <a href="../datenschutz.html">Datenschutz</a>
+        <a href="../agb.html">AGB</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>
