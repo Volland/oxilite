@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How to use oxilite with Python – oxilite</title>
+  <meta name="description" content="A step-by-step tutorial for oxilite's Python package: pyoxigraph's API on a single SQLite file, with SPARQL, openCypher, Datalog, reasoning, JSON-LD documents, Verifiable Credentials and time travel.">
+  <meta property="og:title" content="How to use oxilite with Python">
+  <meta property="og:description" content="pip install oxilite: a knowledge graph in one SQLite file, with pyoxigraph's API, Cypher, Datalog, reasoning and time travel.">
+  <meta property="og:image" content="../assets/logo.png">
+  <meta name="theme-color" content="#0a0a0a">
+  <link rel="canonical" href="https://oxilitedb.com/articles/oxilite-python">
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg">
+  <link rel="icon" type="image/png" href="../assets/logo.png">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt=""><span>oxi<b>lite</b></span></a>
+      <nav class="nav" aria-label="Main">
+        <a href="../">Home</a>
+        <a href="./">Articles</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="article">
+    <article class="wrap">
+      <span class="kicker">Python · Tutorial</span>
+      <h1>How to use oxilite with Python</h1>
+      <p class="standfirst">Most knowledge-graph work happens in Python, in notebooks, pipelines and agent frameworks. oxilite now ships a Python package with pyoxigraph's API. It keeps the whole graph in one SQLite file, and the same data answers SPARQL, openCypher and Datalog.</p>
+      <p class="meta">A tutorial · Every snippet on this page comes from <a href="https://github.com/Volland/oxilite/blob/main/examples/python-tour/tour.py"><code>examples/python-tour/tour.py</code></a>, which CI runs with the outputs asserted</p>
+
+      <h2>Why a SQLite file</h2>
+      <p>Python already has an excellent RDF store: <a href="https://pypi.org/project/pyoxigraph/">pyoxigraph</a>, Oxigraph's Python package. It stores data in RocksDB, as a directory of files that only RocksDB can read. That is the right choice for a server. It gets awkward when the graph must travel:</p>
+      <ul>
+        <li>when you commit a fixture to a repository</li>
+        <li>when you attach a dataset to a notebook</li>
+        <li>when you ship a graph inside a desktop app</li>
+        <li>when you give each agent its own memory file</li>
+        <li>when you inspect a database with <code>sqlite3</code></li>
+      </ul>
+      <p>oxilite keeps Oxigraph's data model, SPARQL semantics and API, and stores everything in SQLite. Each query compiles to one SQL statement. The file can be copied, backed up and opened by any SQLite tool. On top of that, oxilite adds what pyoxigraph does not have:</p>
+      <ul>
+        <li>openCypher and Datalog over the same quads</li>
+        <li>RDFS and OWL reasoning</li>
+        <li>a registry of ontologies and SHACL shapes</li>
+        <li>JSON-LD documents stored verbatim</li>
+        <li>Verifiable Credentials</li>
+        <li>a version history you can query</li>
+      </ul>
+
+      <h2>Install</h2>
+<pre><code>pip install oxilite</code></pre>
+      <p>That installs one prebuilt wheel, with SQLite compiled in. It needs no compiler and no system library. Wheels use CPython's stable ABI, so the same wheel serves Python 3.9 through the newest release, on:</p>
+      <ul>
+        <li>Linux (x86_64 and aarch64, glibc and musl)</li>
+        <li>macOS (Intel and Apple silicon)</li>
+        <li>Windows (x64)</li>
+      </ul>
+
+      <h2><span class="step">1</span>A knowledge graph in one file</h2>
+<pre><code><span class="k">from</span> oxilite <span class="k">import</span> Literal, NamedNode, Quad, RdfFormat, Store
+
+store = Store(<span class="s">"team.sqlite"</span>)          <span class="c"># created on first use; Store() is in memory</span>
+store.load(<span class="s">"""
+    @prefix ex:   &lt;http://example.org/&gt; .
+    @prefix foaf: &lt;http://xmlns.com/foaf/0.1/&gt; .
+
+    ex:ada   a ex:Engineer ; foaf:name "Ada"   ; ex:age 36 ; foaf:knows ex:grace .
+    ex:grace a ex:Engineer ; foaf:name "Grace" ; ex:age 45 ; foaf:knows ex:alan .
+    ex:alan  a ex:Researcher ; foaf:name "Alan" ; ex:age 41 .
+"""</span>, RdfFormat.TURTLE)
+
+EX = <span class="s">"http://example.org/"</span>
+store.add(Quad(NamedNode(EX + <span class="s">"alan"</span>), NamedNode(EX + <span class="s">"age"</span>), Literal(42)))
+store.remove(Quad(NamedNode(EX + <span class="s">"alan"</span>), NamedNode(EX + <span class="s">"age"</span>), Literal(41)))
+len(store)                               <span class="c"># 11</span></code></pre>
+      <p>Each piece of that code does one thing:</p>
+      <ul>
+        <li><strong><code>load</code></strong> accepts a string, bytes, an open file, or <code>path="dump.nq"</code>, whose extension picks the format. It is atomic: a syntax error on line 900 leaves the store untouched, and the <code>SyntaxError</code> carries the file name, line and column. For millions of triples, <code>bulk_load</code> commits in chunks and refreshes the planner's statistics at the end.</li>
+        <li><strong>Terms</strong> are plain Python values. <code>Literal(42)</code> is an <code>xsd:integer</code>. Terms can be hashed and pickled, and <code>match</code> statements destructure them.</li>
+        <li><strong>An invalid IRI</strong> raises <code>ValueError</code> on the line that builds it, not deep inside a query.</li>
+      </ul>
+
+      <h2><span class="step">2</span>Ask it with SPARQL</h2>
+<pre><code>PREFIXES = {<span class="s">"ex"</span>: EX, <span class="s">"foaf"</span>: <span class="s">"http://xmlns.com/foaf/0.1/"</span>}
+
+solutions = store.query(
+    <span class="s">"SELECT ?name ?age WHERE { ?p foaf:name ?name ; ex:age ?age } ORDER BY DESC(?age)"</span>,
+    prefixes=PREFIXES,
+)
+[v.value <span class="k">for</span> v <span class="k">in</span> solutions.variables]             <span class="c"># ['name', 'age']</span>
+[(s[<span class="s">"name"</span>].value, int(s[<span class="s">"age"</span>].value)) <span class="k">for</span> s <span class="k">in</span> solutions]
+<span class="c"># [('Grace', 45), ('Alan', 42), ('Ada', 36)]</span>
+
+store.query(<span class="s">"ASK { ex:ada foaf:knows ex:grace }"</span>, prefixes=PREFIXES)          <span class="c"># truthy</span>
+store.query(<span class="s">"CONSTRUCT { ?b ex:knownBy ?a } WHERE { ?a foaf:knows ?b }"</span>, prefixes=PREFIXES)</code></pre>
+      <p>Results come back in pyoxigraph's classes, one per query form:</p>
+      <ul>
+        <li><strong><code>QuerySolutions</code></strong>, for <code>SELECT</code>: an iterator of solutions, each readable by name, by position, by <code>Variable</code>, or by unpacking.</li>
+        <li><strong><code>QueryBoolean</code></strong>, for <code>ASK</code>: usable as a <code>bool</code>.</li>
+        <li><strong><code>QueryTriples</code></strong>, for <code>CONSTRUCT</code> and <code>DESCRIBE</code>: an iterator of triples.</li>
+      </ul>
+      <p>Each one serializes to the standard results formats:</p>
+<pre><code><span class="k">from</span> oxilite <span class="k">import</span> QueryResultsFormat, Variable
+
+store.query(<span class="s">"SELECT ?name WHERE { ?p foaf:name ?name } ORDER BY ?name"</span>, prefixes=PREFIXES
+            ).serialize(format=QueryResultsFormat.CSV)
+<span class="c"># b'name\r\nAda\r\nAlan\r\nGrace\r\n'</span>
+
+<span class="c"># Bind a variable before evaluation, without string formatting (no injection):</span>
+store.query(<span class="s">"SELECT ?friend WHERE { ?p foaf:knows ?friend }"</span>, prefixes=PREFIXES,
+            substitutions={Variable(<span class="s">"p"</span>): NamedNode(EX + <span class="s">"ada"</span>)})
+
+<span class="c"># Rows as dicts, ready for pandas.DataFrame(rows) or a JSON API:</span>
+solutions = store.query(<span class="s">"SELECT ?name ?age WHERE { ?p foaf:name ?name ; ex:age ?age }"</span>, prefixes=PREFIXES)
+rows = [{v.value: s[v].value <span class="k">for</span> v <span class="k">in</span> solutions.variables} <span class="k">for</span> s <span class="k">in</span> solutions]</code></pre>
+      <p><code>substitutions</code> binds variables before the query runs. oxilite implements it by joining a one-row <code>VALUES</code> into the query's algebra, so the query is still a single SQL statement.</p>
+
+      <h2><span class="step">3</span>See the SQL</h2>
+      <p>Nothing is hidden. <code>explain</code> shows the statement a query becomes, and the join order the planner chose:</p>
+<pre><code>print(store.explain(<span class="s">"PREFIX ex: &lt;http://example.org/&gt; "</span>
+                    <span class="s">"SELECT ?p WHERE { ?p a ex:Engineer ; ex:age ?a FILTER(?a &gt; 40) }"</span>))</code></pre>
+<pre><code><span class="c">-- oxilite: fully compiled to SQL (1 output variable(s))</span>
+<span class="c">-- join order (heuristics, run optimize() for statistics): ?p rdf:type ex:Engineer (~500 rows) → ?p ex:age ?a (~1 rows)</span>
+SELECT q1.s AS v0 FROM quads q1 CROSS JOIN quads q2
+WHERE q1.p = 662360971285383673 AND q1.o = 1092603140165095980 AND +q1.g = 0
+  AND q2.s = q1.s AND q2.p = 768773004378996546 AND +q2.g = 0
+  AND (CASE … ((q2.o) &amp; 576460752303423487) - 288230376151711744 … END) &gt; (40)</code></pre>
+      <p>Each detail in that SQL has a reason:</p>
+      <ul>
+        <li><strong>Constants are integers.</strong> Every term is a 64-bit hash computed in Rust, so the constants in the SQL are integers, and no dictionary lookup runs at query time.</li>
+        <li><strong>Small numbers live in the id.</strong> Small integers are stored inside the id itself, so <code>?a &gt; 40</code> is plain arithmetic, not a join.</li>
+        <li><strong>The planner needs statistics.</strong> Run <code>store.optimize()</code> after a large import, and it orders joins from real per-predicate counts.</li>
+      </ul>
+      <p><code>explain_update</code>, <code>explain_cypher</code> and <code>explain_datalog</code> do the same for the other languages.</p>
+
+      <h2><span class="step">4</span>Coming from pyoxigraph</h2>
+<pre><code><span class="k">import</span> oxilite <span class="k">as</span> pyoxigraph            <span class="c"># the only change most pyoxigraph code needs</span>
+
+legacy = pyoxigraph.Store(<span class="s">"data/"</span>)       <span class="c"># an existing directory: the data goes to data/oxilite.sqlite</span></code></pre>
+      <p>This is not a promise, it is a test. pyoxigraph's own test suite (<code>test_store.py</code>, <code>test_model.py</code>, <code>test_io.py</code>) runs against oxilite on every build with only the import changed. 112 tests pass. Three are listed as known divergences, and CI fails if any other test fails, or if a listed one starts passing:</p>
+      <table>
+        <thead><tr><th>pyoxigraph feature</th><th>oxilite</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td><code>custom_functions</code>, <code>custom_aggregate_functions</code></td><td><code>NotImplementedError</code></td><td>A query is one SQL statement run by SQLite, which cannot call back into Python for each row</td></tr>
+          <tr><td><code>LOAD &lt;https://…&gt;</code> in an update</td><td><code>NotImplementedError</code></td><td>The core does no network I/O. Download the file, then <code>store.load(path=…)</code></td></tr>
+        </tbody>
+      </table>
+      <p>The rest carries over:</p>
+      <ul>
+        <li>RDF-star triple terms</li>
+        <li><code>default_graph</code> and <code>named_graphs</code> datasets</li>
+        <li><code>use_default_graph_as_union</code></li>
+        <li><code>bulk_load</code></li>
+        <li><code>dump</code> to paths and file objects</li>
+        <li><code>parse</code>, <code>serialize</code> and <code>parse_query_results</code></li>
+        <li><code>Store.read_only</code></li>
+      </ul>
+
+      <h2><span class="step">5</span>The same data, as a property graph</h2>
+      <p>Some questions read better as graph patterns. <code>cypher</code> runs openCypher over the same quads. In that view:</p>
+      <ul>
+        <li>nodes are IRIs</li>
+        <li>labels are <code>rdf:type</code></li>
+        <li>properties are literal triples</li>
+        <li>relationships are triples</li>
+      </ul>
+<pre><code>cy = {<span class="s">"base"</span>: EX, <span class="s">"prefixes"</span>: {<span class="s">"foaf"</span>: <span class="s">"http://xmlns.com/foaf/0.1/"</span>}}
+result = store.cypher(
+    <span class="s">"MATCH (a)-[:`foaf:knows`]-&gt;(b) RETURN a.`foaf:name` AS who, b.`foaf:name` AS knows ORDER BY who"</span>, **cy)
+result.records     <span class="c"># [{'who': 'Ada', 'knows': 'Grace'}, {'who': 'Grace', 'knows': 'Alan'}]</span>
+
+created = store.cypher(
+    <span class="s">"MATCH (a {`foaf:name`: 'Alan'}) CREATE (a)-[:MENTORS {since: 2024}]-&gt;(:Engineer {`foaf:name`: 'Linus'})"</span>, **cy)
+created.stats.nodes_created, created.stats.relationships_created     <span class="c"># (1, 1)</span>
+store.query(<span class="s">'ASK { ?n foaf:name "Linus" ; a ex:Engineer }'</span>, prefixes=PREFIXES)   <span class="c"># truthy</span></code></pre>
+      <p>How the two views map onto each other:</p>
+      <ul>
+        <li><strong>Names.</strong> <code>base</code> gives unprefixed labels and keys a namespace. <code>prefixes</code> lets you write <code>`foaf:name`</code>.</li>
+        <li><strong>Relationship properties.</strong> A relationship with properties, such as <code>since</code>, gets an RDF 1.2 reifier. SPARQL sees everything Cypher writes, and Cypher sees everything SPARQL writes.</li>
+        <li><strong>Results.</strong> Nodes and relationships come back as <code>CypherNode</code> and <code>CypherRelationship</code> dataclasses, and <code>records</code> are plain dicts.</li>
+        <li><strong>Atomicity.</strong> A writing statement is atomic.</li>
+      </ul>
+
+      <h2><span class="step">6</span>Rules that recurse</h2>
+      <p>Datalog handles questions that need recursion together with a join, a filter or a count. SPARQL property paths cannot express those. Here "reach" follows two predicates, one of them written a moment ago by Cypher:</p>
+<pre><code>program = <span class="s">"""
+@prefix ex:   &lt;http://example.org/&gt; .
+@prefix foaf: &lt;http://xmlns.com/foaf/0.1/&gt; .
+reach(?x, ?y) :- foaf:knows(?x, ?y).
+reach(?x, ?y) :- ex:MENTORS(?x, ?y).
+reach(?x, ?z) :- reach(?x, ?y), reach(?y, ?z).
+?- reach(ex:ada, ?who).
+"""</span>
+sorted(r[<span class="s">"who"</span>].value <span class="k">for</span> r <span class="k">in</span> store.datalog(program).records)
+<span class="c"># ['http://example.org/alan', 'http://example.org/grace', 'urn:oxilite:node:…']   ← Linus</span></code></pre>
+      <p>The program's parts:</p>
+      <ul>
+        <li><strong>Atoms.</strong> An IRI with two arguments is a triple pattern, and an IRI with one argument is a class.</li>
+        <li><strong>Evaluation.</strong> Linear recursion compiles to a single <code>WITH RECURSIVE</code> statement. Other recursion is iterated to a fixpoint, and <code>result.rounds</code> reports how many rounds it took.</li>
+        <li><strong>Rejected programs.</strong> A program with negation inside a recursive cycle raises <code>ValueError</code> naming the cycle, before any SQL runs.</li>
+        <li><strong>Materializing.</strong> <code>datalog_materialize(program)</code> stores what the rules derive. Queries see those triples with <code>include_inferred=True</code>.</li>
+      </ul>
+
+      <h2><span class="step">7</span>Reasoning</h2>
+<pre><code>store.update(<span class="s">"""PREFIX ex: &lt;http://example.org/&gt; PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;
+    INSERT DATA { ex:Engineer rdfs:subClassOf ex:Person . ex:Researcher rdfs:subClassOf ex:Person . }"""</span>)
+
+count = <span class="k">lambda</span> **opts: len(list(store.query(<span class="s">"SELECT ?p WHERE { ?p a ex:Person }"</span>, prefixes=PREFIXES, **opts)))
+count(), count(reasoning=<span class="s">"rdfs"</span>)                  <span class="c"># (0, 4)</span>
+
+store.materialize(engine=<span class="s">"reasonable"</span>)             <span class="c"># OWL 2 RL closure, stored apart from the data</span>
+count(include_inferred=<span class="k">True</span>)                        <span class="c"># 4</span></code></pre>
+      <p>You have two options:</p>
+      <ul>
+        <li><strong>Reason at query time.</strong> <code>reasoning="rdfs"</code> (or <code>"owl-ql"</code>) rewrites the query over the class and property hierarchies. Nothing is stored, so there is nothing to keep in sync.</li>
+        <li><strong>Materialize.</strong> <code>materialize()</code> computes the full OWL 2 RL closure once and keeps it in a separate table. <code>clear_inferences()</code> drops it.</li>
+      </ul>
+      <p>When ontologies live in named graphs, <code>register_schema_graph(graph, "ontology", applies_to=[…])</code> scopes reasoning to the ontologies you trust and the graphs they describe. <code>"shacl"</code> graphs feed a compiled shape index that checks Cypher writes.</p>
+
+      <h2><span class="step">8</span>JSON-LD documents and credentials</h2>
+<pre><code>docs = store.jsonld()
+key = docs.put(<span class="s">'{"@context": {"name": "http://xmlns.com/foaf/0.1/name"}, '</span>
+               <span class="s">'"@id": "http://example.org/doc/1", "name": "Ada"}'</span>)
+docs.get(key).json                     <span class="c"># the exact text you stored, byte for byte</span>
+store.query(<span class="s">'ASK { GRAPH &lt;http://example.org/doc/1&gt; { ?s foaf:name "Ada" } }'</span>, prefixes=PREFIXES)
+
+vcs = store.credentials()
+vcs.put({
+    <span class="s">"@context"</span>: [<span class="s">"https://www.w3.org/ns/credentials/v2"</span>],
+    <span class="s">"id"</span>: <span class="s">"urn:uuid:badge-1"</span>, <span class="s">"type"</span>: [<span class="s">"VerifiableCredential"</span>],
+    <span class="s">"issuer"</span>: <span class="s">"did:example:academy"</span>, <span class="s">"validFrom"</span>: <span class="s">"2024-01-01T00:00:00Z"</span>,
+    <span class="s">"credentialSubject"</span>: {<span class="s">"id"</span>: <span class="s">"did:example:ada"</span>},
+})
+[c.key <span class="k">for</span> c <span class="k">in</span> vcs.find(issuer=<span class="s">"did:example:academy"</span>, valid_at=datetime.now(timezone.utc))]
+<span class="c"># ['urn:uuid:badge-1']</span></code></pre>
+      <p>Each document is stored as it was written, under its key. Its RDF goes in a named graph of the same IRI, and SPARQL queries that graph like any other. The rest follows from that:</p>
+      <ul>
+        <li><strong>Contexts.</strong> The W3C credential contexts are bundled, so nothing is fetched. <code>network=True</code> opts in to downloading other contexts.</li>
+        <li><strong>Lookups.</strong> <code>find</code> answers by issuer, subject, type and validity from indexed columns, without SPARQL.</li>
+        <li><strong>Types.</strong> Timestamps are timezone-aware <code>datetime</code>s. Errors raise <code>JsonLdError</code>, whose <code>code</code> is the JSON-LD error code.</li>
+        <li><strong>Proofs.</strong> Proofs are kept in their own graphs, but oxilite does not verify them: verify them on the stored JSON with a verifier library.</li>
+      </ul>
+
+      <h2><span class="step">9</span>Time travel</h2>
+<pre><code>tasks = Store(<span class="s">"tasks.sqlite"</span>, versioning=<span class="s">"log"</span>)
+<span class="k">with</span> tasks.commit(author=<span class="s">"ada"</span>, message=<span class="s">"open the ticket"</span>):
+    tasks.update(<span class="s">'INSERT DATA { &lt;http://example.org/t1&gt; &lt;http://example.org/status&gt; "open" }'</span>)
+<span class="k">with</span> tasks.commit(author=<span class="s">"grace"</span>, message=<span class="s">"close it"</span>):
+    tasks.update(<span class="s">'DELETE DATA { … "open" } ; INSERT DATA { … "done" }'</span>)
+
+status = <span class="s">"SELECT ?s WHERE { &lt;http://example.org/t1&gt; &lt;http://example.org/status&gt; ?s }"</span>
+[s[<span class="s">"s"</span>].value <span class="k">for</span> s <span class="k">in</span> tasks.query(status)]                  <span class="c"># ['done']</span>
+[s[<span class="s">"s"</span>].value <span class="k">for</span> s <span class="k">in</span> tasks.query(status, as_of=<span class="s">"HEAD~1"</span>)]   <span class="c"># ['open']</span>
+
+[(c.author, c.message) <span class="k">for</span> c <span class="k">in</span> tasks.history() <span class="k">if</span> c.kind == <span class="s">"write"</span>]
+<span class="c"># [('grace', 'close it'), ('ada', 'open the ticket')]</span>
+<span class="k">for</span> change <span class="k">in</span> tasks.diff(<span class="s">"HEAD~1"</span>):
+    print(<span class="s">"+"</span> <span class="k">if</span> change.added <span class="k">else</span> <span class="s">"-"</span>, change.quad)
+<span class="c"># + &lt;http://example.org/t1&gt; &lt;http://example.org/status&gt; "done"</span>
+<span class="c"># - &lt;http://example.org/t1&gt; &lt;http://example.org/status&gt; "open"</span></code></pre>
+      <p>With <code>versioning="log"</code>, every write is a commit in an immutable change log. The history works like this:</p>
+      <ul>
+        <li><strong>Commits.</strong> <code>with store.commit(…)</code> records an author and a message on the writes in its block.</li>
+        <li><strong>Reading the past.</strong> <code>as_of</code> works in SPARQL, Cypher and Datalog. A version is <code>HEAD~n</code>, a tick (<code>#42</code>), or an instant (<code>@2026-09-01T00:00:00Z</code>).</li>
+        <li><strong>The present stays fast.</strong> Queries on the present keep the same SQL.</li>
+        <li><strong>Erasure.</strong> <code>purge</code> removes data from the present and from the whole history, for erasure requests.</li>
+      </ul>
+      <p>Versioning is opt-in per store. Without it, a store has no extra tables and pays no extra write cost.</p>
+
+      <h2><span class="step">10</span>Threads, asyncio and web apps</h2>
+<pre><code><span class="k">async def</span> main():
+    <span class="c"># Store calls release the GIL, so a thread per call keeps the event loop free.</span>
+    <span class="k">return await</span> asyncio.gather(*(asyncio.to_thread(<span class="k">lambda</span>: list(store.query(<span class="s">"SELECT * WHERE { ?s ?p ?o }"</span>)))
+                                  <span class="k">for</span> _ <span class="k">in</span> range(4)))</code></pre>
+      <p>A <code>Store</code> can be shared across threads. Every call releases the GIL while SQLite works, so readers in other threads keep running. Writes queue, since SQLite has one writer at a time. In a FastAPI or Flask app, open one store at startup and call it from your handlers. With asyncio, wrap calls in <code>asyncio.to_thread</code>.</p>
+
+      <h2>Limits to know</h2>
+      <ul>
+        <li><strong>Results are materialized.</strong> A query returns once its rows are decoded. For very large <code>SELECT</code>s, page with <code>LIMIT</code> and <code>OFFSET</code>.</li>
+        <li><strong>No Python inside SPARQL.</strong> Custom functions and aggregates are refused, and remote <code>LOAD</code> is not supported (see step 4).</li>
+        <li><strong>One writer.</strong> SQLite serializes writes. Batch them with <code>extend</code> or one <code>update</code>, or use <code>bulk_load</code> for imports.</li>
+        <li><strong>Proofs are not verified.</strong> Credentials are checked for structure and stored, not cryptographically verified.</li>
+      </ul>
+
+      <h2>Where next</h2>
+      <ul>
+        <li><a href="https://github.com/Volland/oxilite/blob/main/docs/python.md">The Python reference</a>: every method, option, result type and exception.</li>
+        <li><a href="https://github.com/Volland/oxilite/blob/main/docs/python-publishing.md">Building and publishing the package</a>: a development setup, the wheels, and releasing to PyPI.</li>
+        <li><a href="datalog-rules.html">Rules your SPARQL can't write</a>, <a href="property-graphs-cypher.html">Property graphs with Cypher</a> and <a href="time-travel.html">Time travel</a> go deeper into steps 5, 6 and 9. Their examples use JavaScript, but the calls are the same in Python.</li>
+      </ul>
+
+      <div class="callout">
+        <p><strong>The takeaway.</strong> Run <code>pip install oxilite</code> and you get pyoxigraph's API on a file you can copy, back up and open with <code>sqlite3</code>. The same data answers SPARQL, Cypher and Datalog. Reasoning, schemas, JSON-LD, credentials and history are each one method away.</p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt="" width="28" height="28"><span>oxilite</span></a>
+      <span>MIT or Apache-2.0</span>
+      <nav aria-label="Rechtliches">
+        <a href="../impressum.html">Impressum</a>
+        <a href="../datenschutz.html">Datenschutz</a>
+        <a href="../agb.html">AGB</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>

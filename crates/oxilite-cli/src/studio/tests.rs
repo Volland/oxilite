@@ -1343,3 +1343,54 @@ fn registry_edits_follow_the_update_rules() {
     );
     assert!(r.error.unwrap().message.contains("read-only"));
 }
+
+// @lat: [[tests#Studio server#Vector indexes on a Turso connection]]
+#[test]
+fn vector_indexes_on_a_turso_connection() {
+    let mut c = Client::start(workspace(&[("people.ttl", PEOPLE)]));
+    // The project store is bundled SQLite: no vector indexes there.
+    let r = c.ok("oxilite/vectorIndexes", json!({"connection": "project"}));
+    assert_eq!(r["supported"], false);
+    assert_eq!(r["indexes"], json!([]));
+    let db = c.dir.join("kg.db").display().to_string();
+    let list = c.ok("oxilite/attach", json!({"path": db, "engine": "turso"}));
+    assert_eq!(list[1]["kind"], "turso");
+    c.ok(
+        "oxilite/query",
+        json!({
+            "query": "INSERT DATA { <http://ex.org/a> <http://ex.org/e> \"[1, 0]\" . <http://ex.org/b> <http://ex.org/e> \"[0, 1]\" }",
+            "confirmed": true
+        }),
+    );
+    let created = c.ok(
+        "oxilite/vectorIndexCreate",
+        json!({"name": "docs", "property": "http://ex.org/e", "dimensions": 2, "metric": "cosine"}),
+    );
+    assert_eq!(created["rows"], 2);
+    assert_eq!(created["built"], true);
+    let r = c.ok("oxilite/vectorIndexes", json!({}));
+    assert_eq!(r["supported"], true);
+    assert_eq!(r["indexes"][0]["name"], "docs");
+    assert_eq!(r["indexes"][0]["iri"], "oxilite:vector/docs");
+    let hits = c.ok(
+        "oxilite/vectorSearch",
+        json!({"index": "docs", "vector": [0.9, 0.1], "k": 1}),
+    );
+    assert_eq!(hits["hits"][0]["node"]["value"], "http://ex.org/a");
+    assert!(hits["hits"][0]["score"].as_f64().unwrap() > 0.9);
+    let hits = c.ok(
+        "oxilite/vectorSearch",
+        json!({"index": "docs", "node": "http://ex.org/b", "k": 2}),
+    );
+    assert_eq!(hits["hits"][0]["node"]["value"], "http://ex.org/b");
+    assert_eq!(
+        c.ok("oxilite/functions", json!({})),
+        json!({"functions": []})
+    );
+    assert_eq!(
+        c.ok("oxilite/vectorIndexDrop", json!({"name": "docs"})),
+        json!({"dropped": true})
+    );
+    let r = c.ok("oxilite/vectorIndexes", json!({}));
+    assert_eq!(r["indexes"], json!([]));
+}

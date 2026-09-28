@@ -1,4 +1,5 @@
-//! The store behind the CLI: bundled SQLite, a dlopen'ed library, or D1 through the sidecar.
+//! The store behind the CLI: bundled SQLite, a dlopen'ed library, Turso, or D1 through the
+//! sidecar.
 
 use crate::Location;
 use oxilite::dylib::DylibBackend;
@@ -7,6 +8,7 @@ use oxilite::model::{GraphName, NamedNode, NamedOrBlankNode, Term};
 use oxilite::schema::{RegisteredGraph, Registration, SchemaRole, ShapeIndex};
 use oxilite::sparql::{QueryOptions, Reasoning, SparqlParser};
 use oxilite::store::Store;
+use oxilite::turso::TursoBackend;
 use oxilite::version::{Change, CommitInfo, CommitRecord, LevelChange, VersionStatus, Versioning};
 use oxilite::AsyncStore;
 use oxilite_core::encoding::graph_id;
@@ -109,6 +111,7 @@ pub fn parse_graph(s: &str) -> Result<GraphName> {
 pub enum Db {
     Native(Store),
     Library(Store<DylibBackend>),
+    Turso(Store<TursoBackend>),
     D1(Box<Mutex<AsyncStore<SidecarD1>>>),
 }
 
@@ -117,10 +120,26 @@ macro_rules! sync_store {
         match $self {
             Db::Native($s) => $e,
             Db::Library($s) => $e,
+            Db::Turso($s) => $e,
             Db::D1(m) => {
                 let $d1 = m.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
                 futures::executor::block_on($f)
             }
+        }
+    };
+}
+
+/// A vector index operation: on the blocking stores (it fails on those without vector
+/// functions); D1 has none.
+macro_rules! vector_store {
+    ($self:expr, $s:ident => $e:expr) => {
+        match $self {
+            Db::Native($s) => $e,
+            Db::Library($s) => $e,
+            Db::Turso($s) => $e,
+            Db::D1(_) => Err(oxilite::Error::unsupported(
+                "vector indexes need a Turso store (--turso); D1 has no vector functions",
+            )),
         }
     };
 }
@@ -175,6 +194,19 @@ impl Db {
             return Ok(Self::D1(Box::new(Mutex::new(store))));
         }
         let path = l.location.clone().unwrap_or_else(|| ":memory:".into());
+        if l.turso {
+            if l.library.is_some() {
+                return Err("--turso and --library cannot be combined".into());
+            }
+            let backend = if path == ":memory:" {
+                TursoBackend::memory()?
+            } else {
+                TursoBackend::open(&path)?
+            };
+            return Ok(Self::Turso(Store::with_backend_and_options(
+                backend, &options,
+            )?));
+        }
         Ok(match &l.library {
             Some(lib) => Self::Library(Store::with_backend_and_options(
                 DylibBackend::open(lib, &path)?,
@@ -234,6 +266,7 @@ impl Db {
         Ok(match self {
             Db::Native(s) => s.explain_opt(query, &options)?,
             Db::Library(s) => s.explain_opt(query, &options)?,
+            Db::Turso(s) => s.explain_opt(query, &options)?,
             Db::D1(_) if as_of.is_some() => {
                 return Err("explain --as-of is not available on D1; run the query instead".into())
             }
@@ -272,6 +305,7 @@ impl Db {
         match self {
             Db::Native(s) => s.set_commit_info(info),
             Db::Library(s) => s.set_commit_info(info),
+            Db::Turso(s) => s.set_commit_info(info),
             Db::D1(m) => m
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -330,6 +364,7 @@ impl Db {
         Ok(match self {
             Db::Native(s) => s.datalog(program)?,
             Db::Library(s) => s.datalog(program)?,
+            Db::Turso(s) => s.datalog(program)?,
             Db::D1(m) => futures::executor::block_on(
                 m.lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -343,6 +378,7 @@ impl Db {
         Ok(match self {
             Db::Native(s) => s.explain_datalog(program)?,
             Db::Library(s) => s.explain_datalog(program)?,
+            Db::Turso(s) => s.explain_datalog(program)?,
             Db::D1(m) => futures::executor::block_on(
                 m.lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -356,6 +392,7 @@ impl Db {
         Ok(match self {
             Db::Native(s) => s.datalog_materialize(program)?,
             Db::Library(s) => s.datalog_materialize(program)?,
+            Db::Turso(s) => s.datalog_materialize(program)?,
             Db::D1(m) => futures::executor::block_on(
                 m.lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -391,14 +428,58 @@ impl Db {
                 loader.load_from_slice(parser, data)?;
                 loader.commit()?;
             }
+            Db::Turso(s) if bulk => {
+                let mut loader = s.bulk_loader();
+                loader.load_from_slice(parser, data)?;
+                loader.commit()?;
+            }
             Db::Native(s) => s.load_from_slice(parser, data)?,
             Db::Library(s) => s.load_from_slice(parser, data)?,
+            Db::Turso(s) => s.load_from_slice(parser, data)?,
             Db::D1(m) => {
                 let s = m.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
                 futures::executor::block_on(s.bulk_load(parser, data))?;
             }
         }
         Ok(())
+    }
+
+    // --------------------------------------------------------------------- vector indexes
+
+    pub fn vector_indexes(&self) -> Result<Vec<oxilite::vector::VectorIndexInfo>> {
+        Ok(vector_store!(self, s => s.vector_indexes())?)
+    }
+
+    pub fn create_vector_index(&self, index: &oxilite::vector::VectorIndex) -> Result<()> {
+        Ok(vector_store!(self, s => s.create_vector_index(index))?)
+    }
+
+    pub fn drop_vector_index(&self, name: &str) -> Result<bool> {
+        Ok(vector_store!(self, s => s.drop_vector_index(name))?)
+    }
+
+    pub fn vector_search(
+        &self,
+        name: &str,
+        query: &oxilite::vector::QueryVector,
+        k: u64,
+    ) -> Result<Vec<oxilite::vector::VectorHit>> {
+        Ok(vector_store!(self, s => s.vector_search(name, query, k))?)
+    }
+
+    /// Does the backend have vector functions?
+    pub fn supports_vectors(&self) -> bool {
+        matches!(self, Db::Turso(_))
+    }
+
+    /// The host functions registered on the store.
+    pub fn functions(&self) -> Vec<oxilite::functions::HostFunction> {
+        match self {
+            Db::Native(s) => s.functions(),
+            Db::Library(s) => s.functions(),
+            Db::Turso(s) => s.functions(),
+            Db::D1(_) => Vec::new(),
+        }
     }
 
     pub fn optimize(&self) -> Result<()> {

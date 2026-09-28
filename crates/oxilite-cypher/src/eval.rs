@@ -1140,8 +1140,48 @@ pub(crate) fn function(name: &str, args: Vec<Value>) -> Result<Value> {
             }
         }
         "valuetype" => Value::String(a0.type_name().to_string()),
-        other => return Err(CypherError::unsupported(format!("function {other}()"))),
+        other => return host_call(other, args),
     })
+}
+
+thread_local! {
+    /// The host functions of the statement being run (set by `CypherJob::step`).
+    static HOST: std::cell::RefCell<oxilite_core::functions::Functions> =
+        std::cell::RefCell::new(Default::default());
+}
+
+/// Runs `body` with `functions` callable from Rust-evaluated expressions.
+pub(crate) fn with_host<T>(
+    functions: &oxilite_core::functions::Functions,
+    body: impl FnOnce() -> T,
+) -> T {
+    let saved = HOST.with(|h| h.replace(functions.clone()));
+    let out = body();
+    HOST.with(|h| *h.borrow_mut() = saved);
+    out
+}
+
+/// Calls a host function: Cypher values become RDF terms and back; a `null` argument gives
+/// `null`, and so does an evaluation error of the function.
+fn host_call(name: &str, args: Vec<Value>) -> Result<Value> {
+    let Some(f) = HOST.with(|h| h.borrow().by_cypher_name(name).cloned()) else {
+        return Err(CypherError::unsupported(format!("function {name}()")));
+    };
+    let mut terms = Vec::with_capacity(args.len());
+    for a in &args {
+        terms.push(match a {
+            Value::Null => return Ok(Value::Null),
+            Value::Node(n) => match &n.id {
+                oxrdf::NamedOrBlankNode::NamedNode(x) => oxrdf::Term::from(x.clone()),
+                oxrdf::NamedOrBlankNode::BlankNode(x) => oxrdf::Term::from(x.clone()),
+            },
+            v => match v.to_literal()? {
+                Some(l) => l.into(),
+                None => return Ok(Value::Null),
+            },
+        });
+    }
+    Ok(f.call(&terms).map_or(Value::Null, |t| Value::from_term(&t)))
 }
 
 fn temporal_kind(name: &str) -> TemporalKind {

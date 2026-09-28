@@ -42,6 +42,15 @@ pub struct Stats {
     pub schema_scopes: BTreeSet<i64>,
     /// The versioning level and history of the store (see `version`).
     pub version: crate::version::VersionState,
+    /// Vector index definitions of `<oxilite:vectors>` (loaded on backends with vectors).
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub vector_indexes: Vec<crate::vector::VectorIndex>,
+    /// Why descriptions in `<oxilite:vectors>` are not valid definitions.
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub vector_problems: Vec<String>,
+    /// Fingerprints of the built vector tables, by lower-case index name.
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub vector_built: std::collections::BTreeMap<String, String>,
 }
 
 fn id_col(caps: &Capabilities, c: &str) -> String {
@@ -55,7 +64,7 @@ fn id_col(caps: &Capabilities, c: &str) -> String {
 impl Stats {
     /// Statements that load statistics and store settings.
     pub fn load_request(caps: &Capabilities) -> Request {
-        Request::read(vec![
+        let mut r = Request::read(vec![
             Statement::new("SELECT key, value FROM oxilite_meta"),
             Statement::new(format!(
                 "SELECT {}, triples, distinct_s, distinct_o FROM stats_pred",
@@ -72,15 +81,28 @@ impl Stats {
                 id_col(caps, "o")
             )),
             crate::registry::scopes_statement(|c| id_col(caps, c)),
-        ])
+        ]);
+        // Only a backend with vector functions reads the definitions, so the load request on
+        // every other backend is what it always was.
+        if caps.vectors {
+            r.statements
+                .push(crate::vector::definitions_statement(|c| id_col(caps, c)));
+        }
+        r
     }
 
     pub fn from_response(response: &Response) -> Result<Self> {
-        expect_len(response, 6)?;
+        if response.len() != 7 {
+            expect_len(response, 6)?;
+        }
         let mut stats = Self::default();
         for row in &response[0].rows {
             let key = col(row, 0)?.as_str().unwrap_or_default();
             let value = col(row, 1)?.clone().into_string().unwrap_or_default();
+            if let Some(name) = key.strip_prefix("vector:") {
+                stats.vector_built.insert(name.to_owned(), value);
+                continue;
+            }
             match key {
                 "graph_index" => stats.graph_index = value == "1",
                 "text_index" => stats.text_index = value == "1",
@@ -135,6 +157,11 @@ impl Stats {
             ) {
                 stats.pairs.insert((p, o), n);
             }
+        }
+        if let Some(defs) = response.get(6) {
+            let (indexes, problems) = crate::vector::definitions_from_rows(&defs.rows);
+            stats.vector_indexes = indexes;
+            stats.vector_problems = problems;
         }
         Ok(stats)
     }

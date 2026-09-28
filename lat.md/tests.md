@@ -512,6 +512,74 @@ The Node store registers ontology and shapes graphs by term or IRI, scopes RDFS 
 
 `new Store({ systemGraphs: true })` starts with the vocabulary graph while a default store stays empty, and `installSystemGraphs()` adds it to an existing store once.
 
+## Python
+
+`oxilite` for Python over the PyO3 module, next to the verbatim port of pyoxigraph's tests, see [[architecture#Bindings#Python]]. The port's failures must match `py:` entries of `testsuite/allowlist.toml`.
+
+### Ported pyoxigraph tests
+
+pyoxigraph's `test_store.py`, `test_model.py` and `test_io.py` run with only the import changed; `conftest.py` marks each `py:` allow-list entry a strict xfail, so an unlisted failure or a stale entry fails the run.
+
+### File store persists across processes
+
+A child Python process adds a quad to a SQLite file; a store opened on that file in the test process contains it.
+
+### Directory and read-only stores
+
+A store opened on a directory writes `oxilite.sqlite` inside it, `Store.read_only` reads it back and refuses writes with `OSError`, and `backup` writes a copy that opens as a store.
+
+### Terms validate their input
+
+Invalid IRIs, blank-node ids and language tags raise `ValueError` at construction, a bad query raises `SyntaxError`, and terms are hashable values.
+
+### Query-time reasoning and materialization
+
+`reasoning="rdfs"` entails a type per query, both materialization engines infer the same number of triples visible only with `include_inferred`, and `clear_inferences` removes them.
+
+### Explain returns SQL
+
+`explain` returns the SQL of a SELECT and `explain_update` describes an update.
+
+### Files round-trip through load and dump
+
+A dump to an `.nq` path loads back with the format inferred from the extension, a graph dumps as Turtle, a syntax error carries the file name and line, and the named-graph helpers clear and remove graphs.
+
+### Cypher reads and writes the same dataset
+
+`cypher` creates nodes and a relationship with a property that SPARQL finds, returns typed node and relationship objects and records, reads data inserted with SPARQL, and raises `SyntaxError` for bad Cypher.
+
+### Datalog recursion and materialization
+
+A recursive program returns terms keyed by the goal's variables with no iterated rounds, materialized conclusions are visible only with `include_inferred`, `explain_datalog` shows the recursive CTE, and an unstratified program raises.
+
+### Schema registry and system graphs
+
+An ontology registered for the default graph scopes RDFS reasoning and reports its version and `applies_to`; activation, unregistration, the shape index and dropping work; the vocabulary graph is installed once.
+
+### JSON-LD documents round-trip and query
+
+A document is stored verbatim in its own graph, queryable with SPARQL and mapped back from its graph; pointer keys and template graphs work; `JsonLdError` carries `missing-key` and `loading remote context failed` codes.
+
+### Credentials are stored and found
+
+Credentials are stored under their id with timezone-aware validity, a presentation stores its credentials, `find` filters by issuer and validity, and an invalid credential raises `JsonLdError` with code `invalid`.
+
+### Versioning and time travel
+
+A `log` store records commits with author and message through the `commit` context manager, answers `as_of` in SPARQL, Datalog and Cypher, reports diffs and changes, purges history, and changes level; an unversioned store refuses `as_of`.
+
+### Threads share a store
+
+Four threads each insert 100 quads into one store, which then holds 400: calls release the GIL and the store is shared safely.
+
+### Text search
+
+A store with `text_index=True` answers `oxl:textMatch`, the schema SQL creates the FTS5 table, and `prefixes` and `substitutions` combine with the compiled query.
+
+### A SQLite library loaded at runtime
+
+A store opened with `library=` (the system SQLite) reads and writes a file that the bundled SQLite then opens.
+
 ## Cypher
 
 openCypher over the RDF store ([[architecture#Property graph frontend]]). Unless noted, each test runs on the bundled SQLite, the system `libsqlite3` (dylib), a D1-capability async store, and Miniflare D1 when `OXILITE_D1_URL` points at `testsuite/d1-sidecar`.
@@ -906,6 +974,10 @@ A script prints what succeeded, reports errors with their line on standard error
 
 `.reasoning`, `.inferred` and `.schemagraphs` apply to the user's queries and `.explain`, not to `.dump`; `.materialize` and `.materialize clear` drive OWL 2 RL inferences.
 
+### Vector commands
+
+On a Turso session, `.vector create`, `.vector list`, `.vector search` and `.vector drop` create, show, query and remove an index, nearest first; on bundled SQLite `.vector` says a Turso store (`--turso`) is needed.
+
 ## Command line
 
 The `oxilite` subcommands beyond the shell, see [[architecture#Command line and HTTP endpoint]].
@@ -1086,6 +1158,10 @@ On an attached store an unconfirmed `registryEdit` fails with 1001, and a read-o
 
 Confirmed, it registers, adds a second role sharing the targets, remaps to every graph, deactivates, installs the system graphs and drops a graph with its triples.
 
+### Vector indexes on a Turso connection
+
+`oxilite/vectorIndexes` answers `supported: false` on the project store; on a Turso file attached with `engine: "turso"`, creating, listing, searching by vector and by node, listing functions and dropping all work over LSP.
+
 ## Versioning
 
 The store clock, the immutable change log and time travel ([[architecture#Versioning]]), on bundled SQLite, the system SQLite, the D1 code path and Miniflare D1.
@@ -1195,4 +1271,112 @@ An `@version "HEAD~1"` directive and `Options::as_of` run a recursive program on
 ### Node binding keeps history
 
 `@oxilite/node` records commits with `withCommit`, answers `as_of` queries and Datalog `asOf`, diffs versions and freezes the history by lowering the level.
+
+## Turso
+
+The store on the Turso engine: the query surface of the bundled SQLite backend, the DDL shim and the atomic contract. See [[architecture#Backends#Turso]].
+
+### Failed atomic request changes nothing
+
+An atomic request whose second statement violates a primary key leaves the table empty, and a savepoint rolled back inside an interactive transaction undoes an atomic request.
+
+### Same answers as bundled SQLite
+
+Joins with FILTER, OPTIONAL, aggregates, UNION with MINUS, a property path and REGEX return the same solutions on Turso and on bundled SQLite; `optimize`, `DELETE/INSERT … WHERE` and `DROP SILENT GRAPH` run.
+
+### Cypher and Datalog on Turso
+
+A Cypher `CREATE` and `MATCH` and a recursive Datalog ancestor program return on Turso what they return on bundled SQLite.
+
+### File store survives reopening
+
+Quads loaded into a Turso database file are all there after the store is dropped and the file reopened.
+
+### Schema and refusals
+
+A Turso store declares vector capabilities (bundled SQLite does not), keeps quads unique despite the rowid rewrite, and refuses the text index with an error naming the full-text index.
+
+## Vector indexes
+
+Vector indexes on Turso: definitions as RDF, trigger-maintained tables, and search from the API, SPARQL, Cypher and Datalog. See [[architecture#Vector indexes]].
+
+### Creation back-fills and search orders by distance
+
+Creating an index over loaded embeddings indexes them all; a search returns nodes nearest first with Neo4j scores, a search by node puts that node first at distance 0, and the definition is queryable in `<oxilite:vectors>`.
+
+### Writes keep the index current
+
+Inserting into a named graph, `CLEAR GRAPH`, a Cypher `CREATE` and a `DELETE WHERE` all update the index; an update whose request fails later leaves no embedding behind.
+
+### Malformed embeddings abort the write
+
+A wrong-length or non-JSON embedding makes the update fail naming the dimensions and writes nothing; creating an index over a bad existing value fails naming its subject and leaves no definition; a wrong-length query vector is refused.
+
+### Definitions from SPARQL Update
+
+`INSERT DATA` of a definition into `<oxilite:vectors>` builds the index, changing its metric by a `DELETE/INSERT` rebuilds it with the new metric, and `DELETE WHERE` of the definition drops the table.
+
+### A loaded definition is built on sync
+
+A dump that includes `<oxilite:vectors>`, loaded into a fresh Turso store, lists its index as not built until `sync_vector_indexes` builds it from the loaded embeddings.
+
+### Refused without vector functions
+
+On bundled SQLite, creating an index and a vector `SERVICE` fail with an unsupported error mentioning Turso and write nothing; invalid names, zero dimensions, Jaccard over dense vectors and a name clashing ignoring case are refused.
+
+### Class restriction and element types
+
+An index restricted to a class returns only its instances, and float64, int8 and 1-bit indexes over the same property build and answer searches.
+
+### Sparse Jaccard index
+
+A sparse Jaccard index (with its IVF index method) over bag-of-words vectors returns the exact match first and orders results by Jaccard distance.
+
+### SPARQL search joins the graph in one statement
+
+A vector `SERVICE` joined with titles and a year filter returns the nearest matching titles, binds `oxl:distance` as `xsd:double` and compiles to one SQL statement calling the distance function.
+
+It also accepts a constant node, and names an unknown index, predicate or wrong dimensions in its errors.
+
+### Cypher DDL
+
+`CREATE VECTOR INDEX … FOR (d:Doc) ON (d.embedding) OPTIONS {…}` maps label and key through the vocabulary, and `SHOW VECTOR INDEXES` and `DROP INDEX` list and drop it.
+
+`IF NOT EXISTS` is a no-op, a second creation fails, and `DROP INDEX … IF EXISTS` tolerates a missing index.
+
+### Cypher queryNodes binds a node
+
+`db.index.vector.queryNodes` returns titles by descending score, takes its vector from a parameter, binds `node` as a node that a later `MATCH` follows, returns its yields when it ends the statement, and compiles into the statement's SQL.
+
+### Datalog nearest ranks neighbours
+
+`nearest("docs", vector, 3, ?d, ?r), ?r <= 2` returns the two nearest nodes with ranks 1 and 2; the four-argument form searches by node and joins the graph; a variable index name is refused; a program defining `nearest` keeps its own relation.
+
+## Host functions
+
+Application functions called from the three languages. See [[architecture#Host functions]].
+
+### Registry
+
+Registered functions are listed with their Cypher names, arities and descriptions, clones share them, reserved IRIs and Cypher built-in names are refused, and unregistering removes one.
+
+### SPARQL calls host functions
+
+`BIND` and `FILTER` call host functions, the rest of the query still compiles to SQL, an update's `WHERE` calls them, an unregistered IRI fails the query naming it, and a wrong number of arguments leaves the variable unbound.
+
+### Host functions on Turso with vector search
+
+A query that searches a vector index and projects a host function of the neighbours' names returns the slugs of the nearest people.
+
+### Cypher calls host functions
+
+Host functions are called in `WHERE` and `RETURN`, inside `collect()` evaluated in Rust, by a case-insensitive name, with `null` for a `null` argument, and an unknown function is an error naming it.
+
+### Datalog calls host functions
+
+The expression form binds a value, the atom forms filter and bind, host-derived relations feed joins and negation in later rules, a goal constraint filters rows, and a host rule that derives nothing still defines its relation.
+
+### Datalog rejects recursive host rules
+
+A rule that calls a host function and depends on its own head is refused as recursive, and an unregistered function IRI is an error naming it.
 

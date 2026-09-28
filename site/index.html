@@ -21,6 +21,7 @@
       <nav class="nav" aria-label="Main">
         <a href="#features" class="hide-sm">Features</a>
         <a href="#start" class="hide-sm">Get started</a>
+        <a href="#python" class="hide-sm">Python</a>
         <a href="#d1" class="hide-sm">Cloudflare D1</a>
         <a href="#versioning" class="hide-sm">Versioning</a>
         <a href="#datalog" class="hide-sm">Datalog</a>
@@ -98,6 +99,7 @@
         <div class="tabs" role="tablist" aria-label="Platform">
           <button class="tab" role="tab" id="tab-rust" aria-controls="p-rust" aria-selected="true">Rust</button>
           <button class="tab" role="tab" id="tab-node" aria-controls="p-node" aria-selected="false" tabindex="-1">Node.js</button>
+          <button class="tab" role="tab" id="tab-python" aria-controls="p-python" aria-selected="false" tabindex="-1">Python</button>
           <button class="tab" role="tab" id="tab-cli" aria-controls="p-cli" aria-selected="false" tabindex="-1">CLI</button>
         </div>
 
@@ -125,6 +127,17 @@ store.load(<span class="s">`@prefix ex: &lt;http://ex/&gt; . ex:a ex:knows ex:b 
 }</code></pre>
         </div>
 
+        <div class="panel" role="tabpanel" id="p-python" aria-labelledby="tab-python" hidden>
+<pre><code><span class="c"># pip install oxilite</span>
+<span class="k">from</span> oxilite <span class="k">import</span> Store, RdfFormat     <span class="c"># was: from pyoxigraph import …</span>
+
+store = Store(<span class="s">"data.sqlite"</span>)
+store.load(<span class="s">"@prefix ex: &lt;http://ex/&gt; . ex:a ex:knows ex:b ."</span>, RdfFormat.TURTLE)
+
+<span class="k">for</span> solution <span class="k">in</span> store.query(<span class="s">"SELECT ?x WHERE { ?x ?p ?o }"</span>):
+    print(solution[<span class="s">"x"</span>].value)</code></pre>
+        </div>
+
         <div class="panel" role="tabpanel" id="p-cli" aria-labelledby="tab-cli" hidden>
 <pre><code>cargo install oxilite-cli
 oxilite load    -l data.sqlite -f dump.nt            <span class="c"># bulk load, then refresh statistics</span>
@@ -132,6 +145,31 @@ oxilite query   -l data.sqlite -q <span class="s">'SELECT * WHERE { ?s ?p ?o } L
 oxilite explain -l data.sqlite -q <span class="s">'…'</span>              <span class="c"># the SQL and the join order</span>
 oxilite serve   -l data.sqlite -b 127.0.0.1:7879     <span class="c"># /query, /update, /store</span></code></pre>
         </div>
+      </div>
+    </section>
+
+    <section id="python" class="band-black">
+      <div class="wrap">
+        <span class="eyebrow">New · Python</span>
+        <h2>pyoxigraph's API, in one SQLite file<span class="dot">.</span></h2>
+        <p class="sub"><code>pip install oxilite</code> gives Python the store Node.js and Rust already have. The terms, results and <code>Store</code> methods are pyoxigraph's, so <code>import oxilite as pyoxigraph</code> runs existing code, and pyoxigraph's own test suite runs against it. The graph lives in one file you can copy, back up and open with <code>sqlite3</code>.</p>
+        <div class="backends">
+          <div class="backend"><strong>One wheel</strong><span>Stable ABI: CPython 3.9 and later on Linux, macOS and Windows. SQLite compiled in.</span></div>
+          <div class="backend"><strong>Every language</strong><span><em>query</em>, <em>cypher</em> and <em>datalog</em> over the same quads, with typed results.</span></div>
+          <div class="backend"><strong>Everything else too</strong><span>Reasoning, the schema registry, JSON-LD, credentials, time travel, full-text search.</span></div>
+          <div class="backend"><strong>Thread-friendly</strong><span>Calls release the GIL; share one store across threads or <em>asyncio.to_thread</em>.</span></div>
+        </div>
+<pre style="margin-top:20px"><code><span class="k">from</span> oxilite <span class="k">import</span> Store
+
+store = Store(<span class="s">"team.sqlite"</span>, versioning=<span class="s">"log"</span>)
+<span class="k">with</span> store.commit(author=<span class="s">"ada"</span>, message=<span class="s">"import"</span>):
+    store.load(path=<span class="s">"team.ttl"</span>)
+
+store.query(<span class="s">"SELECT ?p WHERE { ?p a ex:Person }"</span>, prefixes={<span class="s">"ex"</span>: EX}, reasoning=<span class="s">"rdfs"</span>)
+store.cypher(<span class="s">"MATCH (a)-[:knows]-&gt;(b) RETURN b.name AS friend"</span>, base=EX).records
+store.datalog(<span class="s">"reach(?x, ?z) :- ex:knows(?x, ?y), reach(?y, ?z). …"</span>)
+store.query(<span class="s">"SELECT * WHERE { ?s ?p ?o }"</span>, as_of=<span class="s">"HEAD~1"</span>)   <span class="c"># the store one commit ago</span></code></pre>
+        <p style="margin-top:20px"><a href="articles/oxilite-python.html">How to use oxilite with Python →</a> · <a href="https://github.com/Volland/oxilite/blob/main/docs/python.md">Python reference →</a></p>
       </div>
     </section>
 
@@ -237,7 +275,7 @@ store.datalog(<span class="s">r#"
           </table>
         </div>
         <p style="margin-top:20px">SQLite&rsquo;s restrictions <em>are</em> Datalog&rsquo;s classical safety conditions, so the compiler reports them as rule diagnostics instead of working around them. <code>explain_datalog()</code> shows the strata, the strategy picked for each recursive component, and the SQL.</p>
-        <p>Available from Rust, from the CLI (<code>oxilite datalog -l db.sqlite -f rules.dl</code>), and from JavaScript &mdash; <code>@oxilite/node</code> and <code>@oxilite/d1</code> both return RDF/JS terms. In the WebAssembly core it is an opt-in feature (~0.2&nbsp;MB), so a Worker that does not use rules does not carry it.</p>
+        <p>Available from Rust, from the CLI (<code>oxilite datalog -l db.sqlite -f rules.dl</code>), from Python (<code>store.datalog(program)</code>), and from JavaScript &mdash; <code>@oxilite/node</code> and <code>@oxilite/d1</code> both return RDF/JS terms. In the WebAssembly core it is an opt-in feature (~0.2&nbsp;MB), so a Worker that does not use rules does not carry it.</p>
       </div>
     </section>
     <section id="credentials" class="band-black">
@@ -296,6 +334,12 @@ code --install-extension pavlyshyn.oxilite-studio
         <h2>Articles<span class="dot">.</span></h2>
         <p class="sub">Guides and design notes: what you can build with oxilite and how it works inside. <a href="articles/">All articles →</a></p>
         <div class="articles">
+          <a class="article-card" href="articles/oxilite-python.html">
+            <span class="kicker">Python · Tutorial · New</span>
+            <h3>How to use oxilite with Python</h3>
+            <p>pyoxigraph's API on one SQLite file: install, SPARQL, the SQL behind it, Cypher and Datalog on the same data, reasoning, JSON-LD and credentials, and time travel, step by step.</p>
+            <span class="more">Start the tutorial →</span>
+          </a>
           <a class="article-card" href="articles/versioning-knowledge-graph-memory.html">
             <span class="kicker">Versioning · Overview · Use cases · New</span>
             <h3>A knowledge graph with a memory</h3>

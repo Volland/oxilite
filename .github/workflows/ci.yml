@@ -95,6 +95,34 @@ jobs:
           OXILITE_D1_URL=http://127.0.0.1:8799 cargo test -p oxilite-compat
           OXILITE_D1_URL=http://127.0.0.1:8799 cargo test -p oxilite-jsonld -p oxilite-vc -- --test-threads=1
 
+  # The Python package: pyoxigraph's own tests (allow-listed divergences are strict xfails),
+  # oxilite's extension tests, and a strict type check. Wheels are built by python-wheels.yml.
+  python:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-0
+      - if: runner.os == 'macOS'
+        run: echo "OXILITE_SQLITE_LIBRARY=/usr/lib/libsqlite3.dylib" >> "$GITHUB_ENV"
+      - name: Build, test and type-check
+        working-directory: bindings/python
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install maturin pytest mypy
+          maturin develop
+          python -m pytest
+          mypy --strict python/oxilite
+          python ../../examples/python-tour/tour.py   # the article "How to use oxilite with Python"
+
   lat:
     runs-on: ubuntu-latest
     steps:

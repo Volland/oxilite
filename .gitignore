@@ -16,3 +16,9 @@ node_modules/
 bench/bsbm-tools/td_data/
 /bindings/node/oxilite.*.node
 /examples/do-agent-memory-ts/build/
+/bindings/python/.venv/
+/bindings/python/dist/
+/bindings/python/python/oxilite/*.so
+/bindings/python/python/oxilite/*.pyd
+__pycache__/
+/.venv/

@@ -6,8 +6,8 @@ use crate::store::Store;
 use crate::AsyncStore;
 use oxilite_core::{AsyncBackend, SyncBackend};
 use oxilite_datalog::{
-    compile, explain as explain_program, prepare, version_of, version_refs, DatalogError,
-    DatalogJob, DatalogResult, MaterializeJob, MaterializeStats, Options,
+    compile, explain as explain_program, prepare, prepare_program, version_of, version_refs,
+    DatalogError, DatalogJob, DatalogResult, MaterializeJob, MaterializeStats, Options,
 };
 use std::borrow::Cow;
 
@@ -62,7 +62,7 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
         options: &Options,
     ) -> Result<DatalogResult, DatalogError> {
         let options = self.datalog_version(program, options)?;
-        let job: DatalogJob = prepare(program, self.caps(), &options)?;
+        let job = prepare_program(program, self.caps(), &options)?;
         Ok(self.run(job)?)
     }
 
@@ -74,7 +74,18 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
     ) -> Result<Cow<'o, Options>, DatalogError> {
         let (whole, atoms) = version_refs(program, options)?;
         let mut o = options.clone();
-        o.history = Some(self.stats().version);
+        let stats = self.stats();
+        o.history = Some(stats.version);
+        // Only built indexes can be searched.
+        o.vector_indexes = stats
+            .vector_indexes
+            .iter()
+            .filter(|i| oxilite_core::vector::is_built(i, &stats.vector_built))
+            .cloned()
+            .collect();
+        if o.functions.registry().is_none() {
+            o.functions = self.host_functions();
+        }
         if let Some(v) = whole {
             check_version(options)?;
             o.as_of_tick = Some(self.resolve_version(&v)?);

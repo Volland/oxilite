@@ -1,0 +1,51 @@
+[build-system]
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
+
+[project]
+name = "oxilite"
+description = "An Oxigraph-compatible SPARQL 1.1 store on SQLite, with openCypher, Datalog, reasoning, JSON-LD, Verifiable Credentials and time travel"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT OR Apache-2.0"
+license-files = ["LICENSE-MIT", "LICENSE-APACHE"]
+authors = [{ name = "Volodymyr Pavlyshyn" }]
+keywords = ["rdf", "sparql", "sqlite", "oxigraph", "cypher", "datalog", "knowledge-graph", "json-ld"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Rust",
+    "Topic :: Database",
+    "Topic :: Database :: Database Engines/Servers",
+    "Topic :: Software Development :: Libraries",
+    "Typing :: Typed",
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://oxilitedb.com"
+Documentation = "https://github.com/Volland/oxilite/blob/main/docs/python.md"
+Repository = "https://github.com/Volland/oxilite"
+Issues = "https://github.com/Volland/oxilite/issues"
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[tool.maturin]
+python-source = "python"
+module-name = "oxilite._native"
+features = ["pyo3/extension-module"]
+include = [{ path = "python/oxilite/py.typed", format = ["sdist", "wheel"] }]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.mypy]
+strict = true
+files = ["python/oxilite"]

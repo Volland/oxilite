@@ -32,6 +32,7 @@ mod schema_store;
 pub mod store;
 #[cfg(feature = "vc")]
 mod vc_store;
+mod vector_store;
 mod version_store;
 
 pub use async_store::AsyncStore;
@@ -121,6 +122,27 @@ pub mod jsonld {
 pub mod vc {
     pub use crate::vc_store::{AsyncCredentialStore, CredentialStore};
     pub use oxilite_vc::*;
+}
+
+/// Vector indexes over embedding literals and nearest-neighbour search (`Store::create_vector_index`,
+/// `Store::vector_search`; backends with vector functions: Turso).
+pub mod vector {
+    pub use crate::vector_store::{VectorHit, VectorIndexInfo};
+    pub use oxilite_core::vector::{
+        vocab, ElementType, Metric, QueryVector, VectorIndex, INDEX_PREFIX, VECTORS_GRAPH,
+    };
+}
+
+/// Host functions: application code callable from SPARQL, Cypher and Datalog
+/// (`Store::register_function`).
+pub mod functions {
+    pub use oxilite_core::functions::{FunctionRegistry, Functions, HostFunction};
+}
+
+/// The Turso backend (SQLite rewritten in Rust, with vector search).
+#[cfg(feature = "turso")]
+pub mod turso {
+    pub use oxilite_turso::*;
 }
 
 /// The in-process SQLite backend (bundled SQLite, UDFs).

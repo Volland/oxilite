@@ -26,3 +26,18 @@ decision = "lat.md/decisions.md#D2 Tagged 64-bit hash ids with inline small valu
 id = "js:Store #query() SELECT with explicit default graph list"
 reason = "The default_graph option builds the RDF merge of the listed graphs, like FROM (set semantics): a triple in both the default graph and ex matches once; Oxigraph concatenates the graphs and returns it twice"
 decision = "lat.md/decisions.md#D12 Set semantics for merged default graphs"
+
+[[divergence]]
+id = "py:test_pyoxigraph_store.py::TestStore::test_select_query_with_custom_functions"
+reason = "Queries compile to one SQL statement run by SQLite, which cannot call back into Python per row; custom_functions raises NotImplementedError"
+decision = "lat.md/decisions.md#D37 Python bindings mirror pyoxigraph over the JSON bridge"
+
+[[divergence]]
+id = "py:test_pyoxigraph_store.py::TestStore::test_select_query_with_custom_aggregate_function"
+reason = "Queries compile to one SQL statement run by SQLite, which cannot call back into Python per group; custom_aggregate_functions raises NotImplementedError"
+decision = "lat.md/decisions.md#D37 Python bindings mirror pyoxigraph over the JSON bridge"
+
+[[divergence]]
+id = "py:test_pyoxigraph_store.py::TestStore::test_update_load"
+reason = "The core is sans-IO and has no network access, so SPARQL LOAD of a remote document reports unsupported (NotImplementedError); load the document with Store.load instead"
+decision = "lat.md/decisions.md#D37 Python bindings mirror pyoxigraph over the JSON bridge"

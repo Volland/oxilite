@@ -127,10 +127,11 @@ The filter is applied right after the first scan, before any join. The unary `+`
 ## Usage
 
 ```bash
-cargo add oxilite                      # Rust (features: rusqlite (default), dylib, d1, reasonable, cypher)
+cargo add oxilite                      # Rust (features: rusqlite (default), dylib, d1, turso, reasonable, cypher)
 cargo install oxilite-cli              # the `oxilite` command and SPARQL endpoint
 npm install @oxilite/node              # Node.js (prebuilt for macOS arm64)
 npm install @oxilite/d1                # Cloudflare D1 (WebAssembly)
+pip install oxilite                    # Python ≥ 3.9 (pyoxigraph's API)
 ```
 
 Every package has its own README with installation, examples and its API:
@@ -141,6 +142,7 @@ Every package has its own README with installation, examples and its API:
 | [`oxilite-core`](crates/oxilite-core/README.md) | The sans-IO core: term encoding, schema, SPARQL → SQL compiler and planner |
 | [`oxilite-rusqlite`](crates/oxilite-rusqlite/README.md) | In-process backend with a bundled SQLite (the default) |
 | [`oxilite-dylib`](crates/oxilite-dylib/README.md) | Backend that loads your own `libsqlite3` at runtime |
+| [`oxilite-turso`](crates/oxilite-turso/README.md) | Backend on Turso (SQLite rewritten in Rust), with vector indexes searchable from SPARQL, Cypher and Datalog |
 | [`oxilite-d1`](crates/oxilite-d1/README.md) | Cloudflare D1 backend for Rust Workers |
 | [`oxilite-cypher`](crates/oxilite-cypher/README.md) | openCypher over the same data, OWL- and SHACL-aware |
 | [`oxilite-jsonld`](crates/oxilite-jsonld/README.md) | JSON-LD documents stored verbatim, one named graph each |
@@ -151,6 +153,7 @@ Every package has its own README with installation, examples and its API:
 | [`@oxilite/node`](bindings/node/README.md) | Node.js bindings, API of Oxigraph's JS package |
 | [`@oxilite/d1`](packages/d1/README.md) | Cloudflare D1 and Durable Objects from TypeScript (WebAssembly core) |
 | [`@oxilite/common`](packages/common/README.md) | RDF/JS terms and shared TypeScript types |
+| [`oxilite` on PyPI](bindings/python/README.md) | Python bindings, API of pyoxigraph |
 
 ### Rust: drop-in for `oxigraph::store::Store`
 
@@ -209,6 +212,25 @@ store.update("DELETE WHERE { ?s <http://ex/knows> ?o }");
 ```
 
 The API mirrors Oxigraph's JS package (`query`, `update`, `load`, `dump`, `add`, `delete`, `has`, `match`, `size`), with RDF/JS terms, plus `explain`, `explainUpdate`, `bulkLoad`, `optimize` and `backup`. Oxigraph's own `store.test.ts` runs unchanged against it. Build the native addon from a checkout with `npm run build:native -w @oxilite/node`.
+
+### Python
+
+```python
+from oxilite import Store, NamedNode, Literal, Quad, RdfFormat   # was: from pyoxigraph import …
+
+store = Store("data.sqlite")                     # Store() in memory; a directory holds oxilite.sqlite
+store.load("@prefix ex: <http://ex/> . ex:a ex:knows ex:b .", RdfFormat.TURTLE)
+store.add(Quad(NamedNode("http://ex/b"), NamedNode("http://ex/name"), Literal("Bea")))
+
+for solution in store.query("SELECT ?x ?name WHERE { ?x <http://ex/name> ?name }"):
+    print(solution["x"], solution["name"].value)
+
+store.cypher("MATCH (p {name: $n}) RETURN p", {"n": "Bea"}, base="http://ex/")   # openCypher
+store.datalog("@prefix ex: <http://ex/> .\n?- ex:knows(?a, ?b).")                 # Datalog
+store.query("ASK { ?x a <http://ex/Animal> }", reasoning="rdfs")                  # entailment
+```
+
+The API is pyoxigraph's (`Store`, terms, `RdfFormat`, `QuerySolutions`, `parse`, `serialize`, `parse_query_results`), so `import oxilite as pyoxigraph` runs existing code on a SQLite file. pyoxigraph's own test suite runs against it; its three failures are allow-listed (custom Python functions in SPARQL and remote `LOAD`, which a query compiled to SQL cannot do). Everything oxilite adds is there too, with typed results: `explain`, Cypher, Datalog, `materialize`, the schema registry, JSON-LD documents and credentials, versioning (`with store.commit(author=…):`, `as_of=`, `history`, `diff`), full-text search and `library=` for a system SQLite. Calls release the GIL. Wheels are `abi3` for Linux, macOS and Windows. See the [Python reference](docs/python.md) and [how to build and publish the package](docs/python-publishing.md).
 
 ---
 

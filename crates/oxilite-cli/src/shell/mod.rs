@@ -60,6 +60,11 @@ pub const COMMANDS: &[(&str, &str, &str)] = &[
         "GRAPH",
         "Stop a registered schema graph contributing",
     ),
+    (
+        ".functions",
+        "",
+        "List the host functions callable from SPARQL, Cypher and Datalog",
+    ),
     (".graphs", "", "List the named graphs and their sizes"),
     (".help", "", "Show this message"),
     (
@@ -125,6 +130,11 @@ pub const COMMANDS: &[(&str, &str, &str)] = &[
         ".unregister",
         "GRAPH ?--drop?",
         "Unregister a schema graph (--drop also deletes its triples)",
+    ),
+    (
+        ".vector",
+        "?list|create|drop|search ...?",
+        "Vector indexes (Turso): list; create NAME PROPERTY DIMS ?METRIC? ?ELEMENT? ?--class C?; drop NAME; search NAME [..]|NODE ?K?",
     ),
 ];
 
@@ -405,6 +415,8 @@ impl Session {
             ".explain" => self.explain(rest),
             ".datalog" => self.datalog(rest),
             ".graphs" => self.graphs(),
+            ".functions" => self.functions(),
+            ".vector" => self.vector(rest),
             ".stats" => self.stats(),
             ".optimize" => {
                 let start = Instant::now();
@@ -800,6 +812,192 @@ impl Session {
         }
         self.footer(&format!("Loaded {file}"), start.elapsed());
         Ok(())
+    }
+
+    fn functions(&mut self) -> Result<()> {
+        let fs = self.db.functions();
+        if fs.is_empty() {
+            self.note(
+                "No host function is registered (applications register them through the API).",
+            );
+            return Ok(());
+        }
+        let rows: Vec<Vec<render::Cell>> = fs
+            .iter()
+            .map(|f| {
+                vec![
+                    render::Cell::plain(format!("<{}>", f.iri())),
+                    render::Cell::plain(f.cypher()),
+                    render::Cell::plain(match f.max_arity() {
+                        Some(m) if m == f.min_arity() => m.to_string(),
+                        Some(m) => format!("{}–{m}", f.min_arity()),
+                        None => format!("{}+", f.min_arity()),
+                    }),
+                    render::Cell::plain(f.description_text()),
+                ]
+            })
+            .collect();
+        let headers = ["iri", "cypher", "arity", "description"].map(String::from);
+        let t = render::table(&headers, &rows, self.width(), self.paint);
+        self.print(&t);
+        Ok(())
+    }
+
+    /// `.vector list|create|drop|search`.
+    fn vector(&mut self, rest: &str) -> Result<()> {
+        use oxilite::vector::{ElementType, Metric, QueryVector, VectorIndex};
+        if !self.db.supports_vectors() {
+            return Err("vector indexes need a Turso store: start the shell with --turso".into());
+        }
+        let (sub, rest) = rest
+            .split_once(char::is_whitespace)
+            .map_or((rest, ""), |(s, r)| (s, r.trim()));
+        let args: Vec<&str> = rest.split_whitespace().collect();
+        match sub {
+            "" | "list" => {
+                let indexes = self.db.vector_indexes()?;
+                if indexes.is_empty() {
+                    self.note("No vector index.");
+                    return Ok(());
+                }
+                let rows: Vec<Vec<render::Cell>> = indexes
+                    .iter()
+                    .map(|i| {
+                        let iri = |n: &oxilite::model::NamedNode| {
+                            render::term_text(&n.clone().into(), &self.prefixes)
+                        };
+                        vec![
+                            render::Cell::plain(i.index.name.clone()),
+                            render::Cell::plain(iri(&i.index.property)),
+                            render::Cell::plain(i.index.dimensions.to_string()),
+                            render::Cell::plain(i.index.metric.name()),
+                            render::Cell::plain(i.index.element_type.name()),
+                            render::Cell::plain(
+                                i.index.class.as_ref().map(iri).unwrap_or_default(),
+                            ),
+                            render::Cell::plain(i.rows.to_string()),
+                            render::Cell::plain(if i.built { "yes" } else { "no" }),
+                        ]
+                    })
+                    .collect();
+                let headers = [
+                    "name", "property", "dims", "metric", "element", "class", "rows", "built",
+                ]
+                .map(String::from);
+                let t = render::table(&headers, &rows, self.width(), self.paint);
+                self.print(&t);
+                Ok(())
+            }
+            "create" => {
+                let usage = "usage: .vector create NAME PROPERTY DIMENSIONS ?METRIC? ?ELEMENT? ?--class CLASS?";
+                let mut positional = Vec::new();
+                let mut class = None;
+                let mut it = args.iter();
+                while let Some(a) = it.next() {
+                    if *a == "--class" {
+                        class = Some(*it.next().ok_or(usage)?);
+                    } else {
+                        positional.push(*a);
+                    }
+                }
+                let [name, property, dims, more @ ..] = positional.as_slice() else {
+                    return Err(usage.into());
+                };
+                let dims: u32 = dims.parse().map_err(|_| usage)?;
+                let mut index = VectorIndex::new(
+                    *name,
+                    oxilite::model::NamedNode::new(self.expand(property)?)?,
+                    dims,
+                );
+                for m in more {
+                    if let Some(metric) = Metric::parse(m) {
+                        index.metric = metric;
+                        if metric == Metric::Jaccard {
+                            index.element_type = ElementType::SparseFloat32;
+                        }
+                    } else if let Some(t) = ElementType::parse(m) {
+                        index.element_type = t;
+                    } else {
+                        return Err(format!(
+                            "{m} is neither a metric (cosine, euclidean, dot, jaccard) nor an element type (float32, float64, int8, bit1, sparse)"
+                        )
+                        .into());
+                    }
+                }
+                if let Some(c) = class {
+                    index.class = Some(oxilite::model::NamedNode::new(self.expand(c)?)?);
+                }
+                let start = Instant::now();
+                self.db.create_vector_index(&index)?;
+                self.vocab = None;
+                self.footer(&format!("Created vector index {name}"), start.elapsed());
+                Ok(())
+            }
+            "drop" => match args.as_slice() {
+                [name] => {
+                    if self.db.drop_vector_index(name)? {
+                        self.vocab = None;
+                        self.note(&format!("Dropped vector index {name}"));
+                        Ok(())
+                    } else {
+                        Err(format!("there is no vector index named {name}").into())
+                    }
+                }
+                _ => Err("usage: .vector drop NAME".into()),
+            },
+            "search" => {
+                let usage = "usage: .vector search NAME [0.1, …]|NODE ?K?";
+                let (name, query) = rest
+                    .split_once(char::is_whitespace)
+                    .map(|(n, q)| (n, q.trim()))
+                    .ok_or(usage)?;
+                let (query, k) = if query.starts_with('[') {
+                    let end = query.find(']').ok_or(usage)?;
+                    (
+                        QueryVector::Vector(query[..=end].to_owned()),
+                        query[end + 1..].trim(),
+                    )
+                } else {
+                    let (node, k) = query
+                        .split_once(char::is_whitespace)
+                        .map_or((query, ""), |(n, k)| (n, k.trim()));
+                    (
+                        QueryVector::node(oxilite::model::NamedNode::new(self.expand(node)?)?),
+                        k,
+                    )
+                };
+                let k: u64 = if k.is_empty() {
+                    10
+                } else {
+                    k.parse().map_err(|_| usage)?
+                };
+                let start = Instant::now();
+                let hits = self.db.vector_search(name, &query, k)?;
+                let rows: Vec<Vec<render::Cell>> = hits
+                    .iter()
+                    .enumerate()
+                    .map(|(i, h)| {
+                        vec![
+                            render::Cell::plain((i + 1).to_string()),
+                            render::term_cell(&h.node, &self.prefixes),
+                            render::Cell::plain(format!("{:.6}", h.distance)),
+                            render::Cell::plain(format!("{:.6}", h.score)),
+                        ]
+                    })
+                    .collect();
+                let headers = ["rank", "node", "distance", "score"].map(String::from);
+                let t = render::table(&headers, &rows, self.width(), self.paint);
+                self.print(&t);
+                self.footer(
+                    &render::count(hits.len(), "neighbour", "neighbours"),
+                    start.elapsed(),
+                );
+                Ok(())
+            }
+            other => {
+                Err(format!("unknown .vector command {other}: list, create, drop or search").into())
+            }
+        }
     }
 
     /// An IRI given as `<iri>`, `prefix:local` or plain text.

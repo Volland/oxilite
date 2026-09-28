@@ -60,6 +60,14 @@ Done when both packages have passing test suites and typed examples in the READM
 
 Status: done. Both packages are tested with vitest (Oxigraph's own JS store tests included for `@oxilite/node`, Miniflare D1 for `@oxilite/d1`), and both example Workers pass end-to-end tests.
 
+## Python bindings
+
+The `oxilite` package on PyPI: pyoxigraph's API on a SQLite file, plus every oxilite extension. Change: `python-bindings`; depends on the stores of M1–M9 and the JSON forms of the TypeScript bindings.
+
+Done when pyoxigraph's own tests pass against the package (except allow-listed divergences), every extension has a Python test, and wheels build for Linux, macOS and Windows.
+
+Status: done. pyoxigraph's `test_store.py`, `test_model.py` and `test_io.py` run verbatim with three allow-listed divergences ([[decisions#D37 Python bindings mirror pyoxigraph over the JSON bridge]]); oxilite's Python suite covers every extension ([[tests#Python]]); `mypy --strict` passes; `python-wheels.yml` builds abi3 wheels and publishes with trusted publishing on release tags. Publishing to PyPI needs the one-time trusted-publisher setup of `docs/python-publishing.md`.
+
 ## JSON-LD and Verifiable Credentials
 
 Store JSON-LD documents verbatim in a keyed table and their RDF in a named graph per document (by default the credential `id`), queryable with SPARQL. Change: `jsonld-vc-storage`.
@@ -101,3 +109,14 @@ Status: done. Delivered: the language and its checks; non-recursive and linear-r
 Optional versioning in nested levels — `off` (default, today's store), `stamped` (store clock, no extra rows per triple), `log` (immutable history, time travel) — then branches, merge and push/pull.
 
 Status: phase 1 done. Delivered: the three levels with explicit level changes (genesis snapshot, freeze and resume, `allow_loss`), the store clock and commit metadata, the trigger-written change log, as-of queries in SPARQL (option, `SERVICE <oxilite:version/…>`, `/query?version=`) and Datalog (`@version`), history, changes, diffs and purge on the Rust stores, `@oxilite/d1`, `@oxilite/node` and the CLI, and D1 migrations (`oxilite versioning migration`, `npx oxilite-d1 versioning-migration`). Measured on local D1: 4.81 rows per triple at `stamped`, 6.82 at `log`. As-of reads: subject-bound ~3×, selective patterns 1–3.6× with the as-of index, full-history aggregates ~17×; current-state queries unchanged, and a golden test pins unversioned SQL to 0.3.1. The done-criterion holds — as-of results equal the snapshots taken after every commit — on bundled SQLite, the system SQLite, the D1 code path and Miniflare D1 ([[tests#Versioning]]). Changes: `versioned-store` (phase 1), archived as `2026-09-25-versioned-store`. Then `version-history-queries`, archived as `2026-09-25-version-history-queries`: the `<oxilite:history>` graph, Datalog `at` and the `commit`/`added`/`removed`/`branch` relations, and Cypher `asOf`. Planned: `version-branches` (gated on BEAR-B and a checkpoint decision) and `version-sync`.
+
+## Turso, vector indexes and host functions
+
+oxilite on Turso, vector indexes defined as RDF and searched from SPARQL, Cypher and Datalog, and host functions callable from all three.
+
+Change: `turso-vectors-functions`, archived as `2026-09-28-turso-vectors-functions`; the resulting specs are `turso-backend`, `vector-index`, `vector-search` and `host-functions`.
+
+Scope: [[architecture#Backends#Turso]], [[architecture#Vector indexes]], [[architecture#Host functions]] and decisions D38–D41. Done when the query surface of the bundled SQLite backend passes on Turso (text index excepted), an index created from any write surface is searchable from every language in one SQL statement, and host functions work in all three languages.
+
+Status: done. `oxilite-turso` (pinned to Turso 0.8.0-pre.14, the first release with recursive CTEs) passes the Turso, vector and host-function suites ([[tests#Turso]], [[tests#Vector indexes]], [[tests#Host functions]]) alongside the unchanged core, Cypher (TCK allow-list included), Datalog, store and CLI suites. The shell has `--turso`, `.vector` and `.functions`; the studio server has the vector index and function requests. Not in scope: a dense ANN index (Turso has none), vector search on other backends, and the JavaScript and Python bindings.
+

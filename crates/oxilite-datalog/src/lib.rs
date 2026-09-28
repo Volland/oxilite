@@ -28,6 +28,7 @@
 pub mod ast;
 pub mod error;
 pub mod exec;
+pub mod host;
 #[cfg(feature = "json")]
 pub mod json;
 pub mod lexer;
@@ -92,6 +93,42 @@ pub fn version_refs(src: &str, options: &Options) -> Result<(Option<String>, Vec
 pub fn prepare(src: &str, caps: &Capabilities, options: &Options) -> Result<DatalogJob> {
     let compiled = compile(src, caps, options)?;
     Ok(DatalogJob::new(compiled, caps.clone()))
+}
+
+/// A program ready to run: plain, or with rules that call host functions (see [`host`]).
+pub enum ProgramJob {
+    Plain(Box<DatalogJob>),
+    Host(Box<host::HostJob>),
+}
+
+impl oxilite_core::job::Job for ProgramJob {
+    type Output = DatalogResult;
+
+    fn step(
+        &mut self,
+        response: Option<oxilite_core::sql::Response>,
+    ) -> oxilite_core::Result<oxilite_core::job::Step<DatalogResult>> {
+        match self {
+            Self::Plain(j) => j.step(response),
+            Self::Host(j) => j.step(response),
+        }
+    }
+}
+
+/// Prepares a program, with the host functions of `options` callable from it.
+pub fn prepare_program(src: &str, caps: &Capabilities, options: &Options) -> Result<ProgramJob> {
+    let program = parse(src)?;
+    if host::uses_host_functions(&program, &options.functions)? {
+        return Ok(ProgramJob::Host(Box::new(host::HostJob::new(
+            program, caps, options,
+        )?)));
+    }
+    let analysis = program::analyse(&program)?;
+    let compiled = sql::compile(&program, &analysis, caps, options)?;
+    Ok(ProgramJob::Plain(Box::new(DatalogJob::new(
+        compiled,
+        caps.clone(),
+    ))))
 }
 
 /// Describes how a program runs: its strata, the strategy chosen for each recursive
