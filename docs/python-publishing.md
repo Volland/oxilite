@@ -77,6 +77,10 @@ pip install maturin pytest mypy
    OXILITE_SQLITE_LIBRARY=/usr/lib/libsqlite3.dylib python -m pytest
    ```
 
+   The run includes `tests/test_examples.py`, which runs every script in `examples/python/`, the
+   tutorial's `examples/python-tour/tour.py`, and the code blocks of the package README (the page PyPI
+   shows), so an API change that breaks an example fails the tests.
+
 3. Type-check:
 
    ```bash
@@ -131,8 +135,19 @@ and no API token is stored anywhere.
    | Environment name | `pypi` |
 
 3. **Create the environment.** In the GitHub repository, go to *Settings → Environments → New
-   environment* and create `pypi`. As a safety catch, add yourself as a required reviewer: each publish
-   then waits for your approval in the Actions tab.
+   environment* and create `pypi`. Under *Deployment branches and tags*, choose *Selected branches and
+   tags* and allow the tag pattern `v*` and the branch `main`, so only release tags and manual runs on
+   `main` can publish. As an extra safety catch, add yourself as a required reviewer: each publish then
+   waits for your approval in the Actions tab.
+
+   The same with the GitHub CLI:
+
+   ```bash
+   gh api -X PUT repos/Volland/oxilite/environments/pypi \
+     --input - <<< '{"deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}}'
+   gh api -X POST repos/Volland/oxilite/environments/pypi/deployment-branch-policies -f name='v*' -f type=tag
+   gh api -X POST repos/Volland/oxilite/environments/pypi/deployment-branch-policies -f name=main -f type=branch
+   ```
 
 After the first successful upload, the pending publisher becomes a normal publisher of the `oxilite`
 project.
@@ -164,6 +179,19 @@ Pushing the tag starts `python-wheels.yml`:
 
 Check the result at <https://pypi.org/project/oxilite/>, then run `pip install oxilite==X.Y.Z` in a clean
 environment.
+
+### When the tag run fails
+
+A tag cannot be rebuilt with a fix, and moving a pushed tag is bad practice. If a wheel fails on the tag
+(so nothing was published), fix it on `main`, then run the workflow by hand from `main` (*Actions → Python
+wheels → Run workflow*, branch `main`) with **Publish** checked, or:
+
+```bash
+gh workflow run python-wheels.yml --ref main -f publish=true
+```
+
+The version still comes from the Cargo workspace, so this publishes the tagged version with the fix. Do it
+only while `main` has not moved on to the next version's changes in the Python package or its crates.
 
 ### Rehearse on TestPyPI
 
@@ -208,6 +236,7 @@ means a new version.
 | `ImportError: … _native` after pulling | The native module is stale. Run `maturin develop` again |
 | A pyoxigraph test fails in the port | Fix the behaviour, or, if the difference is intended, add a `py:` entry with a reason and a decision to `testsuite/allowlist.toml` |
 | `readme path … does not exist` during `maturin sdist` | Every workspace crate needs the README its manifest names. The sdist includes the workspace |
+| The `publish` job waits, then fails with `Branch "…" is not allowed to deploy to pypi` | The run is not on a `v*` tag or `main`. Run it from `main` |
 | The `publish` job fails with `invalid-publisher` | The trusted publisher on PyPI does not match. Check the owner, repository, workflow file name and environment (`pypi`) |
 | `File already exists` on upload | That version is already on PyPI. Bump the version |
 | `ARM assembler must define __ARM_ARCH` (ring) in the aarch64 wheel | manylinux2014's aarch64 cross compiler is too old for ring. Build that wheel with `manylinux: "2_28"` (glibc 2.28 or later) |

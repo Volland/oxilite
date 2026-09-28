@@ -119,9 +119,8 @@ jobs:
           source .venv/bin/activate
           pip install maturin pytest mypy
           maturin develop
-          python -m pytest
+          python -m pytest            # includes examples/python, the tutorial tour and the README blocks
           mypy --strict python/oxilite
-          python ../../examples/python-tour/tour.py   # the article "How to use oxilite with Python"
 
   lat:
     runs-on: ubuntu-latest

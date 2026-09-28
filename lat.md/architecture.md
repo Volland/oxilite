@@ -712,7 +712,7 @@ Packaging:
 - The crate enables PyO3's `extension-module` feature, and its `build.rs` adds `-undefined dynamic_lookup` on macOS, so `cargo build --workspace` never links libpython.
 - `.github/workflows/python-wheels.yml` builds manylinux x86_64 and aarch64, musllinux x86_64, macOS x86_64 and arm64, Windows x64 and an sdist, smoke-tests the native ones, and publishes with PyPI trusted publishing on `v*` tags. `docs/python-publishing.md` is the guide.
 
-pyoxigraph's `test_store.py`, `test_model.py` and `test_io.py` run verbatim (only the import changed) in `bindings/python/tests/`. Their three failures are `py:` entries of `testsuite/allowlist.toml` (custom functions, custom aggregates, remote `LOAD`), which `conftest.py` turns into strict xfails. The CI job `python` runs them, oxilite's own Python tests, `mypy --strict` and the tutorial script `examples/python-tour/tour.py`. `docs/python.md` is the reference.
+pyoxigraph's `test_store.py`, `test_model.py` and `test_io.py` run verbatim (only the import changed) in `bindings/python/tests/`. Their three failures are `py:` entries of `testsuite/allowlist.toml` (custom functions, custom aggregates, remote `LOAD`), which `conftest.py` turns into strict xfails. The CI job `python` runs them, oxilite's own Python tests and `mypy --strict`; `tests/test_examples.py` also runs the focused scripts in `examples/python/`, the tutorial script `examples/python-tour/tour.py` and the README's code blocks. `docs/python.md` is the reference.
 
 ## Project website
 
