@@ -17,7 +17,7 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 /// A store the user attached: its updates persist.
 pub struct Attached {
     pub id: String,
-    /// `sqlite`, `d1-local` (a `wrangler dev` database file) or `d1`.
+    /// `sqlite`, `turso`, `d1-local` (a `wrangler dev` database file) or `d1`.
     pub kind: &'static str,
     pub label: String,
     pub path: String,
@@ -48,6 +48,29 @@ impl Attached {
             path: path.to_string(),
             read_only,
             store: Handle::Sqlite(store),
+            union_default_graph: false,
+        })
+    }
+
+    /// A Turso database file (SQLite rewritten in Rust): the connection where vector indexes
+    /// live.
+    pub fn open_turso(path: &str, read_only: bool) -> Result<Self> {
+        if !std::path::Path::new(path).exists() && read_only {
+            return Err(format!("{path} does not exist").into());
+        }
+        let backend = if read_only {
+            oxilite::turso::TursoBackend::open_read_only(path)?
+        } else {
+            oxilite::turso::TursoBackend::open(path)?
+        };
+        let store = Store::with_backend(backend)?;
+        Ok(Self {
+            id: format!("turso:{path}"),
+            kind: "turso",
+            label: format!("{} (Turso)", path.rsplit('/').next().unwrap_or(path)),
+            path: path.to_string(),
+            read_only,
+            store: Handle::Turso(store),
             union_default_graph: false,
         })
     }

@@ -8,6 +8,7 @@ pub mod compiler;
 pub mod encoding;
 pub mod error;
 pub mod fallback;
+pub mod functions;
 pub mod job;
 #[cfg(feature = "serde")]
 pub mod json;
@@ -22,6 +23,7 @@ pub mod sql;
 pub mod stats;
 pub mod text;
 pub mod update;
+pub mod vector;
 pub mod version;
 pub mod writer;
 

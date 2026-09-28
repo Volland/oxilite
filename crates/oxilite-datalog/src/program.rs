@@ -64,6 +64,7 @@ impl Analysis {
 
 /// Checks a program and orders its strata.
 pub fn analyse(program: &Program) -> Result<Analysis> {
+    check_iri_atoms(program)?;
     let arity = arities(program)?;
     check_safety(program)?;
     let (nodes, edges) = dependency_graph(program);
@@ -127,6 +128,32 @@ fn arities(program: &Program) -> Result<HashMap<Pred, usize>> {
 }
 
 /// Every head, negated and constraint variable must be bound by a positive body atom.
+/// A store-reading IRI atom is a triple pattern (two arguments) or a class (one). Other arities
+/// parse, because a host function atom may take any number (see `host`), and are refused here.
+fn check_iri_atoms(program: &Program) -> Result<()> {
+    let check = |a: &crate::ast::Atom| -> Result<()> {
+        if matches!(a.pred, Pred::Edb(_)) && !matches!(a.args.len(), 1 | 2) {
+            return Err(DatalogError::Arity {
+                predicate: a.pred.to_string(),
+                expected: 2,
+                found: a.args.len(),
+            });
+        }
+        Ok(())
+    };
+    for rule in &program.rules {
+        for item in &rule.body {
+            if let crate::ast::BodyItem::Atom(a) | crate::ast::BodyItem::Negated(a) = item {
+                check(a)?;
+            }
+        }
+    }
+    if let Some(g) = &program.goal {
+        check(&g.atom)?;
+    }
+    Ok(())
+}
+
 fn check_safety(program: &Program) -> Result<()> {
     for rule in &program.rules {
         let mut bound = Vec::new();

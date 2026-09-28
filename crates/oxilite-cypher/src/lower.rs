@@ -2103,7 +2103,22 @@ impl<'a> Lowerer<'a> {
                 fcall(Function::Round, lowered)
             }
             "rand" => fcall(Function::Rand, vec![]),
-            other => return Err(CypherError::unsupported(format!("{other}() in SQL"))),
+            // A host function: a SPARQL custom function, evaluated by the store's fallback.
+            other => match self
+                .opts
+                .functions
+                .by_cypher_name(other)
+                .map(|f| f.iri().to_owned())
+            {
+                Some(iri) => {
+                    lower_all(self, stage, &mut lowered)?;
+                    fcall(
+                        Function::Custom(oxrdf::NamedNode::new_unchecked(iri)),
+                        lowered,
+                    )
+                }
+                None => return Err(CypherError::unsupported(format!("{other}() in SQL"))),
+            },
         })
     }
 

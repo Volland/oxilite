@@ -431,6 +431,7 @@ fn pred_text(p: &Pred) -> String {
         Pred::Triple { graph: false } => "triple".into(),
         Pred::Triple { graph: true } => "quad".into(),
         Pred::History(h) => h.name().into(),
+        Pred::Nearest { .. } => "nearest".into(),
     }
 }
 
@@ -470,7 +471,13 @@ fn expr_text(e: &Expr, subst: &impl Fn(&str) -> Option<Term>) -> String {
         Expr::Not(x) => format!("!({})", expr_text(x, subst)),
         Expr::Neg(x) => format!("-({})", expr_text(x, subst)),
         Expr::Call { name, args } => format!(
-            "{name}({})",
+            "{}({})",
+            // A host function is named by its IRI.
+            if name.contains(':') {
+                format!("<{name}>")
+            } else {
+                name.clone()
+            },
             args.iter()
                 .map(|a| expr_text(a, subst))
                 .collect::<Vec<_>>()

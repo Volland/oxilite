@@ -14,6 +14,7 @@ The workspace splits a pure, I/O-free core from thin backends and bindings, so t
 | `oxilite` | Umbrella with Oxigraph's module layout (`model`, `io`, `sparql`, `store`): `store::Store` is a drop-in for `oxigraph::store::Store`, `AsyncStore<B>` offers the same API asynchronously |
 | `oxilite-rusqlite` | Native backend on rusqlite (bundled or system SQLite) with `oxilite_*` UDFs |
 | `oxilite-dylib` | Native backend that `dlopen`s a user-supplied `libsqlite3` path — no build-time link |
+| `oxilite-turso` | Native backend on Turso, SQLite rewritten in Rust: the backend with vector indexes ([[architecture#Backends#Turso]]) |
 | `oxilite-d1` | Rust Workers backend over `worker::D1Database` (wasm32) |
 | `oxilite-wasm` | wasm-bindgen export of the sans-IO core for JavaScript drivers |
 | `@oxilite/node` | napi-rs Node.js binding with TypeScript types |
@@ -210,7 +211,7 @@ The Rust blocking and async stores implement them over the core's jobs ([[crates
 
 ## Backends
 
-Four ways to reach SQLite, all behind the same sans-IO contract.
+Five ways to reach SQLite, all behind the same sans-IO contract.
 
 ### Native rusqlite
 
@@ -219,6 +220,12 @@ In-process SQLite (bundled by default) with `oxilite_*` UDFs registered, Unicode
 ### Dynamic libsqlite3
 
 Loads a SQLite shared library from a path at runtime (`libloading`), binding only the C API functions oxilite needs, for hosts that ship their own SQLite.
+
+### Turso
+
+Turso, the Rust reimplementation of SQLite, sync and async, with a two-rule DDL shim. It declares `vectors` and `vector_index_methods`, so vector indexes work there. See [[crates/oxilite-turso/src/lib.rs]].
+
+Turso indexes no `WITHOUT ROWID` table and rejects `WITHOUT ROWID, STRICT`, so [[crates/oxilite-turso/src/lib.rs#adapt]] makes such tables `STRICT` rowid tables: the composite primary key becomes a unique index and every covering index still builds, at one more B-tree per table. FTS5 does not exist; the text index is refused as unsupported. The crate pins `turso = "=0.8.0-pre.14"`, the first release with recursive CTEs (property paths, registry scoping, Datalog recursion); 0.7.2 has none. Sync calls drive Turso's async API with `block_on` (its local IO needs no runtime); atomic requests are savepoints, blobs come back as hex text. `Store::new_turso` / `open_turso` and the CLI's `--turso` open one. See [[decisions#D38 Turso is a backend, not a fork of the compiler]].
 
 ### Cloudflare D1
 
@@ -369,6 +376,12 @@ It loads a project like the Project store (`--root`, in memory) or opens a store
 `oxilite/datalogDebug` reports, for each rule of a program, how many ways its body matches and how many facts its head predicate holds, with the strata and strategies the engine chose. See [[crates/oxilite-cli/src/studio/debug.rs#debug]].
 
 Each count runs the program with an extra goal over one rule's body or head, capped at 100 000, so a rule that matches nothing or explodes stands out next to its line.
+
+### Vector indexes
+
+`oxilite/vectorIndexes`, `vectorIndexCreate`, `vectorIndexDrop`, `vectorSearch` and `functions` work on any connection; `oxilite/attach` with `engine: "turso"` attaches a Turso file, where vector indexes live. See [[crates/oxilite-cli/src/studio/vector.rs]].
+
+On a connection without vector functions (the project store is bundled SQLite) `vectorIndexes` answers `supported: false`, so the panel can say why it is empty. Search takes a `vector` (numbers or JSON text) or a `node`, and returns hits as RDF/JS terms with distance, score and the elapsed time. The studio's panels, quick-pick flow and completions are designed in the change archived as `2026-09-28-turso-vectors-functions`.
 
 ### ShEx and full-text search
 
@@ -598,6 +611,54 @@ The request deletes the quads and graph names of every graph the key owns, delet
 `examples/verifiable-credentials` runs the website's walkthrough on `@oxilite/node` and on Miniflare D1.
 
 The `ssi` crates enable serde_json's `arbitrary_precision` for the whole build, which changes how numbers deserialize; `SqlValue` therefore has a hand-written deserializer that accepts both forms ([[decisions#D20 json-ld and ssi, in two crates]]).
+
+## Vector indexes
+
+k-nearest-neighbour search over embeddings stored as RDF literals, defined as RDF in `<oxilite:vectors>` and searched from SPARQL, Cypher, Datalog and the API with one SQL statement. See [[crates/oxilite-core/src/vector.rs]].
+
+Needs a backend with `Capabilities::vectors` (Turso); every other backend refuses with an unsupported error. Change archived as `2026-09-28-turso-vectors-functions`; specs `vector-index` and `vector-search`.
+
+### Definitions
+
+An index is the resource `<oxilite:vector/NAME>` of type `oxl:VectorIndex` in the system graph `<oxilite:vectors>`, so definitions are data: queryable, versioned, dumped and loaded like any triples.
+
+It names `oxl:indexName`, `oxl:property` (whose literal values are JSON arrays of numbers), `oxl:dimensions`, `oxl:metric` (`Cosine`, `Euclidean`, `DotProduct`, `Jaccard`), `oxl:elementType` (`Float32`, `Float64`, `Int8`, `Bit1`, `SparseFloat32`) and an optional `oxl:class`. [[crates/oxilite-core/src/vector.rs#VectorIndex]] validates a definition (names `[A-Za-z][A-Za-z0-9_]{0,63}`, unique ignoring case; Jaccard if and only if sparse) and converts it to and from quads; readers stay lenient and report invalid descriptions as problems. `Stats` loads the definitions and the build fingerprints only on backends with vectors, so the load request elsewhere is unchanged. See [[decisions#D39 A vector index is RDF in a system graph, realised as a trigger-maintained table]].
+
+### Maintenance
+
+Each index is a table `vec_name (s, o, g, e)` kept exact by two triggers on `quads`, in the transaction of every write: inserts, deletes, `CLEAR`, the bulk loader and Cypher writes alike.
+
+The insert trigger aborts the write when the literal is not a JSON array of the index's dimensions (`RAISE` with the index name), then stores `vector32(lex)` (or the element type's function). Creation back-fills in the same atomic request, guarded by a CHECK-constrained table because `RAISE` exists only in triggers; the store first names the offending subject itself. A sparse index also gets `CREATE INDEX … USING toy_vector_sparse_ivf`. A fingerprint in `oxilite_meta` (`vector:name`) records how the table was built, so [[crates/oxilite-core/src/vector.rs#sync_statements]] can create missing tables, drop orphans and rebuild changed ones.
+
+### Lifecycle
+
+Indexes are created and dropped from the store API, SPARQL Update, Cypher DDL, the shell and the studio; all end in the same statements. See [[crates/oxilite/src/vector_store.rs]].
+
+`create_vector_index` writes the definition and builds the table in one atomic request; `drop_vector_index` removes both. A SPARQL update that can touch `<oxilite:vectors>` ([[crates/oxilite-core/src/vector.rs#update_touches_vectors]]) is followed by a sync, and so is opening a writable store whose definitions and tables disagree (a restored dump); `sync_vector_indexes` runs it on demand. Cypher's `CREATE VECTOR INDEX … FOR (n:Label) ON (n.prop) OPTIONS {indexConfig: {…}}`, `DROP INDEX` and `SHOW VECTOR INDEXES` are recognized by [[crates/oxilite-cypher/src/vector.rs#schema_command]] and run by the store, with labels and keys mapped through the vocabulary.
+
+### Search
+
+[[crates/oxilite-core/src/vector.rs#knn_sql]] is the only nearest-neighbour statement: `k` distinct nodes, each at its smallest distance, by distance then id. Every language places it in its own single SQL statement.
+
+The query is a vector literal or a node whose stored embedding is used; a class restriction is an `EXISTS` on `rdf:type`; a sparse search keeps the shape Turso's IVF index method recognizes. SPARQL's `SERVICE <oxilite:vector/NAME> { [] oxl:query … ; oxl:k … ; oxl:node ?n ; oxl:distance ?d ; oxl:score ?s }` compiles to a derived table ([[crates/oxilite-core/src/compiler/vector.rs]]) that joins, filters and orders with the rest of the query; the partial evaluator keeps it in SQL when other parts need spareval. Cypher's `CALL db.index.vector.queryNodes(name, k, vector) YIELD node, score` is lowered like a `MATCH` ([[crates/oxilite-cypher/src/vector.rs]]): `node` is a node binding later clauses match on. Datalog's `nearest(index, query, k, ?node, ?rank)` reads [[crates/oxilite-core/src/vector.rs#knn_ranked_sql]], with a rank because a Datalog column is a term id and a computed distance has none. Scores follow Neo4j: cosine `1 − d/2`, Euclidean `1/(1 + d²)`, dot `−d`, Jaccard `1 − d`. See [[decisions#D40 One k-NN statement, three languages]].
+
+## Host functions
+
+Application code callable from SPARQL, Cypher and Datalog: a function from RDF terms to an optional term, registered on a store under an IRI and a Cypher name. See [[crates/oxilite-core/src/functions.rs]].
+
+The registry travels in `QueryOptions::functions`, `CypherOptions::functions` and the Datalog `Options::functions`; stores fill them from `Store::register_function`. Functions are not persisted, and IRIs the engine interprets (`oxl:`, `xsd:`) or Cypher built-in names cannot be taken. Only the calls leave SQL. See [[decisions#D41 Host functions run in Rust, and only the calls leave SQL]].
+
+### SPARQL and Cypher
+
+A call to a registered IRI makes the compiler report `unsupported`, so the partial evaluator runs the compilable subtrees as SQL and the calls in spareval, which gets every registered function.
+
+Updates reach them through `delete_insert_with`. An unregistered IRI fails the query naming it, as in Oxigraph; a call with the wrong number of arguments is an evaluation error per solution. Cypher lowers a call whose name is a registered Cypher name to the same custom function, and the Rust evaluator calls it directly in clauses SQL cannot express (a scoped thread-local set by `CypherJob::step`), converting values to terms and back.
+
+### Datalog
+
+Datalog compiles to SQL, which cannot call Rust, so a rule that calls a host function is split: its host-free part runs as SQL, the calls run in Rust over its rows, and the results return as facts. See [[crates/oxilite-datalog/src/host.rs]].
+
+Calls are expressions (`?s = fn:slugify(?n)` binds an unbound `?s`; `fn:score(?x) > 0.5` filters) or atoms named by the function (`fn:slugify(?n, ?s)`: the last argument is the result; `fn:isLong(?n)`: a filter). [[crates/oxilite-datalog/src/host.rs#HostJob]] resolves host rules in dependency order, one request each, replacing each by its facts (or by a never-firing rule when it derives nothing, so its relation stays defined); a host rule that depends on its own head is rejected. A goal's host constraints filter its rows. `prepare_program` chooses this path only when the program calls a host function.
 
 ## Bindings
 

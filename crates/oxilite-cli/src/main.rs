@@ -52,6 +52,10 @@ struct Location {
     /// Load this SQLite shared library instead of the bundled SQLite.
     #[arg(long)]
     library: Option<String>,
+    /// Use Turso (SQLite rewritten in Rust) instead of the bundled SQLite: vector indexes and
+    /// search become available.
+    #[arg(long)]
+    turso: bool,
     /// Use the D1 database of a local sidecar (`testsuite/d1-sidecar`) at this URL.
     #[arg(long)]
     d1_sidecar: Option<String>,

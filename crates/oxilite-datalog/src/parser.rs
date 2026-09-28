@@ -31,7 +31,49 @@ pub fn parse(src: &str) -> Result<Program> {
     }
     .program()?;
     history_names(&mut program)?;
+    nearest_names(&mut program)?;
     Ok(program)
+}
+
+/// `nearest` is the vector search built-in unless the program defines rules of that name.
+fn nearest_names(program: &mut Program) -> Result<()> {
+    use crate::ast::BodyItem;
+    let defined = program
+        .rules
+        .iter()
+        .any(|r| matches!(r.head.pred, Pred::Nearest { .. }));
+    let fix = |pred: &mut Pred| {
+        if defined && matches!(pred, Pred::Nearest { .. }) {
+            *pred = Pred::Idb("nearest".to_owned());
+        }
+    };
+    let check = |atom: &Atom| -> Result<()> {
+        if !defined
+            && matches!(atom.pred, Pred::Nearest { .. })
+            && !matches!(atom.args.len(), 4 | 5)
+        {
+            return Err(DatalogError::Arity {
+                predicate: atom.pred.to_string(),
+                expected: 5,
+                found: atom.args.len(),
+            });
+        }
+        Ok(())
+    };
+    for rule in &mut program.rules {
+        fix(&mut rule.head.pred);
+        for item in &mut rule.body {
+            if let BodyItem::Atom(a) | BodyItem::Negated(a) = item {
+                check(a)?;
+                fix(&mut a.pred);
+            }
+        }
+    }
+    if let Some(goal) = &mut program.goal {
+        check(&goal.atom)?;
+        fix(&mut goal.atom.pred);
+    }
+    Ok(())
 }
 
 /// `commit`, `added`, `removed` and `branch` are the history built-ins unless the program
@@ -286,6 +328,9 @@ impl Parser {
                 if n == "triple" || n == "quad" {
                     // Arity decides which form this is; fixed up once the arguments are read.
                     Ok(Pred::Triple { graph: n == "quad" })
+                } else if n == "nearest" {
+                    // Arity decides the form; a program defining `nearest` keeps its own.
+                    Ok(Pred::Nearest { rank: true })
                 } else if let Some(h) = crate::ast::HistoryRel::from_name(&n) {
                     // A program that defines rules of that name keeps its own relation (see
                     // `parse`).
@@ -424,10 +469,47 @@ impl Parser {
             return false;
         }
         match head {
-            Some(Tok::Iri(_)) | Some(Tok::Curie(..)) => true,
+            // An IRI call followed by an operator (`fn:score(?x) > 0.5`) is an expression.
+            Some(Tok::Iri(_)) | Some(Tok::Curie(..)) => !self.call_then_operator(offset + 1),
             Some(Tok::Name(n)) => !is_function(n),
             _ => false,
         }
+    }
+
+    /// Does the parenthesized group opening at `offset` end just before an operator?
+    fn call_then_operator(&self, offset: usize) -> bool {
+        let mut depth = 0usize;
+        let mut i = offset;
+        while let Some(t) = self.peek_at(i) {
+            match t {
+                Tok::LParen => depth += 1,
+                Tok::RParen => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return matches!(
+                            self.peek_at(i + 1),
+                            Some(
+                                Tok::Eq
+                                    | Tok::Ne
+                                    | Tok::Lt
+                                    | Tok::Le
+                                    | Tok::Gt
+                                    | Tok::Ge
+                                    | Tok::Plus
+                                    | Tok::Minus
+                                    | Tok::Star
+                                    | Tok::Slash
+                                    | Tok::And
+                                    | Tok::Or
+                            )
+                        );
+                    }
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+        false
     }
 
     fn atom(&mut self) -> Result<Atom> {
@@ -467,9 +549,15 @@ impl Parser {
                 graph: args.len() == 4,
             };
         }
+        if let Pred::Nearest { .. } = pred {
+            pred = Pred::Nearest {
+                rank: args.len() != 4,
+            };
+        }
         if let Some(want) = pred.arity() {
-            // A history name may be the program's own relation: checked after parsing.
-            if args.len() != want && !matches!(pred, Pred::History(_)) {
+            // A history or `nearest` name may be the program's own relation: checked after
+            // parsing.
+            if args.len() != want && !matches!(pred, Pred::History(_) | Pred::Nearest { .. }) {
                 return Err(DatalogError::Arity {
                     predicate: pred.to_string(),
                     expected: want,
@@ -477,15 +565,8 @@ impl Parser {
                 });
             }
         }
-        if let Pred::Edb(_) = &pred {
-            if !matches!(args.len(), 1 | 2) {
-                return Err(DatalogError::Arity {
-                    predicate: pred.to_string(),
-                    expected: 2,
-                    found: args.len(),
-                });
-            }
-        }
+        // An IRI atom of another arity can only be a host function call (`fn:concat(?a, ?b,
+        // ?out)`): checked once functions are known (`program::analyse`, `host`).
         if at.is_some() && !matches!(pred, Pred::Edb(_) | Pred::Triple { .. }) {
             return Err(DatalogError::parse(
                 span,
@@ -628,6 +709,30 @@ impl Parser {
                 }
                 self.expect(&Tok::RParen, "`)` closing the function call")?;
                 Ok(Expr::Call { name, args })
+            }
+            // A host function, named by its IRI (`fn:slugify(?n)`, `<http://…>(?n)`).
+            Some(Tok::Curie(..)) | Some(Tok::Iri(_)) if self.peek_at(1) == Some(&Tok::LParen) => {
+                let span = self.span();
+                let name = match self.bump() {
+                    Some(Tok::Curie(p, l)) => self.curie(&p, &l, span)?,
+                    Some(Tok::Iri(i)) => self.iri(&i, span)?,
+                    _ => unreachable!("peeked an IRI"),
+                };
+                self.bump();
+                let mut args = Vec::new();
+                if self.peek() != Some(&Tok::RParen) {
+                    loop {
+                        args.push(self.expr()?);
+                        if !self.eat(&Tok::Comma) {
+                            break;
+                        }
+                    }
+                }
+                self.expect(&Tok::RParen, "`)` closing the function call")?;
+                Ok(Expr::Call {
+                    name: name.into_string(),
+                    args,
+                })
             }
             _ => Ok(Expr::Const(self.term()?)),
         }

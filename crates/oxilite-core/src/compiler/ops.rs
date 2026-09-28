@@ -99,6 +99,14 @@ impl Compiler<'_> {
                 self.as_of = saved;
                 out
             }
+            GraphPattern::Service {
+                name: spargebra::term::NamedNodePattern::NamedNode(n),
+                inner,
+                ..
+            } if crate::vector::service_index(n.as_str()).is_some() => {
+                let name = crate::vector::service_index(n.as_str()).unwrap_or_default();
+                self.vector_service(name, inner)
+            }
             GraphPattern::Service { .. } => Err(Error::unsupported("SERVICE")),
             other => Err(Error::unsupported(format!(
                 "graph pattern {}",

@@ -291,8 +291,10 @@ pub fn evaluate<B: SyncBackend>(
     query: &Query,
     options: &crate::QueryOptions,
 ) -> Result<QueryOutput> {
-    let evaluator = QueryEvaluator::new()
-        .with_custom_function(crate::text::text_match_name(), crate::text::text_match);
+    let evaluator = options.functions.install(
+        QueryEvaluator::new()
+            .with_custom_function(crate::text::text_match_name(), crate::text::text_match),
+    );
     let mut prepared = evaluator.prepare(query);
     let dataset = SqlDataset::new(backend).with_options(options)?;
     apply_dataset_options(prepared.dataset_mut(), query, options, |id| {
@@ -329,6 +331,21 @@ pub fn delete_insert<B: SyncBackend>(
     op: &spargebra::GraphUpdateOperation,
     base_iri: Option<&oxiri::Iri<String>>,
 ) -> Result<(Vec<oxrdf::Quad>, Vec<oxrdf::Quad>)> {
+    delete_insert_with(
+        backend,
+        op,
+        base_iri,
+        &crate::functions::Functions::default(),
+    )
+}
+
+/// [`delete_insert`] with host functions callable from the `WHERE` clause.
+pub fn delete_insert_with<B: SyncBackend>(
+    backend: &B,
+    op: &spargebra::GraphUpdateOperation,
+    base_iri: Option<&oxiri::Iri<String>>,
+    functions: &crate::functions::Functions,
+) -> Result<(Vec<oxrdf::Quad>, Vec<oxrdf::Quad>)> {
     let spargebra::GraphUpdateOperation::DeleteInsert {
         delete,
         insert,
@@ -338,8 +355,10 @@ pub fn delete_insert<B: SyncBackend>(
     else {
         return Err(Error::Other("not a DELETE/INSERT operation".into()));
     };
-    let evaluator = QueryEvaluator::new()
-        .with_custom_function(crate::text::text_match_name(), crate::text::text_match);
+    let evaluator = functions.install(
+        QueryEvaluator::new()
+            .with_custom_function(crate::text::text_match_name(), crate::text::text_match),
+    );
     let prepared = evaluator.prepare_delete_insert(
         delete.clone(),
         insert.clone(),

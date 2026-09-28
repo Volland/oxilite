@@ -127,7 +127,7 @@ The filter is applied right after the first scan, before any join. The unary `+`
 ## Usage
 
 ```bash
-cargo add oxilite                      # Rust (features: rusqlite (default), dylib, d1, reasonable, cypher)
+cargo add oxilite                      # Rust (features: rusqlite (default), dylib, d1, turso, reasonable, cypher)
 cargo install oxilite-cli              # the `oxilite` command and SPARQL endpoint
 npm install @oxilite/node              # Node.js (prebuilt for macOS arm64)
 npm install @oxilite/d1                # Cloudflare D1 (WebAssembly)
@@ -141,6 +141,7 @@ Every package has its own README with installation, examples and its API:
 | [`oxilite-core`](crates/oxilite-core/README.md) | The sans-IO core: term encoding, schema, SPARQL → SQL compiler and planner |
 | [`oxilite-rusqlite`](crates/oxilite-rusqlite/README.md) | In-process backend with a bundled SQLite (the default) |
 | [`oxilite-dylib`](crates/oxilite-dylib/README.md) | Backend that loads your own `libsqlite3` at runtime |
+| [`oxilite-turso`](crates/oxilite-turso/README.md) | Backend on Turso (SQLite rewritten in Rust), with vector indexes searchable from SPARQL, Cypher and Datalog |
 | [`oxilite-d1`](crates/oxilite-d1/README.md) | Cloudflare D1 backend for Rust Workers |
 | [`oxilite-cypher`](crates/oxilite-cypher/README.md) | openCypher over the same data, OWL- and SHACL-aware |
 | [`oxilite-jsonld`](crates/oxilite-jsonld/README.md) | JSON-LD documents stored verbatim, one named graph each |

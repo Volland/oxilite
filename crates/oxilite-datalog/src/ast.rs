@@ -22,6 +22,9 @@ pub enum Pred {
     Triple { graph: bool },
     /// The history of a versioned store: `commit`, `added`, `removed`, `branch`.
     History(HistoryRel),
+    /// `nearest(index, query, k, ?node, ?rank)` (and without `?rank`): the `k` nodes nearest
+    /// to `query` in a vector index (see `oxilite_core::vector`).
+    Nearest { rank: bool },
 }
 
 /// The built-in relations over a versioned store's history.
@@ -74,6 +77,7 @@ impl Pred {
             Self::Triple { graph: false } => Some(3),
             Self::Triple { graph: true } => Some(4),
             Self::History(h) => Some(h.arity()),
+            Self::Nearest { rank } => Some(if *rank { 5 } else { 4 }),
             // An IRI atom takes one argument or two, and a derived relation takes whatever
             // its rules give it, so neither has a fixed arity.
             Self::Edb(_) | Self::Idb(_) => None,
@@ -94,6 +98,7 @@ impl std::fmt::Display for Pred {
             Self::Triple { graph: false } => f.write_str("triple/3"),
             Self::Triple { graph: true } => f.write_str("triple/4"),
             Self::History(h) => write!(f, "{}/{}", h.name(), h.arity()),
+            Self::Nearest { rank } => write!(f, "nearest/{}", if *rank { 5 } else { 4 }),
         }
     }
 }

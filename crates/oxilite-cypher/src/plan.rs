@@ -126,8 +126,9 @@ fn plan_single(sq: &SingleQuery, lw: &mut Lowerer<'_>) -> Result<PartPlan> {
     // Variables introduced by tail clauses.
     let mut tail_vars: BTreeSet<String> = BTreeSet::new();
     let mut tail_reshaped = false;
-    let n = sq.clauses.len();
-    for (i, clause) in sq.clauses.iter().enumerate() {
+    let clauses = with_vector_return(&sq.clauses);
+    let n = clauses.len();
+    for (i, clause) in clauses.iter().enumerate() {
         let last = i + 1 == n;
         if let Clause::Merge {
             pattern,
@@ -340,6 +341,26 @@ fn plan_single(sq: &SingleQuery, lw: &mut Lowerer<'_>) -> Result<PartPlan> {
                 }
                 in_sql = false;
             }
+            // A vector search reads like a MATCH: its node joins the rest of the SQL stage.
+            Clause::Call {
+                procedure: name,
+                args,
+                yields,
+                where_,
+            } if name == crate::vector::QUERY_NODES => {
+                let (pattern, binds) = crate::vector::query_nodes(args, yields, lw)?;
+                stage.pattern = join(std::mem::replace(&mut stage.pattern, unit()), pattern);
+                for (alias, bind) in binds {
+                    stage.scope.insert(alias, bind);
+                }
+                if let Some(w) = where_ {
+                    let expr = lw.expr(w, &mut stage)?;
+                    stage.pattern = GraphPattern::Filter {
+                        expr,
+                        inner: Box::new(std::mem::replace(&mut stage.pattern, unit())),
+                    };
+                }
+            }
             Clause::Call {
                 procedure: name,
                 args,
@@ -429,6 +450,44 @@ fn plan_single(sq: &SingleQuery, lw: &mut Lowerer<'_>) -> Result<PartPlan> {
         var_types: std::mem::take(&mut lw.var_types),
         comprehensions,
     })
+}
+
+/// A statement ending with a vector search returns what it yields.
+fn with_vector_return(clauses: &[Clause]) -> std::borrow::Cow<'_, [Clause]> {
+    let Some(Clause::Call {
+        procedure, yields, ..
+    }) = clauses.last()
+    else {
+        return std::borrow::Cow::Borrowed(clauses);
+    };
+    if procedure != crate::vector::QUERY_NODES {
+        return std::borrow::Cow::Borrowed(clauses);
+    }
+    let names: Vec<String> = match yields {
+        None => vec!["node".into(), "score".into()],
+        Some(items) => items
+            .iter()
+            .map(|(c, a)| a.clone().unwrap_or_else(|| c.clone()))
+            .collect(),
+    };
+    let mut out = clauses.to_vec();
+    out.push(Clause::Return(Projection {
+        distinct: false,
+        star: false,
+        items: names
+            .into_iter()
+            .map(|n| ProjectionItem {
+                expr: Expr::Var(n.clone()),
+                alias: None,
+                text: n,
+            })
+            .collect(),
+        order: Vec::new(),
+        skip: None,
+        limit: None,
+        where_: None,
+    }));
+    std::borrow::Cow::Owned(out)
 }
 
 fn select(pattern: GraphPattern, vars: Vec<Variable>) -> spargebra::Query {
