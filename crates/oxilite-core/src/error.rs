@@ -44,6 +44,11 @@ impl Error {
             Self::Other("the graph does not exist".into())
         } else if msg.contains("graph_already_exists") {
             Self::Other("the graph already exists".into())
+        } else if msg.contains("vector_dimensions_mismatch") {
+            Self::Other(
+                "a value of the indexed property is not a JSON array with the index's dimensions"
+                    .into(),
+            )
         } else if msg.contains("computed_value_not_storable") {
             Self::Unsupported(
                 "an update template stores a computed non-integer value, which SQL cannot hash"

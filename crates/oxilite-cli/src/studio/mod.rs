@@ -19,6 +19,7 @@ pub(crate) mod scanner;
 #[cfg(test)]
 mod tests;
 mod validate;
+mod vector;
 mod why;
 
 use conn::{Attached, NeedsConfirmation, Target, Vocab};
@@ -438,7 +439,13 @@ impl Server<'_> {
             "oxilite/attach" => {
                 let path = p["path"].as_str().ok_or("oxilite/attach needs a `path`")?;
                 let read_only = p["readOnly"].as_bool().unwrap_or(false);
-                let attached = Attached::open(path, read_only)?;
+                let attached = match p["engine"].as_str() {
+                    Some("turso") => Attached::open_turso(path, read_only)?,
+                    None | Some("sqlite") => Attached::open(path, read_only)?,
+                    Some(other) => {
+                        return Err(format!("unknown engine {other}: sqlite or turso").into())
+                    }
+                };
                 let id = attached.id.clone();
                 self.attached.retain(|a| a.id != id);
                 self.attached.push(attached);
@@ -481,6 +488,21 @@ impl Server<'_> {
                 .collect::<Vec<_>>())),
             "oxilite/ontology" => explorer::ontology(&self.target(p["connection"].as_str())?),
             "oxilite/registry" => registry::read(&self.target(p["connection"].as_str())?),
+            "oxilite/vectorIndexes" => vector::list(&self.target(p["connection"].as_str())?),
+            "oxilite/vectorIndexCreate" => {
+                let id = p["connection"].as_str().map(str::to_string);
+                let out = vector::create(&self.target(id.as_deref())?, &p)?;
+                self.after_write(id.as_deref())?;
+                Ok(out)
+            }
+            "oxilite/vectorIndexDrop" => {
+                let id = p["connection"].as_str().map(str::to_string);
+                let out = vector::drop(&self.target(id.as_deref())?, &p)?;
+                self.after_write(id.as_deref())?;
+                Ok(out)
+            }
+            "oxilite/vectorSearch" => vector::search(&self.target(p["connection"].as_str())?, &p),
+            "oxilite/functions" => vector::functions(&self.target(p["connection"].as_str())?),
             "oxilite/registryEdit" => {
                 let id = p["connection"].as_str().map(str::to_string);
                 let out = registry::edit(&self.target(id.as_deref())?, &p)?;

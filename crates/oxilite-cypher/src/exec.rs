@@ -575,6 +575,11 @@ impl CypherJob {
 
     /// Advances the job. The first call gets `None`.
     pub fn step(&mut self, input: Option<StepInput>) -> Result<CypherStep> {
+        let functions = self.opts.functions.clone();
+        crate::eval::with_host(&functions, || self.step_inner(input))
+    }
+
+    fn step_inner(&mut self, input: Option<StepInput>) -> Result<CypherStep> {
         match (self.state, input) {
             (State::Start, _) => {
                 crate::temporal::reset_clock();

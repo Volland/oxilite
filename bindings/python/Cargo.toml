@@ -1,0 +1,31 @@
+[package]
+name = "oxilite-python"
+description = "Python bindings for oxilite (PyO3): an Oxigraph-compatible SPARQL store on SQLite"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+publish = false
+
+[lib]
+name = "oxilite_python"
+crate-type = ["cdylib"]
+# The module links against the Python that loads it; there is no Rust test harness to link.
+test = false
+doctest = false
+
+[dependencies]
+oxilite = { workspace = true, features = ["rusqlite", "dylib", "reasonable", "cypher", "datalog", "datalog-json", "vc", "jsonld-json", "jsonld-network"] }
+oxilite-core = { workspace = true, features = ["serde"] }
+oxrdf.workspace = true
+oxrdfio.workspace = true
+spargebra.workspace = true
+sparesults.workspace = true
+serde = "1"
+serde_json = "1"
+pyo3 = { version = "0.29", features = ["abi3-py39", "extension-module"] }
+
+[build-dependencies]
+pyo3-build-config = "0.29"

@@ -1,0 +1,21 @@
+[package]
+name = "oxilite-turso"
+description = "Turso backend for oxilite: SQLite rewritten in Rust, with vector search"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/oxilite-turso"
+readme = "README.md"
+authors.workspace = true
+keywords = ["rdf", "sparql", "turso", "vector-search", "sqlite"]
+categories.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+oxilite-core.workspace = true
+# Pinned exactly: 0.7.x has no recursive CTEs, and a prerelease moves under a caret requirement.
+# Default features pull in mimalloc and FTS, which a library must not choose for its users.
+turso = { version = "=0.8.0-pre.14", default-features = false }
+futures = { version = "0.3", default-features = false, features = ["executor", "std"] }

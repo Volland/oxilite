@@ -341,3 +341,40 @@ fn session_query_options() {
     assert!(out.take().contains("off"));
     assert!(err.take().is_empty());
 }
+
+// @lat: [[tests#Shell#Vector commands]]
+#[test]
+fn vector_commands() {
+    let turso = Location {
+        turso: true,
+        ..memory()
+    };
+    let (out, err) = (Buf::default(), Buf::default());
+    let db = Db::open(&turso).unwrap();
+    let mut s = Session::new(db, turso, Box::new(out.clone()), Box::new(err.clone()));
+    feed(
+        &mut s,
+        r#"PREFIX ex: <http://example.com/> INSERT DATA { ex:a ex:e "[1, 0, 0]" . ex:b ex:e "[0.7, 0.7, 0]" . ex:c ex:e "[0, 1, 0]" }
+.prefix ex: <http://example.com/>
+.vector create docs ex:e 3 euclidean
+.vector list
+.vector search docs [1, 0.1, 0] 2"#,
+    );
+    let text = out.take();
+    assert!(text.contains("Created vector index docs"), "{text}");
+    assert!(
+        text.contains("euclidean") && text.contains("ex:e"),
+        "{text}"
+    );
+    let a = text.find("ex:a").expect("ex:a found");
+    let b = text.rfind("ex:b").expect("ex:b found");
+    assert!(a < b, "{text}");
+    assert!(!text.contains("ex:c │"), "{text}");
+    feed(&mut s, ".vector drop docs\n.vector list");
+    assert!(out.take().contains("No vector index."));
+    assert!(err.take().is_empty());
+    // Not on bundled SQLite.
+    let (mut s, _, err) = session();
+    feed(&mut s, ".vector list");
+    assert!(err.take().contains("--turso"));
+}

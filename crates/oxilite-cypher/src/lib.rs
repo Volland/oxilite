@@ -26,6 +26,7 @@ mod schema;
 mod temporal;
 mod validate;
 mod value;
+mod vector;
 mod vocab;
 
 pub use error::{CypherError, Result};
@@ -33,11 +34,25 @@ pub use exec::{CypherJob, CypherResult, CypherStep, StepInput, WriteStats};
 pub use parser::parse;
 pub use schema::{schema_query, Shapes as Schema};
 pub use value::{Node, Params, Path, Relationship, TemporalKind, Value, RDF_JSON};
+pub use vector::{schema_command, SchemaCommand};
 pub use vocab::Vocabulary;
 
 use oxilite_core::job::Job;
 use oxilite_core::query::{compile_query, QueryJob, QueryOutput};
 use oxilite_core::{Capabilities, QueryOptions, Request, Response, Stats, Step};
+
+/// Is `name` a function Cypher defines itself (so a host function may not take it)?
+pub fn is_builtin_function(name: &str) -> bool {
+    let name = name.to_lowercase();
+    if ast::is_aggregate(&name) || matches!(name.as_str(), "id" | "elementid" | "exists") {
+        return true;
+    }
+    // An unknown name is "unsupported"; a known one fails on its arguments, or succeeds.
+    !matches!(
+        eval::function(&name, vec![Value::Null; 8]),
+        Err(CypherError::Unsupported(m)) if m.starts_with("function ")
+    )
+}
 
 /// How a property with several RDF values is read.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -79,6 +94,8 @@ pub struct CypherOptions {
     /// Options of the SPARQL evaluation: reasoning (OWL/RDFS entailment), union default
     /// graph…
     pub query: QueryOptions,
+    /// Host functions, callable by their Cypher names (see `oxilite_core::functions`).
+    pub functions: oxilite_core::functions::Functions,
 }
 
 impl Default for CypherOptions {
@@ -94,6 +111,7 @@ impl Default for CypherOptions {
             shapes: true,
             schema: None,
             query: QueryOptions::default(),
+            functions: Default::default(),
         }
     }
 }

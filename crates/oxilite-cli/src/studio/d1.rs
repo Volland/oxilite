@@ -155,10 +155,11 @@ impl SyncBackend for D1Http {
     }
 }
 
-/// A connection's store: a SQLite file (bundled SQLite) or D1 over HTTP.
+/// A connection's store: a SQLite file (bundled SQLite), a Turso file, or D1 over HTTP.
 #[derive(Clone)]
 pub enum Handle {
     Sqlite(Store),
+    Turso(Store<oxilite::turso::TursoBackend>),
     D1(Store<D1Http>, Arc<Meter>),
 }
 
@@ -166,6 +167,7 @@ macro_rules! each {
     ($self:expr, $s:ident => $e:expr) => {
         match $self {
             Handle::Sqlite($s) => $e,
+            Handle::Turso($s) => $e,
             Handle::D1($s, _) => $e,
         }
     };
@@ -174,9 +176,42 @@ macro_rules! each {
 impl Handle {
     pub fn meter(&self) -> Option<&Arc<Meter>> {
         match self {
-            Handle::Sqlite(_) => None,
+            Handle::Sqlite(_) | Handle::Turso(_) => None,
             Handle::D1(_, m) => Some(m),
         }
+    }
+
+    /// Does this store have vector functions (vector indexes and search)?
+    pub fn supports_vectors(&self) -> bool {
+        matches!(self, Handle::Turso(_))
+    }
+
+    pub fn vector_indexes(&self) -> oxilite_core::Result<Vec<oxilite::vector::VectorIndexInfo>> {
+        each!(self, s => s.vector_indexes())
+    }
+
+    pub fn create_vector_index(
+        &self,
+        index: &oxilite::vector::VectorIndex,
+    ) -> oxilite_core::Result<()> {
+        each!(self, s => s.create_vector_index(index))
+    }
+
+    pub fn drop_vector_index(&self, name: &str) -> oxilite_core::Result<bool> {
+        each!(self, s => s.drop_vector_index(name))
+    }
+
+    pub fn vector_search(
+        &self,
+        name: &str,
+        query: &oxilite::vector::QueryVector,
+        k: u64,
+    ) -> oxilite_core::Result<Vec<oxilite::vector::VectorHit>> {
+        each!(self, s => s.vector_search(name, query, k))
+    }
+
+    pub fn functions(&self) -> Vec<oxilite::functions::HostFunction> {
+        each!(self, s => s.functions())
     }
 
     pub fn query_output(

@@ -223,3 +223,35 @@ Deferred, because they break stored data or IRIs: separate registration resource
 The registration properties get the domain `oxl:RegisteredGraph`, and the registry records imports with `oxl:imports`. Backward compatible: registries of vocabulary 2 read as before.
 
 An ontology review found the shipped registry inconsistent under OWL: `<oxilite:vocabulary>` is an `oxl:SystemGraph` described with `oxl:appliesTo`, whose domain `oxl:SchemaGraph` is disjoint from it. `owl:imports` in the registry had domain `owl:Ontology`, typing every registration an ontology and making OWL tools fetch the imports. 2.1 adds the disjoint union `oxl:RegisteredGraph` ⊑ `sd:Graph` as the domain, writes `oxl:imports` while still reading `owl:imports`, types `oxl:textMatch` as `sd:Function`, gives `oxl:added` / `oxl:removed` the domain `prov:Activity`, and adds `owl:priorVersion`. A unit test checks the vocabulary against the system graphs' descriptions. Registration resources per role (PROF-style) stay deferred to vocabulary 3. See [[architecture#Schema registry]].
+
+## D37 Python bindings mirror pyoxigraph over the JSON bridge
+
+The Python package takes pyoxigraph's API as its contract and reuses the JSON forms of the JavaScript bindings, so Python users switch by changing an import and new store features reach Python without new conversion code.
+
+Why pyoxigraph's API: it is what Python RDF code is written against, and its own tests (`test_store.py`, `test_model.py`, `test_io.py`) can then run against oxilite verbatim, as Oxigraph's JS tests do for `@oxilite/node`. oxilite's extensions use snake_case keyword arguments with Node's meanings and return frozen dataclasses. Why JSON across PyO3 rather than Rust-built Python objects: one wire format for Node, D1 and Python keeps results identical, `json` decoding is C code, and the SQL query dominates the cost; terms are pure-Python `__slots__` classes, which pickle, copy and pattern-match without PyO3 class machinery. Results are therefore materialized, as they already are in the store.
+
+Three pyoxigraph features are refused rather than emulated, and allow-listed: `custom_functions` and `custom_aggregate_functions` (a query is one SQL statement run by SQLite, which cannot call Python per row or group without abandoning compilation), and remote SPARQL `LOAD` (the sans-IO core does no network I/O). `substitutions` is kept by joining a one-row `VALUES` into the algebra, and a directory path stores `oxilite.sqlite` inside it. Wheels target the stable ABI (`abi3-py39`) so a release is one wheel per platform. See [[architecture#Bindings#Python]].
+
+## D38 Turso is a backend, not a fork of the compiler
+
+oxilite runs on Turso through `oxilite-turso`, a backend like the others; the compiler does not branch on the engine, and differences are declared as `Capabilities` (`vectors`, `vector_index_methods`).
+
+A feasibility probe drove the real `Store` over Turso first: 0.7.2 fails every recursive CTE (property paths, registry scoping, Datalog recursion), 0.8.0-pre.14 passes, so the crate pins that prerelease exactly. Two DDL forms are rewritten (`WITHOUT ROWID, STRICT` tables become rowid `STRICT` tables, because Turso neither parses that option list nor indexes `WITHOUT ROWID` tables) and FTS5 is refused. Rejected: reaching Turso through the dylib backend (its C ABI is not the SQLite C API) and an engine switch in the compiler (the SQL is the same). See [[architecture#Backends#Turso]].
+
+## D39 A vector index is RDF in a system graph, realised as a trigger-maintained table
+
+The definition of an index is data in a system graph, as the schema registry is ([[decisions#D34 The schema registry is RDF in a system graph]]); its table is a cache that triggers keep exact and a sync rebuilds.
+
+Triggers on `quads` maintain the table in the transaction of every write path without code in the writer, as `terms_fts` is maintained; malformed or wrong-length embeddings abort the write, so an index is never silently partial. Rejected: one generic table for all indexes, which SPARQL could have maintained without DDL, because Turso's sparse IVF index method matches only `SELECT … FROM {table} ORDER BY distance LIMIT ?` over a whole table; and a definitions table as the source of truth, invisible to queries and dumps. See [[architecture#Vector indexes#Definitions]].
+
+## D40 One k-NN statement, three languages
+
+`vector::knn_sql` is the only nearest-neighbour query; SPARQL (`SERVICE <oxilite:vector/NAME>`), Cypher (`db.index.vector.queryNodes`) and Datalog (`nearest`) each embed it in their single SQL statement.
+
+So the graph pattern around a search runs in the same statement, and the three agree on results by construction. SPARQL uses the `SERVICE` form oxilite already gives versions; Cypher uses Neo4j's procedure and similarity scores so existing queries port; Cypher's call is lowered like a `MATCH` rather than as a schema procedure, because its node must be a node. Datalog returns a rank instead of a distance: its columns are term ids, and an inline integer has one while a computed double does not. Dense search is an exact scan until Turso ships a dense ANN index; `knn_sql` is where one plugs in. See [[architecture#Vector indexes#Search]].
+
+## D41 Host functions run in Rust, and only the calls leave SQL
+
+A host function is spareval's custom-function signature, `Fn(&[Term]) -> Option<Term>`, registered per store and never persisted; each frontend keeps the rest of a query in SQL.
+
+SPARQL and Cypher reach host functions through the partial evaluator, which already runs compilable subtrees as SQL and the rest in spareval. Datalog cannot: its rules are SQL, and Turso keeps scalar-function registration private while D1 has none, so a rule that calls a host function is split, its host-free part run as SQL and its results returned to the program as facts, one request per host rule, with recursion through a host rule rejected. Rejected: SQL UDFs, which would work on rusqlite only and give a function two evaluation paths. See [[architecture#Host functions]].

@@ -61,6 +61,10 @@ pub struct Options {
     pub versions: std::collections::BTreeMap<String, i64>,
     /// The store's versioning state, for the history built-ins and `at ?c` (set by the store).
     pub history: Option<oxilite_core::version::VersionState>,
+    /// The built vector indexes `nearest` can search (set by the store).
+    pub vector_indexes: Vec<oxilite_core::vector::VectorIndex>,
+    /// Host functions callable from rules and goals (set by the store; see [`crate::host`]).
+    pub functions: oxilite_core::functions::Functions,
 }
 
 impl Default for Options {
@@ -74,6 +78,8 @@ impl Default for Options {
             as_of_tick: None,
             versions: std::collections::BTreeMap::new(),
             history: None,
+            vector_indexes: Vec::new(),
+            functions: Default::default(),
         }
     }
 }
@@ -345,6 +351,83 @@ impl<'a> Compiler<'a> {
                 )
             }
         })
+    }
+
+    /// `nearest(index, query, k, ?node[, ?rank])`: the k-NN statement of the index, with the
+    /// constant arguments as columns holding their own ids (so binding them is an identity) and
+    /// the rank as an inline integer.
+    fn nearest_source(
+        &mut self,
+        atom: &Atom,
+        rank: bool,
+    ) -> Result<(String, Vec<String>, Vec<String>)> {
+        use oxilite_core::vector::{self, QueryVector};
+        let form = atom.pred.to_string();
+        if !self.caps.vectors {
+            return Err(DatalogError::Unsupported(format!(
+                "{form} needs a backend with vector functions, such as Turso (oxilite-turso)"
+            )));
+        }
+        let constant = |i: usize, what: &str| match &atom.args[i] {
+            Arg::Const(t) => Ok(t.clone()),
+            _ => Err(DatalogError::Unsupported(format!(
+                "{form}: the {what} must be a constant"
+            ))),
+        };
+        let name_t = constant(0, "index name")?;
+        let query_t = constant(1, "query (a vector string or a node IRI)")?;
+        let k_t = constant(2, "k")?;
+        let Term::Literal(name) = &name_t else {
+            return Err(DatalogError::Unsupported(format!(
+                "{form}: the index name must be a string"
+            )));
+        };
+        let index = vector::find(&self.options.vector_indexes, name.value())
+            .ok_or_else(|| {
+                DatalogError::Unsupported(format!(
+                    "there is no built vector index named {}",
+                    name.value()
+                ))
+            })?
+            .clone();
+        let query = match &query_t {
+            Term::Literal(l) => QueryVector::Vector(l.value().to_owned()),
+            Term::NamedNode(n) => QueryVector::Node(n.clone().into()),
+            _ => {
+                return Err(DatalogError::Unsupported(format!(
+                    "{form}: the query must be a vector string or a node IRI"
+                )))
+            }
+        };
+        let k = match &k_t {
+            Term::Literal(l) => l.value().parse::<u64>().ok(),
+            _ => None,
+        }
+        .ok_or_else(|| {
+            DatalogError::Unsupported(format!("{form}: k must be a positive integer"))
+        })?;
+        let knn = vector::knn_ranked_sql(&index, &query, k).map_err(DatalogError::Store)?;
+        let (n, q, kk) = (
+            self.register_const(&name_t),
+            self.register_const(&query_t),
+            self.register_const(&k_t),
+        );
+        let mut cols: Vec<String> = (0..4).map(|i| format!("c{i}")).collect();
+        let mut select = format!("{n} AS c0, {q} AS c1, {kk} AS c2, knn.s AS c3");
+        if rank {
+            cols.push("c4".to_owned());
+            let _ = write!(select, ", {} + knn.r AS c4", int_zero());
+        }
+        self.notes.push(format!(
+            "{form} searches vector index {} ({}, k = {k})",
+            index.name,
+            index.metric.name()
+        ));
+        Ok((
+            format!("(SELECT {select} FROM ({knn}) AS knn)"),
+            cols,
+            Vec::new(),
+        ))
     }
 
     /// The table every triple pattern reads.
@@ -714,6 +797,7 @@ impl<'a> Compiler<'a> {
         }
         Ok(match &atom.pred {
             Pred::History(h) => self.history_source(*h)?,
+            Pred::Nearest { rank } => self.nearest_source(atom, *rank)?,
             Pred::Edb(iri) => {
                 let id = self.register_const(&Term::from(iri.clone()));
                 let unary = atom.args.len() == 1;

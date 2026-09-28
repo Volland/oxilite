@@ -21,9 +21,12 @@ The system SHALL let each backend declare these capabilities:
 - whether 64-bit integers must be returned as text
 - whether a recursive common table expression may have a compound recursive term
   (SQLite 3.34.0 and later)
+- availability of vector types and distance functions (`vector32`, `vector_distance_cos`, …)
+- availability of index methods (`CREATE INDEX … USING method`)
 
 Generated SQL MUST respect the declared limits. A backend whose SQLite version cannot be
-established MUST declare the compound recursive term unavailable.
+established MUST declare the compound recursive term unavailable. No statement using a vector
+function or an index method MUST be generated for a backend that does not declare it.
 
 #### Scenario: Statement length limit
 - **WHEN** a backend declares a maximum statement length and a large insert is performed
@@ -36,6 +39,11 @@ established MUST declare the compound recursive term unavailable.
 #### Scenario: Compound recursive term is not assumed
 - **WHEN** a backend does not declare support for a compound recursive term
 - **THEN** no generated statement contains a recursive CTE with more than one recursive term
+
+#### Scenario: Vector functions are not assumed
+- **WHEN** a backend does not declare vector functions and a store is opened, queried and
+  optimized on it
+- **THEN** no generated statement calls a vector function or reads a vector table
 
 ### Requirement: Bundled native backend
 The system SHALL provide a native backend on an in-process SQLite that supports in-memory and file databases. It SHALL register the oxilite user-defined functions (regular expressions, replace, hashes, Unicode case mapping).

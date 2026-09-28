@@ -10,6 +10,7 @@
 pub mod expr;
 mod ops;
 pub mod plan;
+mod vector;
 
 use crate::encoding::{encode_literal, named_node_id, term_id, EncodedRows, DEFAULT_GRAPH_ID};
 use crate::error::{Error, Result};
@@ -58,6 +59,10 @@ pub struct QueryOptions {
     pub as_of_tick: Option<i64>,
     /// Resolved ticks of the versions named by `SERVICE <oxilite:version/REF>` (by `REF`).
     pub versions: BTreeMap<String, i64>,
+    /// Host functions callable by IRI (see [`crate::functions`]). A call to one is evaluated
+    /// by the fallback evaluator; the rest of the query still compiles to SQL.
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub functions: crate::functions::Functions,
 }
 
 /// The IRI prefix naming a version of the store in `SERVICE <oxilite:version/REF> { … }`.
@@ -87,6 +92,7 @@ impl Default for QueryOptions {
             as_of: None,
             as_of_tick: None,
             versions: BTreeMap::new(),
+            functions: crate::functions::Functions::default(),
         }
     }
 }

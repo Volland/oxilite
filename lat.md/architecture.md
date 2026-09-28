@@ -14,9 +14,11 @@ The workspace splits a pure, I/O-free core from thin backends and bindings, so t
 | `oxilite` | Umbrella with Oxigraph's module layout (`model`, `io`, `sparql`, `store`): `store::Store` is a drop-in for `oxigraph::store::Store`, `AsyncStore<B>` offers the same API asynchronously |
 | `oxilite-rusqlite` | Native backend on rusqlite (bundled or system SQLite) with `oxilite_*` UDFs |
 | `oxilite-dylib` | Native backend that `dlopen`s a user-supplied `libsqlite3` path — no build-time link |
+| `oxilite-turso` | Native backend on Turso, SQLite rewritten in Rust: the backend with vector indexes ([[architecture#Backends#Turso]]) |
 | `oxilite-d1` | Rust Workers backend over `worker::D1Database` (wasm32) |
 | `oxilite-wasm` | wasm-bindgen export of the sans-IO core for JavaScript drivers |
 | `@oxilite/node` | napi-rs Node.js binding with TypeScript types |
+| `oxilite-python` (`oxilite` on PyPI) | PyO3 Python binding with pyoxigraph's API, see [[architecture#Bindings#Python]] |
 | `@oxilite/d1` | TypeScript D1 driver running the wasm core against `env.DB` |
 | `oxilite-compat` (`testsuite/`) | Compatibility harness: Oxigraph's W3C runner and store tests run on oxilite, see [[test-plan#Oxigraph compatibility harness]] |
 | `oxilite-reason` (M4) | TBox closure, query rewriting, OWL 2 RL materialization |
@@ -210,7 +212,7 @@ The Rust blocking and async stores implement them over the core's jobs ([[crates
 
 ## Backends
 
-Four ways to reach SQLite, all behind the same sans-IO contract.
+Five ways to reach SQLite, all behind the same sans-IO contract.
 
 ### Native rusqlite
 
@@ -219,6 +221,12 @@ In-process SQLite (bundled by default) with `oxilite_*` UDFs registered, Unicode
 ### Dynamic libsqlite3
 
 Loads a SQLite shared library from a path at runtime (`libloading`), binding only the C API functions oxilite needs, for hosts that ship their own SQLite.
+
+### Turso
+
+Turso, the Rust reimplementation of SQLite, sync and async, with a two-rule DDL shim. It declares `vectors` and `vector_index_methods`, so vector indexes work there. See [[crates/oxilite-turso/src/lib.rs]].
+
+Turso indexes no `WITHOUT ROWID` table and rejects `WITHOUT ROWID, STRICT`, so [[crates/oxilite-turso/src/lib.rs#adapt]] makes such tables `STRICT` rowid tables: the composite primary key becomes a unique index and every covering index still builds, at one more B-tree per table. FTS5 does not exist; the text index is refused as unsupported. The crate pins `turso = "=0.8.0-pre.14"`, the first release with recursive CTEs (property paths, registry scoping, Datalog recursion); 0.7.2 has none. Sync calls drive Turso's async API with `block_on` (its local IO needs no runtime); atomic requests are savepoints, blobs come back as hex text. `Store::new_turso` / `open_turso` and the CLI's `--turso` open one. See [[decisions#D38 Turso is a backend, not a fork of the compiler]].
 
 ### Cloudflare D1
 
@@ -369,6 +377,12 @@ It loads a project like the Project store (`--root`, in memory) or opens a store
 `oxilite/datalogDebug` reports, for each rule of a program, how many ways its body matches and how many facts its head predicate holds, with the strata and strategies the engine chose. See [[crates/oxilite-cli/src/studio/debug.rs#debug]].
 
 Each count runs the program with an extra goal over one rule's body or head, capped at 100 000, so a rule that matches nothing or explodes stands out next to its line.
+
+### Vector indexes
+
+`oxilite/vectorIndexes`, `vectorIndexCreate`, `vectorIndexDrop`, `vectorSearch` and `functions` work on any connection; `oxilite/attach` with `engine: "turso"` attaches a Turso file, where vector indexes live. See [[crates/oxilite-cli/src/studio/vector.rs]].
+
+On a connection without vector functions (the project store is bundled SQLite) `vectorIndexes` answers `supported: false`, so the panel can say why it is empty. Search takes a `vector` (numbers or JSON text) or a `node`, and returns hits as RDF/JS terms with distance, score and the elapsed time. The studio's panels, quick-pick flow and completions are designed in the change archived as `2026-09-28-turso-vectors-functions`.
 
 ### ShEx and full-text search
 
@@ -599,9 +613,57 @@ The request deletes the quads and graph names of every graph the key owns, delet
 
 The `ssi` crates enable serde_json's `arbitrary_precision` for the whole build, which changes how numbers deserialize; `SqlValue` therefore has a hand-written deserializer that accepts both forms ([[decisions#D20 json-ld and ssi, in two crates]]).
 
+## Vector indexes
+
+k-nearest-neighbour search over embeddings stored as RDF literals, defined as RDF in `<oxilite:vectors>` and searched from SPARQL, Cypher, Datalog and the API with one SQL statement. See [[crates/oxilite-core/src/vector.rs]].
+
+Needs a backend with `Capabilities::vectors` (Turso); every other backend refuses with an unsupported error. Change archived as `2026-09-28-turso-vectors-functions`; specs `vector-index` and `vector-search`.
+
+### Definitions
+
+An index is the resource `<oxilite:vector/NAME>` of type `oxl:VectorIndex` in the system graph `<oxilite:vectors>`, so definitions are data: queryable, versioned, dumped and loaded like any triples.
+
+It names `oxl:indexName`, `oxl:property` (whose literal values are JSON arrays of numbers), `oxl:dimensions`, `oxl:metric` (`Cosine`, `Euclidean`, `DotProduct`, `Jaccard`), `oxl:elementType` (`Float32`, `Float64`, `Int8`, `Bit1`, `SparseFloat32`) and an optional `oxl:class`. [[crates/oxilite-core/src/vector.rs#VectorIndex]] validates a definition (names `[A-Za-z][A-Za-z0-9_]{0,63}`, unique ignoring case; Jaccard if and only if sparse) and converts it to and from quads; readers stay lenient and report invalid descriptions as problems. `Stats` loads the definitions and the build fingerprints only on backends with vectors, so the load request elsewhere is unchanged. See [[decisions#D39 A vector index is RDF in a system graph, realised as a trigger-maintained table]].
+
+### Maintenance
+
+Each index is a table `vec_name (s, o, g, e)` kept exact by two triggers on `quads`, in the transaction of every write: inserts, deletes, `CLEAR`, the bulk loader and Cypher writes alike.
+
+The insert trigger aborts the write when the literal is not a JSON array of the index's dimensions (`RAISE` with the index name), then stores `vector32(lex)` (or the element type's function). Creation back-fills in the same atomic request, guarded by a CHECK-constrained table because `RAISE` exists only in triggers; the store first names the offending subject itself. A sparse index also gets `CREATE INDEX … USING toy_vector_sparse_ivf`. A fingerprint in `oxilite_meta` (`vector:name`) records how the table was built, so [[crates/oxilite-core/src/vector.rs#sync_statements]] can create missing tables, drop orphans and rebuild changed ones.
+
+### Lifecycle
+
+Indexes are created and dropped from the store API, SPARQL Update, Cypher DDL, the shell and the studio; all end in the same statements. See [[crates/oxilite/src/vector_store.rs]].
+
+`create_vector_index` writes the definition and builds the table in one atomic request; `drop_vector_index` removes both. A SPARQL update that can touch `<oxilite:vectors>` ([[crates/oxilite-core/src/vector.rs#update_touches_vectors]]) is followed by a sync, and so is opening a writable store whose definitions and tables disagree (a restored dump); `sync_vector_indexes` runs it on demand. Cypher's `CREATE VECTOR INDEX … FOR (n:Label) ON (n.prop) OPTIONS {indexConfig: {…}}`, `DROP INDEX` and `SHOW VECTOR INDEXES` are recognized by [[crates/oxilite-cypher/src/vector.rs#schema_command]] and run by the store, with labels and keys mapped through the vocabulary.
+
+### Search
+
+[[crates/oxilite-core/src/vector.rs#knn_sql]] is the only nearest-neighbour statement: `k` distinct nodes, each at its smallest distance, by distance then id. Every language places it in its own single SQL statement.
+
+The query is a vector literal or a node whose stored embedding is used; a class restriction is an `EXISTS` on `rdf:type`; a sparse search keeps the shape Turso's IVF index method recognizes. SPARQL's `SERVICE <oxilite:vector/NAME> { [] oxl:query … ; oxl:k … ; oxl:node ?n ; oxl:distance ?d ; oxl:score ?s }` compiles to a derived table ([[crates/oxilite-core/src/compiler/vector.rs]]) that joins, filters and orders with the rest of the query; the partial evaluator keeps it in SQL when other parts need spareval. Cypher's `CALL db.index.vector.queryNodes(name, k, vector) YIELD node, score` is lowered like a `MATCH` ([[crates/oxilite-cypher/src/vector.rs]]): `node` is a node binding later clauses match on. Datalog's `nearest(index, query, k, ?node, ?rank)` reads [[crates/oxilite-core/src/vector.rs#knn_ranked_sql]], with a rank because a Datalog column is a term id and a computed distance has none. Scores follow Neo4j: cosine `1 − d/2`, Euclidean `1/(1 + d²)`, dot `−d`, Jaccard `1 − d`. See [[decisions#D40 One k-NN statement, three languages]].
+
+## Host functions
+
+Application code callable from SPARQL, Cypher and Datalog: a function from RDF terms to an optional term, registered on a store under an IRI and a Cypher name. See [[crates/oxilite-core/src/functions.rs]].
+
+The registry travels in `QueryOptions::functions`, `CypherOptions::functions` and the Datalog `Options::functions`; stores fill them from `Store::register_function`. Functions are not persisted, and IRIs the engine interprets (`oxl:`, `xsd:`) or Cypher built-in names cannot be taken. Only the calls leave SQL. See [[decisions#D41 Host functions run in Rust, and only the calls leave SQL]].
+
+### SPARQL and Cypher
+
+A call to a registered IRI makes the compiler report `unsupported`, so the partial evaluator runs the compilable subtrees as SQL and the calls in spareval, which gets every registered function.
+
+Updates reach them through `delete_insert_with`. An unregistered IRI fails the query naming it, as in Oxigraph; a call with the wrong number of arguments is an evaluation error per solution. Cypher lowers a call whose name is a registered Cypher name to the same custom function, and the Rust evaluator calls it directly in clauses SQL cannot express (a scoped thread-local set by `CypherJob::step`), converting values to terms and back.
+
+### Datalog
+
+Datalog compiles to SQL, which cannot call Rust, so a rule that calls a host function is split: its host-free part runs as SQL, the calls run in Rust over its rows, and the results return as facts. See [[crates/oxilite-datalog/src/host.rs]].
+
+Calls are expressions (`?s = fn:slugify(?n)` binds an unbound `?s`; `fn:score(?x) > 0.5` filters) or atoms named by the function (`fn:slugify(?n, ?s)`: the last argument is the result; `fn:isLong(?n)`: a filter). [[crates/oxilite-datalog/src/host.rs#HostJob]] resolves host rules in dependency order, one request each, replacing each by its facts (or by a never-firing rule when it derives nothing, so its relation stays defined); a host rule that depends on its own head is rejected. A goal's host constraints filter its rows. `prepare_program` chooses this path only when the program calls a host function.
+
 ## Bindings
 
-A Node.js package and a Cloudflare D1 package, both typed TypeScript, over the same core.
+A Node.js package and a Cloudflare D1 package, both typed TypeScript, and a typed Python package, all over the same core and the same JSON forms.
 
 `@oxilite/node` (napi-rs) wraps `blocking::Store` on rusqlite or a dlopen'ed library: `query`, `update`, `load`, `dump`, `add`/`delete`, `has`, `match`, `size`, `explain`, `optimize`, `backup`, returning RDF/JS-style term objects. `@oxilite/d1` runs the wasm core against a `D1Database` binding and exposes the same API asynchronously.
 
@@ -616,6 +678,39 @@ Both packages also expose JSON-LD documents and Verifiable Credentials: `store.j
 Both packages expose the schema registry: `registerSchemaGraph(graph, role, {iri, version, sha256, imports, appliesTo, active})`, `schemaGraphs()`, `setSchemaGraphActive`, `unregisterSchemaGraph`, `dropSchemaGraph` and `shapeIndex()`, plus the query option `include_schema_graphs`. Node goes through the Rust store; the wasm engine only builds the registry's portable SPARQL and parses its listing, and `D1Store` runs them with its own `query` and `update`.
 
 Both packages share `@oxilite/common` (terms, `DataFactory`, result conversion). The native addon and the wasm engine exchange the same JSON terms and outputs (see [[crates/oxilite-core/src/json.rs]]), so a query returns identical JavaScript values on either. Oxigraph's own `store.test.ts` runs unchanged against `@oxilite/node`; its single failure is the allow-listed merge semantics of `default_graph` lists (D12). Example Workers exist in Rust (`examples/d1-worker`) and TypeScript (`examples/d1-worker-ts`), each with a Miniflare end-to-end test. `examples/do-agent-memory-ts` runs `@oxilite/d1` on a Durable Object's SQLite: a D1-shaped adapter over `ctx.storage.sql` maps `raw()` to `exec` and `batch()` to `transactionSync`, and reports per-statement changes from `total_changes()`. It is tested on Miniflare but is not part of the W3C runs.
+
+### Python
+
+The `oxilite` package on PyPI: a PyO3 native module over `blocking::Store`, wrapped by pure-Python classes with pyoxigraph's API, so `import oxilite as pyoxigraph` works; see [[decisions#D37 Python bindings mirror pyoxigraph over the JSON bridge]].
+
+`bindings/python` is the workspace crate `oxilite-python` (a cdylib, not published to crates.io) and the maturin project that builds the package. The module is `oxilite._native`, [[bindings/python/src/lib.rs]]:
+- `NativeStore` mirrors `@oxilite/node`'s class. Terms, quads, options and results cross as the JSON of [[crates/oxilite-core/src/json.rs]] and of the Cypher, Datalog and JSON-LD `json` modules, and its JSON-LD dispatch copies Node's.
+- Module functions cover what pyoxigraph has beyond a store: `parse_rdf`, `serialize_rdf`, `serialize_results`, `parse_query_results`, plus `schema_sql`, the term checks and the canonical `xsd:double` form.
+- Every store call runs inside `Python::detach`, so the GIL is released, and `Store<B>` is `Send + Sync`.
+
+The Python side lives in `bindings/python/python/oxilite/`:
+- **Terms** (`_model.py`) are immutable `__slots__` classes with `__match_args__`, pickling and value equality. Constructors validate through the native checks, while decoded results use unchecked constructors.
+- **`Store`** (`_store.py`) maps pyoxigraph's methods and every extension to the native calls. [[bindings/python/python/oxilite/_store.py#Store]] builds option JSON with Node's names.
+- **Results** are typed dataclasses (`_types.py`): `CypherResult`, `DatalogResult`, `StoredDocument` (epoch seconds become aware `datetime`s), `VersionStatus`, `CommitRecord`, `Change`, `SchemaGraphEntry`, `PropertyShapeEntry`.
+- **I/O** (`_io.py`) accepts `str`, `bytes`, file objects or paths, and infers formats from extensions.
+
+The pyoxigraph options that have no counterpart are mapped as follows:
+- `prefixes` goes to `SparqlParser::with_prefix`.
+- `substitutions` joins a one-row `VALUES` below the modifiers, projection, grouping, `BIND`s and `FILTER`s of the parsed query, so the query still compiles to one statement.
+- `custom_functions` raises `NotImplementedError`.
+
+Paths and read-only stores:
+- A path that is an existing directory stores `oxilite.sqlite` inside it, the shape of pyoxigraph's RocksDB paths.
+- `Store.read_only` opens SQLite read-only.
+
+The native module raises built-in exceptions from the Rust error enums: `SyntaxError` with `filename`, `lineno` and `offset` for RDF and results parsers, then `ValueError`, `OSError`, `NotImplementedError` and `RuntimeError`, plus its own `JsonLdError(ValueError)` with `code`. Leniently parsed terms (relative IRIs, over-long language tags) serialize through an unchecked JSON-to-quad path, so `parse(..., lenient=True)` round-trips.
+
+Packaging:
+- Wheels use `abi3-py39`, one per platform, and `pyproject.toml` takes its version from the Cargo workspace.
+- The crate enables PyO3's `extension-module` feature, and its `build.rs` adds `-undefined dynamic_lookup` on macOS, so `cargo build --workspace` never links libpython.
+- `.github/workflows/python-wheels.yml` builds manylinux x86_64 and aarch64, musllinux x86_64, macOS x86_64 and arm64, Windows x64 and an sdist, smoke-tests the native ones, and publishes with PyPI trusted publishing on `v*` tags. `docs/python-publishing.md` is the guide.
+
+pyoxigraph's `test_store.py`, `test_model.py` and `test_io.py` run verbatim (only the import changed) in `bindings/python/tests/`. Their three failures are `py:` entries of `testsuite/allowlist.toml` (custom functions, custom aggregates, remote `LOAD`), which `conftest.py` turns into strict xfails. The CI job `python` runs them, oxilite's own Python tests, `mypy --strict` and the tutorial script `examples/python-tour/tour.py`. `docs/python.md` is the reference.
 
 ## Project website
 
@@ -634,5 +729,7 @@ The landing page's `#studio` section introduces oxilite studio, the VS Code exte
 The landing page's `#versioning` section and a Features card present [[architecture#Versioning]] as a key feature, with the measured D1 costs. `site/articles/time-travel.html` is its walkthrough: levels, commits with author and message, as-of queries, `SERVICE` version comparison, Datalog `@version` and `at`, Cypher `asOf`, the history graph and Datalog's history relations, diffs and changes, level changes and purges. Its outputs are those of the CLI, and its behaviour is asserted by the versioning suites of `oxilite`, `@oxilite/d1` and `oxilite-datalog`. `site/articles/versioning-on-d1.html` is the design note: triggers, the clock, the genesis snapshot and the `write-cost` table. A change to [[decisions#D29 The change log is the history, the quad table stays the present]] through D32, or to the measured costs, should be reflected there. `site/articles/versioning-knowledge-graph-memory.html` is the overview: what versioning records, what can be asked of the past, and the use cases (agent memory, curated graphs, audit, change feeds, reproducible analysis, pipeline debugging) with a level for each. `site/articles/versioning-benchmarks.html` is the benchmark article: `write-cost` and `as-of-latency` at three sizes (80,000 triples with 500 and 2,000 commits, 400,000 triples), how the past's cost depends on the as-of index, the store, the history and the depth, and a recommendation per use case; its tables are copied from `bench/results`, so a rerun that moves them should update it. `docs/versioning.md` is the reference for every surface, option, error and schema object.
 
 The site is plain HTML and one stylesheet in a white, black and orange palette. It loads no external fonts, scripts or trackers, which keeps the Datenschutz page to the hosting logs of GitHub Pages and Cloudflare, and Cloudflare's bot-protection cookies. The logo (`site/assets/logo.svg`, rendered to `logo.png` with `rsvg-convert`) combines a SQLite-style tile, a quill drawn as a graph, and a small edge-worker cloud.
+
+The landing page's `#python` section and its Get started tab present [[architecture#Bindings#Python]]. `site/articles/oxilite-python.html`, "How to use oxilite with Python", is its tutorial: install, SPARQL and result classes, `explain`, pyoxigraph migration and its allow-listed divergences, Cypher, Datalog, reasoning, JSON-LD and credentials, time travel, threads and asyncio, and the limits. Every snippet comes from `examples/python-tour/tour.py`, which asserts the outputs the article shows and runs in the CI job `python`, so a change there should be reflected in the article.
 
 The Cypher article walks through the M7 frontend; its steps are asserted by `examples/cypher-property-graph` on `@oxilite/node` and on Miniflare D1. The JSON-LD query tour (`site/articles/querying-jsonld-credentials.html`) queries credentials and a JSON-LD issuer registry with SPARQL (provenance through `GRAPH`, joins, aggregates, typed validity dates, RDFS reasoning, FTS5), metadata lookups and Cypher over the union default graph; every query is asserted by `examples/jsonld-queries` on both packages. It explains that proofs are verified outside oxilite, on the stored JSON.

@@ -232,6 +232,12 @@ pub struct Capabilities {
     /// backend whose version cannot be established MUST leave this false: mutual recursion
     /// then takes a strategy that does not need it, instead of emitting SQL that would fail.
     pub compound_recursive_cte: bool,
+    /// Vector types and distance functions (`vector32`, `vector_distance_cos`…; Turso): vector
+    /// indexes can be built and searched (see [`crate::vector`]).
+    pub vectors: bool,
+    /// Index methods (`CREATE INDEX … USING method`; Turso): sparse vector indexes get an
+    /// inverted-file index.
+    pub vector_index_methods: bool,
     /// Name of the backend, for `explain()`.
     pub name: String,
     /// The versioning level of the store (set by the store at open, not by the backend):
@@ -257,6 +263,8 @@ impl Capabilities {
             max_compound_select: 500,
             // rusqlite bundles a current SQLite, and a dlopen'ed library is probed on open.
             compound_recursive_cte: true,
+            vectors: false,
+            vector_index_methods: false,
             name: "sqlite".into(),
             versioning: crate::version::Versioning::Off,
         }
@@ -273,6 +281,8 @@ impl Capabilities {
             max_compound_select: 5,
             // D1's SQLite version is not ours to assume.
             compound_recursive_cte: false,
+            vectors: false,
+            vector_index_methods: false,
             name: "d1".into(),
             versioning: crate::version::Versioning::Off,
         }

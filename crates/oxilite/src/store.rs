@@ -54,6 +54,8 @@ struct Inner<B> {
     /// The backend, wrapped so every write of a versioned store opens a tick.
     backend: Arc<VersionedBackend<B>>,
     stats: RwLock<Stats>,
+    /// Host functions registered on this store (and its clones).
+    pub(crate) functions: RwLock<oxilite_core::functions::Functions>,
 }
 
 /// An RDF dataset stored in SQLite, queryable with SPARQL.
@@ -99,6 +101,27 @@ impl Store {
     }
 }
 
+#[cfg(feature = "turso")]
+impl Store<oxilite_turso::TursoBackend> {
+    /// A new in-memory store on Turso (vector indexes available).
+    pub fn new_turso() -> Result<Self> {
+        Self::with_backend(oxilite_turso::TursoBackend::memory()?)
+    }
+
+    /// Opens (or creates) a store in a Turso database file.
+    pub fn open_turso(path: impl AsRef<std::path::Path>) -> Result<Self> {
+        Self::with_backend(oxilite_turso::TursoBackend::open(path)?)
+    }
+
+    /// Opens a Turso store with explicit options (used when the database is created).
+    pub fn open_turso_with_options(
+        path: impl AsRef<std::path::Path>,
+        options: &StoreOptions,
+    ) -> Result<Self> {
+        Self::with_backend_and_options(oxilite_turso::TursoBackend::open(path)?, options)
+    }
+}
+
 #[cfg(feature = "dylib")]
 impl Store<oxilite_dylib::DylibBackend> {
     /// Opens a store on `database` through the SQLite shared library at `library`.
@@ -115,7 +138,12 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
 
     pub fn with_backend_and_options(backend: B, options: &StoreOptions) -> Result<Self> {
         let stats = run_sync(&backend, ops::open_job(options, backend.capabilities()))?;
-        Ok(Self::from_parts(backend, stats))
+        let store = Self::from_parts(backend, stats);
+        // Definitions that arrived without their tables (a restored dump) are built now; a
+        // failure leaves them unbuilt, which `vector_indexes()` reports, rather than failing
+        // the open.
+        let _ = store.sync_vector_indexes_if_needed();
+        Ok(store)
     }
 
     fn from_parts(backend: B, stats: Stats) -> Self {
@@ -125,6 +153,7 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
             inner: Arc::new(Inner {
                 backend: Arc::new(VersionedBackend::new(backend, &caps, level)),
                 stats: RwLock::new(stats),
+                functions: RwLock::new(Default::default()),
             }),
         }
     }
@@ -149,6 +178,10 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
             .unwrap_or_else(std::sync::PoisonError::into_inner) = stats;
     }
 
+    pub(crate) fn inner_functions(&self) -> &RwLock<oxilite_core::functions::Functions> {
+        &self.inner.functions
+    }
+
     pub(crate) fn caps(&self) -> &Capabilities {
         self.inner.backend.capabilities()
     }
@@ -157,11 +190,27 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
         run_sync(&*self.inner.backend, job)
     }
 
+    /// The options with this store's host functions, unless the caller set its own.
+    pub(crate) fn with_functions<'o>(
+        &self,
+        options: &'o QueryOptions,
+    ) -> std::borrow::Cow<'o, QueryOptions> {
+        let functions = self.host_functions();
+        if options.functions.registry().is_some() || functions.is_empty() {
+            std::borrow::Cow::Borrowed(options)
+        } else {
+            let mut o = options.clone();
+            o.functions = functions;
+            std::borrow::Cow::Owned(o)
+        }
+    }
+
     pub(crate) fn evaluate(
         &self,
         query: &spargebra::Query,
         options: &QueryOptions,
     ) -> Result<QueryOutput> {
+        let options = &*self.with_functions(options);
         let options = &*self.resolve_versions(query, options)?;
         let compiled = {
             let stats = self
@@ -292,8 +341,16 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
     pub fn update(&self, update: impl IntoUpdate) -> Result<()> {
         let update = update.into_update()?;
         self.update_inner(&update)?;
-        if oxilite_core::reason::update_touches_schema(&update) {
+        let vectors = self.caps().vectors && oxilite_core::vector::update_touches_vectors(&update);
+        if vectors || oxilite_core::reason::update_touches_schema(&update) {
             self.reload_stats()?;
+        }
+        if vectors {
+            self.sync_vector_indexes().map_err(|e| {
+                Error::Other(format!(
+                    "the update was applied, but the vector indexes could not be brought up to date: {e}"
+                ))
+            })?;
         }
         Ok(())
     }
@@ -338,10 +395,11 @@ impl<B: SyncBackend + Send + Sync + 'static> Store<B> {
                         }
                     }
                     PlannedOp::Fallback(i, _) => {
-                        let (deletes, inserts) = oxilite_core::fallback::delete_insert(
+                        let (deletes, inserts) = oxilite_core::fallback::delete_insert_with(
                             backend,
                             &update.operations[i],
                             update.base_iri.as_ref(),
+                            &self.host_functions(),
                         )?;
                         if !deletes.is_empty() {
                             self.run(ops::remove_job(
