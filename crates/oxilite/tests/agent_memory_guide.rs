@@ -169,7 +169,10 @@ fn recall(
         if let (Some(Term::Literal(text)), Some(Term::Literal(score))) =
             (row.get("text"), row.get("score"))
         {
-            out.push((text.value().to_owned(), score.value().parse().unwrap_or(0.0)));
+            out.push((
+                text.value().to_owned(),
+                score.value().parse().unwrap_or(0.0),
+            ));
         }
     }
     Ok(out)
@@ -386,7 +389,13 @@ fn remember_consolidate_forget() {
     assert_eq!(rows(&store), 6);
 
     // The recall tool, for Alice.
-    let hits = recall(&store, "http://example.com/alice", &[0.85, 0.2, 0.05, 0.1], 2).unwrap();
+    let hits = recall(
+        &store,
+        "http://example.com/alice",
+        &[0.85, 0.2, 0.05, 0.1],
+        2,
+    )
+    .unwrap();
     assert_eq!(
         hits.iter().map(|(t, _)| t.as_str()).collect::<Vec<_>>(),
         [
@@ -401,7 +410,11 @@ fn remember_consolidate_forget() {
 fn day_number(t: &Term) -> Option<i64> {
     let Term::Literal(l) = t else { return None };
     let mut parts = l.value().splitn(3, '-').map(str::parse::<i64>);
-    let (y, m, d) = (parts.next()?.ok()?, parts.next()?.ok()?, parts.next()?.ok()?);
+    let (y, m, d) = (
+        parts.next()?.ok()?,
+        parts.next()?.ok()?,
+        parts.next()?.ok()?,
+    );
     let (y, m) = if m <= 2 { (y - 1, m + 12) } else { (y, m) };
     Some(365 * y + y / 4 - y / 100 + y / 400 + (153 * (m - 3) + 2) / 5 + d)
 }
@@ -481,7 +494,10 @@ fn cypher_and_datalog_recall() {
     assert_eq!(
         pairs,
         [
-            (s("Alice is flying to Lisbon for the ACME offsite"), s("Alice")),
+            (
+                s("Alice is flying to Lisbon for the ACME offsite"),
+                s("Alice")
+            ),
             (s("Bob is also going to the ACME offsite"), s("Bob")),
             (s("Alice prefers aisle seats on long flights"), s("Alice")),
         ]
@@ -514,7 +530,10 @@ unseen(?who, ?t) :- attendee(?p), ex:name(?p, ?who), ex:about(?m, ?p), ex:text(?
     assert_eq!(
         rows,
         [
-            ("Alice".into(), "Alice prefers aisle seats on long flights".into()),
+            (
+                "Alice".into(),
+                "Alice prefers aisle seats on long flights".into()
+            ),
             ("Bob".into(), "Bob is allergic to peanuts".into()),
         ]
     );
