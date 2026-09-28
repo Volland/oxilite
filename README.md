@@ -259,6 +259,20 @@ SELECT ?product WHERE { ?product rdfs:label ?label FILTER(oxl:textMatch(?label, 
 
 With the index this is an FTS5 `MATCH` (on D1 too). Without it, native stores still answer through the fallback evaluator with the same word matching.
 
+### Vector search on Turso
+
+On the Turso backend (`Store::open_turso`, `--turso`), embeddings stored as literals get vector indexes, defined as RDF in `<oxilite:vectors>` and searched from SPARQL, Cypher and Datalog inside the query's one SQL statement:
+
+```sparql
+PREFIX oxl: <https://oxilite.dev/ns#>
+SELECT ?text ?score WHERE {
+  SERVICE <oxilite:vector/memories> { [] oxl:query "[0.85, 0.2, 0.05, 0.1]" ; oxl:k 20 ; oxl:node ?m ; oxl:score ?score }
+  ?m ex:visibleTo ex:alice ; ex:text ?text .
+} ORDER BY DESC(?score) LIMIT 5
+```
+
+See [`oxilite-turso`](crates/oxilite-turso/README.md), the guide [Agent memory on Turso](https://oxilitedb.com/articles/agent-memory-turso) and the design note [Vectors that know where they are](https://oxilitedb.com/articles/turso-vectors).
+
 ## Using oxilite with Cloudflare D1
 
 D1 is a managed, serverless SQLite. You can't load extensions or native code, and every call is a network round-trip billed per row read and written. oxilite is designed around exactly these constraints.

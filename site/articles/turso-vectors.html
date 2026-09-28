@@ -31,7 +31,7 @@
       <span class="kicker">Turso · Vector search · AI agents</span>
       <h1>Vectors that know where they are: oxilite on Turso</h1>
       <p class="standfirst">Vector search finds what sounds like your question. A knowledge graph knows what is actually connected to it. AI agents need both, and today they usually get them from two databases glued together in application code. oxilite now runs on Turso, SQLite rewritten in Rust, and puts vector indexes inside the knowledge graph. One store, one SQL statement, and SPARQL, Cypher and Datalog can all use them.</p>
-      <p class="meta">A design note · The behaviour on this page is asserted by <a href="https://github.com/Volland/oxilite/blob/main/crates/oxilite/tests/vectors.rs"><code>vectors.rs</code></a>, <a href="https://github.com/Volland/oxilite/blob/main/crates/oxilite/tests/functions.rs"><code>functions.rs</code></a> and <a href="https://github.com/Volland/oxilite/blob/main/crates/oxilite/tests/turso.rs"><code>turso.rs</code></a> · Rust API and CLI</p>
+      <p class="meta">A design note · Looking for the how-to? Read the guide, <a href="agent-memory-turso.html">Agent memory on Turso</a> · The behaviour on this page is asserted by <a href="https://github.com/Volland/oxilite/blob/main/crates/oxilite/tests/vectors.rs"><code>vectors.rs</code></a>, <a href="https://github.com/Volland/oxilite/blob/main/crates/oxilite/tests/functions.rs"><code>functions.rs</code></a> and <a href="https://github.com/Volland/oxilite/blob/main/crates/oxilite/tests/turso.rs"><code>turso.rs</code></a> · Rust API and CLI</p>
 
       <h2>Two halves of a memory</h2>
       <p>Ask an agent what it remembers about next week's trip, and two different kinds of lookup are needed.</p>
@@ -55,8 +55,7 @@
       </ul>
       <p>Everything else is the same oxilite: the same Rust API, the same SPARQL semantics, the same Cypher and Datalog.</p>
 <pre><code>[dependencies]
-# The `turso` feature ships in the next release; until then, depend on the repository.
-oxilite = { git = "https://github.com/Volland/oxilite", features = ["turso", "cypher", "datalog"] }</code></pre>
+oxilite = { version = "0.8", features = ["turso", "cypher", "datalog"] }</code></pre>
 <pre><code>let store = oxilite::store::Store::open_turso("memory.db")?;   // or Store::new_turso() in memory</code></pre>
       <p>Or from the command line, where every command takes <code>--turso</code>:</p>
 <pre><code>oxilite --turso memory.db</code></pre>
@@ -216,17 +215,17 @@ SELECT ?text ?age WHERE {
         <li><strong>Turso 0.8 is a prerelease.</strong> oxilite pins <code>0.8.0-pre.14</code> exactly, because recursive queries need it. The pin moves when 0.8.0 is released.</li>
         <li><strong>No full-text index on Turso</strong>, because FTS5 isn't available.</li>
         <li><strong>Embeddings come from you.</strong> oxilite stores and searches vectors; your application or model computes them.</li>
-        <li><strong>Rust first.</strong> The Node and Python packages don't expose vector indexes or host functions yet.</li>
+        <li><strong>Multi-pattern <code>OPTIONAL</code>.</strong> Turso doesn't parse the parenthesized join that an <code>OPTIONAL</code> with more than one pattern compiles to, so on Turso chain single-pattern <code>OPTIONAL</code>s instead.</li>
+        <li><strong>Rust first.</strong> The Node and Python packages don't expose vector indexes or host functions yet. Other languages can use <code>oxilite serve --turso</code>, a SPARQL endpoint where every query on this page works.</li>
       </ul>
       <h2>Try it</h2>
-<pre><code># Until the next release, install the command line from the repository:
-cargo install --git https://github.com/Volland/oxilite oxilite-cli
+<pre><code>cargo install oxilite-cli
 oxilite --turso memory.db</code></pre>
 <pre><code>oxilite&gt; .load memory.ttl
 oxilite&gt; .prefix ex: &lt;http://example.com/&gt;
 oxilite&gt; .vector create memories ex:embedding 4 cosine --class ex:Memory
 oxilite&gt; .vector search memories [0.85, 0.2, 0.05, 0.05] 3</code></pre>
-      <p>Then paste the SPARQL query from above into the same shell. The design, including the decisions behind the RDF index definitions, the single nearest-neighbour statement, and how host functions reach Datalog, is written up in the repository, along with the test specifications each feature is held to.</p>
+      <p>Then paste the SPARQL query from above into the same shell. For a step-by-step build of an agent's memory (access control, recency, graph expansion, deduplication, agent tools and an HTTP endpoint), follow the guide, <a href="agent-memory-turso.html">Agent memory on Turso</a>. The design, including the decisions behind the RDF index definitions, the single nearest-neighbour statement, and how host functions reach Datalog, is written up in the repository, along with the test specifications each feature is held to.</p>
       <div class="callout">
         <p><strong>The takeaway.</strong> Similarity tells an agent where to look. The graph tells it what's actually there. Now they can share a query.</p>
       </div>

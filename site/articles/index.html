@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Articles – oxilite</title>
-  <meta name="description" content="Guides and design notes on oxilite: an overview of the RDF and SPARQL engine, Verifiable Credentials and JSON-LD in SQLite, querying them with SPARQL and Cypher, property graphs, Datalog rules, the schema registry, and graph memory for AI agents on Cloudflare Durable Objects.">
+  <meta name="description" content="Guides and design notes on oxilite: an overview of the RDF and SPARQL engine, Verifiable Credentials and JSON-LD in SQLite, querying them with SPARQL and Cypher, vector search and agent memory on Turso, property graphs, Datalog rules, the schema registry, and graph memory for AI agents on Cloudflare Durable Objects.">
   <meta property="og:title" content="oxilite articles">
   <meta property="og:description" content="Guides and design notes: what you can build with oxilite and how it works inside.">
   <meta property="og:image" content="../assets/logo.png">
@@ -135,15 +135,26 @@
           </a>
         </div>
 
-        <h2 class="group">Graphs and agents<span class="dot">.</span></h2>
-        <p class="sub">The property graph frontend, vector search inside the graph, and a private knowledge graph for every agent at the edge.</p>
+        <h2 class="group">Turso and vector search<span class="dot">.</span></h2>
+        <p class="sub">oxilite on SQLite rewritten in Rust: embeddings indexed inside the knowledge graph, and searched from SPARQL, Cypher and Datalog in the same statement as the graph around them.</p>
         <div class="articles">
-          <a class="article-card" href="turso-vectors.html">
-            <span class="kicker">Turso · Vector search · Agents · New</span>
-            <h3>Vectors that know where they are: oxilite on Turso</h3>
-            <p>Vector indexes inside the knowledge graph: nearest-neighbour search from SPARQL, Cypher and Datalog in one SQL statement, host functions, and what it means for agent memory.</p>
-            <span class="more">Read the article →</span>
+          <a class="article-card" href="agent-memory-turso.html">
+            <span class="kicker">Turso · Vector search · Agents · Guide · New</span>
+            <h3>Agent memory on Turso: vector search inside your knowledge graph</h3>
+            <p>Model memories as a graph, index their embeddings, and recall with SPARQL: access control, recency, graph expansion, provenance, deduplication, agent tools and an HTTP endpoint. Every query is tested.</p>
+            <span class="more">Start the guide →</span>
           </a>
+          <a class="article-card" href="turso-vectors.html">
+            <span class="kicker">Turso · Vector search · Design · New</span>
+            <h3>Vectors that know where they are: oxilite on Turso</h3>
+            <p>Why vector indexes are RDF, why one nearest-neighbour statement serves SPARQL, Cypher and Datalog, what Turso needed to run oxilite, and host functions.</p>
+            <span class="more">Read the design note →</span>
+          </a>
+        </div>
+
+        <h2 class="group">Graphs and agents<span class="dot">.</span></h2>
+        <p class="sub">The property graph frontend, and a private knowledge graph for every agent at the edge.</p>
+        <div class="articles">
           <a class="article-card" href="property-graphs-cypher.html">
             <span class="kicker">Cypher · RDF 1.2</span>
             <h3>Property graphs on oxilite, with Cypher</h3>

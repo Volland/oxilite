@@ -1352,6 +1352,30 @@ It also accepts a constant node, and names an unknown index, predicate or wrong 
 
 `nearest("docs", vector, 3, ?d, ?r), ?r <= 2` returns the two nearest nodes with ranks 1 and 2; the four-argument form searches by node and joins the graph; a variable index name is refused; a program defining `nearest` keeps its own relation.
 
+## Agent memory guide
+
+Every query and answer in the website guide `site/articles/agent-memory-turso.html`, run on its agent-memory data on Turso. See [[architecture#Project website]] and [[architecture#Vector indexes]].
+
+### Recall recipes
+
+The guide's eight SPARQL recipes return its rows: top k ranks Carol's private memory first, and a user-scoped search over-fetches and cuts to Alice's three.
+
+`oxl:k 3` before the scope leaves two rows; recency and score filters, graph expansion to the offsite's attendees, chained single-pattern `OPTIONAL` provenance, per-person aggregates and a property path return the guide's rows; `explain` shows one fully compiled statement calling `vector_distance_cos`.
+
+### Remember consolidate forget
+
+The guide's `remember` helper indexes a new memory, and a wrong-length embedding fails the whole write naming the dimensions.
+
+A search by the new node finds its near-duplicate above 0.99; `DELETE WHERE` removes it from the index; the `recall` helper returns Alice's two nearest visible memories in score order.
+
+### Recency decay host function
+
+A registered `fn:decay` half-life function, multiplied into the score in SPARQL, reorders Alice's recall so the week-old offsite memories and the four-day-old agenda rank above the month-old seat preference.
+
+### Cypher and Datalog recall
+
+`db.index.vector.queryNodes` followed by `MATCH` on visibility and `about` returns the guide's three memories with their people; the guide's Datalog follow-up program returns the two unseen facts about the offsite's attendees.
+
 ## Host functions
 
 Application functions called from the three languages. See [[architecture#Host functions]].
