@@ -189,6 +189,36 @@ def family() -> Store:
     return s
 
 
+# @lat: [[tests#Python#Synalog runs over the store]]
+def test_synalog() -> None:
+    store = family()
+    program = (
+        "# @table parent <http://example.org/parent>\n"
+        "@Recursive(Ancestor, 10);\n"
+        "Ancestor(x:, y:) distinct :- parent(subject: x, object: y);\n"
+        "Ancestor(x:, y:) distinct :- Ancestor(x:, y: m), parent(subject: m, object: y);\n"
+    )
+    r = store.synalog(program, "Ancestor")
+    assert r.columns == ["x", "y"]
+    assert len(r.rows) == 6
+    old = store.synalog(
+        'Old(p:, age:) :- triples(subject: p, predicate: "http://example.org/age", object: age), age > 18;',
+        "Old",
+    )
+    assert old.records == [{"p": EX + "ada", "age": 42}]
+    page = store.synalog(
+        '@OrderBy(P, "x");\nP(x:) :- par(subject: x);',
+        "P",
+        tables={"par": EX + "parent"},
+        limit=1,
+        offset=1,
+    )
+    assert page.rows == [[EX + "bob"]]
+    assert "NOT MATERIALIZED" in store.synalog_sql(program, "Ancestor")
+    with pytest.raises(NotImplementedError, match="ArgMax"):
+        store.synalog("O(p? ArgMax= p -> a) distinct :- triples(subject: p, object: a);", "O")
+
+
 # @lat: [[tests#Python#Datalog recursion and materialization]]
 def test_datalog() -> None:
     store = family()

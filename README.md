@@ -176,6 +176,7 @@ Every package has its own README with installation, examples and its API:
 | [`oxilite-d1`](crates/oxilite-d1/README.md) | Cloudflare D1 backend for Rust Workers |
 | [`oxilite-cypher`](crates/oxilite-cypher/README.md) | openCypher over the same data, OWL- and SHACL-aware |
 | [`oxilite-datalog`](crates/oxilite-datalog/README.md) | Datalog rules over the same data: recursion, stratified negation, aggregation |
+| [`oxilite-synalog`](crates/oxilite-synalog/README.md) | [Synalog](https://github.com/SynaLinks/synalog), the Datalog-family language for AI agents, run over the store as relational tables |
 | [`oxilite-jsonld`](crates/oxilite-jsonld/README.md) | JSON-LD documents stored verbatim, one named graph each |
 | [`oxilite-vc`](crates/oxilite-vc/README.md) | Verifiable Credentials: stored under their id, indexed, queryable |
 | [`oxilite-reason`](crates/oxilite-reason/README.md) | OWL 2 RL materialization with `reasonable` |
@@ -279,6 +280,7 @@ oxilite update -l data.sqlite -m "close t1" -u '…'   # a commit message (versi
 oxilite query -l data.sqlite --as-of HEAD~1 -q '…'   # the store as it was one commit ago
 oxilite versioning log -l data.sqlite                 # the history; also status, set, diff, changes, purge
 oxilite datalog -l data.sqlite -f rules.dl            # run a Datalog program (--explain, --materialize)
+oxilite synalog Pred -l data.sqlite -f rules.l        # run a Synalog predicate (--sql, --engine duckdb)
 oxilite registry register -l data.sqlite http://ex/onto --role ontology --file onto.ttl   # schema registry
 oxilite query --turso -l data.db -q '…'              # the same, on Turso
 ```

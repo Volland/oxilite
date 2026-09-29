@@ -29,6 +29,10 @@ cypher = ["dep:oxilite-cypher"]
 datalog = ["dep:oxilite-datalog"]
 # JSON forms of Datalog options and results (JavaScript bindings).
 datalog-json = ["datalog", "oxilite-datalog/json"]
+# Synalog, the agent-oriented Datalog-family language, over the same data.
+synalog = ["dep:oxilite-synalog"]
+# JSON forms of Synalog options and results (JavaScript and Python bindings).
+synalog-json = ["synalog", "oxilite-synalog/json"]
 # JSON-LD documents: verbatim storage, one named graph per document.
 jsonld = ["dep:oxilite-jsonld"]
 # Verifiable Credentials on top of `jsonld` (pulls in the `ssi` crates).
@@ -47,6 +51,7 @@ oxilite-turso = { workspace = true, optional = true }
 oxilite-reason = { workspace = true, optional = true }
 oxilite-cypher = { workspace = true, optional = true }
 oxilite-datalog = { workspace = true, optional = true }
+oxilite-synalog = { workspace = true, optional = true }
 oxilite-jsonld = { workspace = true, optional = true }
 oxilite-vc = { workspace = true, optional = true }
 oxrdf.workspace = true
@@ -57,7 +62,7 @@ sparesults.workspace = true
 oxiri.workspace = true
 
 [dev-dependencies]
-oxilite = { path = ".", features = ["rusqlite", "dylib", "turso", "cypher", "datalog"] }
+oxilite = { path = ".", features = ["rusqlite", "dylib", "turso", "cypher", "datalog", "synalog"] }
 oxilite-core = { workspace = true, features = ["serde"] }
 futures = { version = "0.3", default-features = false, features = ["executor"] }
 ureq = { version = "2", features = ["json"] }

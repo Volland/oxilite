@@ -255,3 +255,9 @@ So the graph pattern around a search runs in the same statement, and the three a
 A host function is spareval's custom-function signature, `Fn(&[Term]) -> Option<Term>`, registered per store and never persisted; each frontend keeps the rest of a query in SQL.
 
 SPARQL and Cypher reach host functions through the partial evaluator, which already runs compilable subtrees as SQL and the rest in spareval. Datalog cannot: its rules are SQL, and Turso keeps scalar-function registration private while D1 has none, so a rule that calls a host function is split, its host-free part run as SQL and its results returned to the program as facts, one request per host rule, with recursion through a host rule rejected. Rejected: SQL UDFs, which would work on rusqlite only and give a function two evaluation paths. See [[architecture#Host functions]].
+
+## D42 Synalog is a guest language, run over the store as tables
+
+Synalog is used as published and the store adapts to it: relational tables injected as CTEs in front of its SQL, its runtime helpers rewritten to plain SQLite. Nothing is forked and no schema is added.
+
+Forking the compiler to emit term-id SQL would have made Synalog a third dialect to maintain and cut it off from upstream fixes and its agent skill; lowering its AST into [[architecture#Datalog frontend]] would change its semantics (multisets, bounded unrolling) and follow an unstable internal format. Persisted views were rejected: a view is a schema change (a D1 migration), cannot follow per-call graph, inference and version options, and appears in dumps. CTEs cost nothing when unreferenced. Decoding terms to SQL values rather than exposing ids is what makes Synalog's comparisons and arithmetic mean what they say. The price is that results are values, not RDF terms, so they are queried rather than materialized. See [[architecture#Synalog frontend]].

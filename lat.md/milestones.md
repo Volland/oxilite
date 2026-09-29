@@ -120,3 +120,12 @@ Scope: [[architecture#Backends#Turso]], [[architecture#Vector indexes]], [[archi
 
 Status: done. `oxilite-turso` (pinned to Turso 0.8.0-pre.14, the first release with recursive CTEs) passes the Turso, vector and host-function suites ([[tests#Turso]], [[tests#Vector indexes]], [[tests#Host functions]]) alongside the unchanged core, Cypher (TCK allow-list included), Datalog, store and CLI suites. The shell has `--turso`, `.vector` and `.functions`; the studio server has the vector index and function requests. Not in scope: a dense ANN index (Turso has none), vector search on other backends, and the JavaScript and Python bindings.
 
+## Synalog dialect
+
+Synalog, the Datalog-family language for AI agents, as an optional second rule dialect: on its own for seven SQL engines, and over the triple store on every backend.
+
+Change: `synalog-dialect`; the resulting spec is `synalog-query`.
+
+Scope: [[architecture#Synalog frontend]] and [[decisions#D42 Synalog is a guest language, run over the store as tables]]. Done when unmodified Synalog programs run over the store with the same graph, inference and version options as Datalog, recursion agrees with the SPARQL property path, and constructs the store cannot run are rejected before any request.
+
+Status: done. `oxilite-synalog` on `synalog` 1.2 (crates.io, default features off), `Store::synalog`/`synalog_with`/`synalog_sql` and the async equivalents behind the `synalog` feature, and `oxilite synalog` on the command line, verified on bundled SQLite and Turso, with D1 limits checked against `Capabilities::d1()` ([[tests#Synalog]]). `@oxilite/node`, `@oxilite/d1` (opt-in WebAssembly feature, checked against Miniflare) and the Python package expose it too; released in 0.9.0. Not in scope: materializing results.

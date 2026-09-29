@@ -51,6 +51,14 @@ fn datalog_args(options: Option<String>) -> Result<oxilite::datalog::Options> {
     oxilite::datalog::json::options_from_json(&value).map_err(err)
 }
 
+fn synalog_args(options: Option<String>) -> Result<oxilite::synalog::Options> {
+    let value = match options {
+        Some(o) => serde_json::from_str::<serde_json::Value>(&o).map_err(err)?,
+        None => serde_json::Value::Null,
+    };
+    oxilite::synalog::json::options_from_json(&value).map_err(err)
+}
+
 fn cypher_args(
     params: Option<String>,
     options: Option<String>,
@@ -309,6 +317,33 @@ impl NativeStore {
     #[napi]
     pub fn explain_datalog(&self, program: String) -> Result<String> {
         with_store!(self, s => s.explain_datalog(&program)).map_err(err)
+    }
+
+    /// A Synalog program over the store as relational tables: the rows of `predicate`.
+    /// `options` is JSON (`oxilite_synalog::json`); the result is
+    /// `{"kind": "synalog", "columns", "rows"}`.
+    #[napi]
+    pub fn synalog(
+        &self,
+        program: String,
+        predicate: String,
+        options: Option<String>,
+    ) -> Result<String> {
+        let opts = synalog_args(options)?;
+        let r = with_store!(self, s => s.synalog_with(&program, &predicate, &opts)).map_err(err)?;
+        Ok(oxilite::synalog::json::result_to_json(&r).to_string())
+    }
+
+    /// The SQL a Synalog predicate compiles to on this store.
+    #[napi]
+    pub fn synalog_sql(
+        &self,
+        program: String,
+        predicate: String,
+        options: Option<String>,
+    ) -> Result<String> {
+        let opts = synalog_args(options)?;
+        with_store!(self, s => s.synalog_sql_with(&program, &predicate, &opts)).map_err(err)
     }
 
     /// The SQL a query compiles to, with the planner's notes.

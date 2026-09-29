@@ -14,6 +14,9 @@ import {
   type DatalogOptions,
   type DatalogOutput,
   type DatalogResult,
+  type SynalogOptions,
+  type SynalogOutput,
+  type SynalogResult,
   type CredentialOptions,
   type DocumentFilter,
   type Drift,
@@ -23,6 +26,7 @@ import {
   type Term,
   cypherResult,
   datalogResult,
+  synalogResult,
   documentText,
   filterJson,
   fromJson,
@@ -68,6 +72,8 @@ interface NativeStoreInstance {
   datalog(program: string, options?: string | null): string;
   datalogMaterialize(program: string, options?: string | null): string;
   explainDatalog(program: string): string;
+  synalog(program: string, predicate: string, options?: string | null): string;
+  synalogSql(program: string, predicate: string, options?: string | null): string;
   update(sparql: string, baseIri?: string | null): void;
   explainUpdate(sparql: string): string;
   load(data: string, format: string, baseIri: string | null, toGraph: string | null, bulk: boolean): void;
@@ -290,6 +296,22 @@ export class Store {
   /** How a Datalog program runs: its strata, the strategy per recursive component, the SQL. */
   explainDatalog(program: string): string {
     return this.native.explainDatalog(program);
+  }
+
+  /**
+   * A Synalog program (the Datalog-family language for AI agents) over the store as
+   * relational tables: `triples(subject, predicate, object, kind, datatype, lang, graph)` and
+   * the tables it declares with `# @table NAME <IRI>` / `# @class NAME <IRI>`. Returns the
+   * rows of `predicate`, with terms decoded to numbers and strings.
+   */
+  synalog(program: string, predicate: string, options: SynalogOptions = {}): SynalogResult {
+    const out = JSON.parse(this.native.synalog(program, predicate, JSON.stringify(options))) as SynalogOutput;
+    return synalogResult(out);
+  }
+
+  /** The SQL a Synalog predicate compiles to on this store, without running it. */
+  synalogSql(program: string, predicate: string, options: SynalogOptions = {}): string {
+    return this.native.synalogSql(program, predicate, JSON.stringify(options));
   }
 
   /** SPARQL update, applied atomically. */

@@ -423,6 +423,51 @@ export function datalogResult(out: DatalogOutput): DatalogResult {
   };
 }
 
+/** A table a Synalog program declares over one predicate or one class. */
+export type SynalogTable = { name: string; predicate: string } | { name: string; class: string };
+
+/** Options of the Synalog frontend (see `oxilite_synalog::json`). */
+export interface SynalogOptions {
+  /** Read every graph rather than only the default graph. */
+  useDefaultGraphAsUnion?: boolean;
+  /** Also read materialized inferences. */
+  includeInferred?: boolean;
+  /** At most this many rows (the smaller of this and the program's `@Limit`). */
+  limit?: number;
+  /** Skip this many rows. */
+  offset?: number;
+  /** Run the program on this version of the store (`"HEAD~1"`, `"#42"`, `"@2026-09-01T00:00:00Z"`). */
+  asOf?: string;
+  /** Tables declared in code, beside the program's `# @table` / `# @class` pragmas. */
+  tables?: SynalogTable[];
+}
+
+/** A Synalog value: terms are decoded to SQL values (numbers, strings, 1/0 for booleans). */
+export type SynalogValue = string | number | null;
+
+/** What the native side returns for a Synalog program. */
+export interface SynalogOutput {
+  kind: "synalog";
+  columns: string[];
+  rows: SynalogValue[][];
+}
+
+/** The rows of a Synalog predicate. */
+export interface SynalogResult {
+  columns: string[];
+  rows: SynalogValue[][];
+  /** Rows as objects keyed by the predicate's head columns. */
+  records: Record<string, SynalogValue>[];
+}
+
+export function synalogResult(out: SynalogOutput): SynalogResult {
+  return {
+    columns: out.columns,
+    rows: out.rows,
+    records: out.rows.map((row) => Object.fromEntries(out.columns.map((c, i) => [c, row[i] ?? null]))),
+  };
+}
+
 /** Options of the Cypher frontend (see `oxilite_cypher::json`). */
 export interface CypherOptions {
   /** Namespace of labels, relationship types and keys without a prefix (default `urn:oxilite:pg:`). */

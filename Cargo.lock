@@ -3577,6 +3577,7 @@ dependencies = [
  "oxilite-jsonld",
  "oxilite-reason",
  "oxilite-rusqlite",
+ "oxilite-synalog",
  "oxilite-turso",
  "oxilite-vc",
  "oxiri 0.2.11",
@@ -3801,6 +3802,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "oxilite-synalog"
+version = "0.8.0"
+dependencies = [
+ "oxilite",
+ "oxilite-core",
+ "oxrdf",
+ "serde_json",
+ "synalog",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "oxilite-turso"
 version = "0.8.0"
 dependencies = [
@@ -3857,6 +3870,7 @@ dependencies = [
  "oxilite-cypher",
  "oxilite-datalog",
  "oxilite-jsonld",
+ "oxilite-synalog",
  "oxilite-vc",
  "oxrdf",
  "oxrdfio",
@@ -6441,6 +6455,20 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "synalog"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4b7ef26148494719cfbbaa9424a5bdc78953fbd31d1dfd84e7d7558a724ff6bd"
+dependencies = [
+ "anyhow",
+ "indexmap 2.14.2",
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
 ]
 
 [[package]]

@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Synalog on oxilite – oxilite</title>
+  <meta name="description" content="oxilite 0.9 adds Synalog, the Datalog-family language for AI agents, as a second rule dialect: unmodified Synalog programs over the triple store as relational tables, with time travel, on Rust, Node.js, Python and Cloudflare D1.">
+  <meta property="og:title" content="A semantic layer for agents, over your knowledge graph">
+  <meta property="og:description" content="Synalog on oxilite: named arguments, expressions and aggregation for agents, run over RDF triples as tables — and over any past version of them.">
+  <meta property="og:image" content="../assets/logo.png">
+  <meta name="theme-color" content="#0a0a0a">
+  <link rel="canonical" href="https://oxilitedb.com/articles/synalog-agents">
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg">
+  <link rel="icon" type="image/png" href="../assets/logo.png">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt=""><span>oxi<b>lite</b></span></a>
+      <nav class="nav" aria-label="Main">
+        <a href="../">Home</a>
+        <a href="./">Articles</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="article">
+    <article class="wrap">
+      <span class="kicker">Synalog · Datalog · Agents · Time travel</span>
+      <h1>A semantic layer for agents, over your knowledge graph</h1>
+      <p class="standfirst">oxilite has had its own Datalog since 0.3. Version 0.9 adds a second rule language beside it: <a href="https://github.com/SynaLinks/synalog">Synalog</a>, the Datalog-family language built for AI agents. You write unmodified Synalog programs, and they run over your RDF triples as if the triples were tables — on your laptop, in Python, in Node.js and on Cloudflare D1, and against any past version of the graph.</p>
+      <p class="meta">A walkthrough · Every program and result on this page comes from the test suite (<a href="https://github.com/Volland/oxilite/blob/main/crates/oxilite-synalog/tests/store.rs"><code>store.rs</code></a>, <a href="https://github.com/Volland/oxilite/blob/main/bindings/node/test/synalog.test.ts"><code>synalog.test.ts</code></a>) or from the <code>oxilite</code> command line</p>
+
+      <h2>Why a second rule language</h2>
+      <p>Synalog is a Rust rewrite of Google's <a href="https://logica.dev/">Logica</a>, built by Synalinks around one idea: give an agent a <em>semantic layer</em> it can write to. Instead of re-deriving "who is an active customer" in every query, the agent defines it once as a named concept, builds more concepts on top of it, and has every rule it writes checked by a verifier whose error messages are meant to be read by a model. The language has named arguments, full expressions, aggregation in the rule head, functors, and <code>@OrderBy</code> / <code>@Limit</code>, so results can be read a page at a time. It compiles to SQL for seven engines and ships an agent skill.</p>
+      <p>That is a different job from oxilite's own Datalog, which is about rules <em>over the graph</em>: its atoms are triple patterns, it derives sets of RDF terms, and what it concludes can be written back as triples. We did not want to pick one, so oxilite now runs both over the same quads.</p>
+
+      <h2>How Synalog differs from oxilite's Datalog</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th></th><th>oxilite Datalog</th><th>Synalog on oxilite</th></tr></thead>
+          <tbody>
+            <tr><td>Atoms</td><td>Positional and RDF-native: <code>ex:parent(?x, ?y)</code> <em>is</em> the triple pattern</td><td>Named arguments over tables: <code>parent(subject: x, object: y)</code></td></tr>
+            <tr><td>Values</td><td>RDF terms, compared by term id</td><td>SQL values: numbers, strings, 1/0 for booleans</td></tr>
+            <tr><td>Semantics</td><td>Sets</td><td>Multisets; a rule marked <code>distinct</code> gets set semantics</td></tr>
+            <tr><td>Recursion</td><td>True least fixpoint: <code>WITH RECURSIVE</code>, or iterated in a work table when SQLite can't express it</td><td>Unrolled to the depth set by <code>@Recursive(P, N)</code>, all in one statement (up to N = 20 on the store)</td></tr>
+            <tr><td>Expressions</td><td>SPARQL's expression language in constraints</td><td>Arithmetic, strings, <code>if … then … else</code>, lists, records, built-in functions</td></tr>
+            <tr><td>Aggregation</td><td>In the head, stratified; results must be storable as terms</td><td>In the head: <code>+=</code>, <code>Min=</code>, <code>Max=</code>, <code>Avg=</code>, <code>List=</code>, <code>Set=</code>, …</td></tr>
+            <tr><td>Result</td><td>The goal's solutions, as terms</td><td>The rows of a named predicate, ordered and pageable</td></tr>
+            <tr><td>Materialization</td><td>Yes, into the inference table SPARQL and Cypher read</td><td>No: results are values, not triples</td></tr>
+            <tr><td>Time travel</td><td><code>@version</code> for a whole program, and <code>at "REF"</code> per atom</td><td><code>asOf</code> for the whole program</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>In short: reach for Datalog when the conclusions should become part of the graph, and for Synalog when an agent is building and querying a vocabulary of concepts <em>over</em> the graph. The two compose, as step 5 shows.</p>
+
+      <h2>Setup</h2>
+<pre><code>cargo add oxilite --features synalog     <span class="c"># Rust</span>
+npm install @oxilite/node                <span class="c"># Node.js</span>
+pip install oxilite                      <span class="c"># Python</span></code></pre>
+      <p>The data is a parent chain with a few ages and names:</p>
+<pre><code><span class="c"># ada → bob → cy → dee</span>
+ex:ada ex:parent ex:bob . ex:bob ex:parent ex:cy . ex:cy ex:parent ex:dee .
+ex:ada ex:age 42 . ex:bob ex:age 17 . ex:cy ex:age 71 . ex:dee ex:age 8 .
+ex:ada ex:name "Ada" . ex:bob ex:name "Bob"@en .</code></pre>
+
+      <h2><span class="step">1</span>The triple store, seen as tables</h2>
+      <p>Synalog reads tables by their lower-case names. On oxilite, every program can read one called <code>triples</code>:</p>
+<pre><code>triples(subject, predicate, object, kind, datatype, lang, graph)</code></pre>
+<pre><code><span class="k">Parent</span>(child:, parent:) :-
+  triples(subject: child, predicate: <span class="s">"http://example.org/parent"</span>, object: parent);</code></pre>
+      <p>This returns the three parent pairs as IRIs. There is no <code>triples</code> table in the schema, though. When a program uses it, oxilite adds it to the front of the compiled statement as a common table expression over the quad table. It honours the same options as SPARQL: the default graph only unless you ask for the union of all graphs, and inferred triples only if you ask for them.</p>
+      <p>The key decision was how terms become values. oxilite stores every term as a 64-bit id. Synalog, however, compares and computes with ordinary SQL semantics, and SQLite sorts every string after every number, so comparing lexical forms would make <code>age &gt; 18</code> quietly wrong. So the <code>object</code> column is decoded into a real SQL value:</p>
+<pre><code>$ oxilite synalog D -l kg.db -p <span class="s">'D(s:, o:, kind:, datatype:, lang:) :-
+    triples(subject: s, object: o, kind:, datatype:, lang:), s == "http://example.org/bob";'</span>
+s                       o                       kind     datatype                                               lang
+http://example.org/bob  http://example.org/cy   iri
+http://example.org/bob  Bob                     literal  http://www.w3.org/1999/02/22-rdf-syntax-ns#langString  en
+http://example.org/bob  17                      literal  http://www.w3.org/2001/XMLSchema#integer</code></pre>
+      <p>Integers come out as numbers, and inline integers are decoded from the id itself without a lookup. Other numeric literals become numbers, booleans become 1 and 0, blank nodes read as <code>_:label</code>, and IRIs and strings read as text. The RDF details are kept in <code>kind</code>, <code>datatype</code> and <code>lang</code>, so an agent can still tell the IRI <code>http://…</code> from a string with the same text. The <code>graph</code> column is NULL for the default graph. Now numbers behave like numbers:</p>
+<pre><code><span class="k">Age</span>(p:, age:) :- triples(subject: p, predicate: <span class="s">"http://example.org/age"</span>, object: age);
+<span class="k">Adult</span>(p:) :- Age(p:, age:), age &gt; <span class="s">18</span>;               <span class="c"># ada, cy</span>
+<span class="k">Total</span>(t? += age) distinct :- Age(age:);             <span class="c"># 138</span></code></pre>
+
+      <h2><span class="step">2</span>Declared tables, answered by the index</h2>
+      <p>Filtering <code>triples</code> by a predicate string works, but it decodes every quad before comparing. So a program can declare a table for one predicate or one class:</p>
+<pre><code><span class="c"># @table parent &lt;http://example.org/parent&gt;</span>
+<span class="c"># @class person &lt;http://example.org/Person&gt;</span>
+
+<span class="k">Parent</span>(child:, parent:) :- parent(subject: child, object: parent);
+<span class="k">Childless</span>(p:) distinct :- person(subject: p), ~parent(subject: p);</code></pre>
+      <p>A declared table compiles to <code>WHERE q.p = 680058446304702762</code>. That number is the predicate's term id, computed in Rust, so the <code>posg</code> index answers the lookup directly. The declarations are Synalog comments, which means the program is still valid Synalog and still runs unchanged with Synalog's own CLI against any other database. You can also pass the same declarations from code: <code>{ tables: [{ name: "parent", predicate: "…" }] }</code>.</p>
+
+      <h2><span class="step">3</span>Recursion, and what it compiles to</h2>
+<pre><code><span class="c"># @table parent &lt;http://example.org/parent&gt;</span>
+@Recursive(Ancestor, <span class="s">10</span>);
+<span class="k">Ancestor</span>(x:, y:) distinct :- parent(subject: x, object: y);
+<span class="k">Ancestor</span>(x:, y:) distinct :- Ancestor(x:, y: m), parent(subject: m, object: y);</code></pre>
+      <p>On the four-person chain this returns six pairs, exactly what the SPARQL property path <code>ex:parent+</code> returns. The test suite uses that property path as the reference answer. Synalog handles recursion differently from oxilite's Datalog. It doesn't run a fixpoint; it <em>unrolls</em> the recursion into one common table expression per level, up to the bound. That's why the bound is mandatory and why cyclic data still terminates. <code>distinct</code> matters here: without it Synalog keeps duplicate rows, and a cycle multiplies them at every level.</p>
+      <p>This is the start of the statement <code>oxilite synalog Ancestor --sql</code> prints (the long decoding <code>CASE</code> expressions are shortened):</p>
+<pre><code>WITH parent AS NOT MATERIALIZED (
+       SELECT <span class="c">/* decode q.s */</span> AS subject, <span class="c">/* decode q.o */</span> AS object, … AS graph
+       FROM quads AS q WHERE q.p = 680058446304702762 AND +q.g = 0),
+     t_8_Ancestor_…_f1 AS (SELECT … FROM parent AS t_10_parent),
+     t_7_Ancestor_r0   AS (SELECT … GROUP BY x, y),
+     t_5_Ancestor_…_f2 AS (SELECT … FROM t_7_Ancestor_r0, parent WHERE parent.subject = Ancestor_r0.y
+                           UNION ALL SELECT … FROM parent),
+     …
+SELECT x, y FROM … ORDER BY x, y</code></pre>
+      <p>Everything below the first CTE is Synalog's own output; oxilite doesn't touch Synalog's compiler. It prepends the store tables the statement uses, marked <code>NOT MATERIALIZED</code> so SQLite can push filters into them, and it makes the SQL <em>portable</em>. Synalog's SQLite dialect assumes the Logica Python runtime has registered helper functions on the connection. Its negation, for instance, compiles to <code>MIN(MagicalEntangle(1, …)) IS NULL</code>. D1 cannot register functions at all, so oxilite rewrites the helpers that plain SQLite can express (<code>MagicalEntangle</code>, <code>IN_LIST</code>, <code>JOIN_STRINGS</code>, <code>DistinctListAgg</code>, <code>SortList</code>). The ones it can't — <code>ArgMax=</code>, file and model calls, and <code>@Ground</code>, which creates tables — are rejected before anything runs, with an error naming the construct. So is a <code>@Recursive</code> bound above 20, because above 20 Synalog switches to an iterative mode that writes tables. The result is one statement and one round trip, on every backend.</p>
+
+      <h2><span class="step">4</span>Time travel</h2>
+      <p>On a store with versioning turned on, a Synalog program can run against any past version. Here the chain was written in two commits, and <code>dee</code> arrived in the second:</p>
+<pre><code>$ oxilite synalog Ancestor -l kg.db -f anc.l
+x                       y
+http://example.org/ada  http://example.org/bob
+http://example.org/ada  http://example.org/cy
+http://example.org/ada  http://example.org/dee
+http://example.org/bob  http://example.org/cy
+http://example.org/bob  http://example.org/dee
+http://example.org/cy   http://example.org/dee
+
+$ oxilite synalog Ancestor -l kg.db -f anc.l --as-of HEAD~1
+x                       y
+http://example.org/ada  http://example.org/bob
+http://example.org/ada  http://example.org/cy
+http://example.org/bob  http://example.org/cy</code></pre>
+      <p>This works because every store table is built over a single quad source, and <code>asOf</code> only swaps what that source is. Instead of <code>quads</code>, the tables read the relation oxilite's versioning already computes from the change log: each quad whose latest change at or before that tick was an addition. The version reference is resolved to a tick first — <code>HEAD~1</code>, <code>#42</code> or <code>@2026-09-01T00:00:00Z</code> — and then the program compiles against it. Synalog doesn't know any of this is happening. The same program, unchanged, reads the past.</p>
+<pre><code>store.synalog(program, <span class="s">"Ancestor"</span>, { asOf: <span class="s">"HEAD~1"</span> });          <span class="c">// Node.js, D1</span>
+store.synalog(program, <span class="s">"Ancestor"</span>, as_of=<span class="s">"HEAD~1"</span>)            <span class="c"># Python</span>
+store.synalog_with(program, <span class="s">"Ancestor"</span>, &amp;Options { as_of: Some(<span class="s">"HEAD~1"</span>.into()), ..Default::default() })?; <span class="c">// Rust</span></code></pre>
+      <p>Two limits, stated plainly. The version applies to the whole program: Synalog has no per-atom <code>at "REF"</code> like oxilite's Datalog, so comparing two versions in one program is still a Datalog job. And inferences describe only the present, so <code>asOf</code> combined with <code>includeInferred</code> is refused.</p>
+
+      <h2><span class="step">5</span>Named graphs, and rules from the other language</h2>
+      <p>With <code>useDefaultGraphAsUnion</code>, the tables read every graph, and the <code>graph</code> column carries each row's graph IRI (NULL for the default graph). With <code>includeInferred</code>, they also read the inference table, which is where the two rule languages meet. Datalog can write conclusions as triples, and Synalog can then build on them:</p>
+<pre><code><span class="c">// Datalog: store grandparents as triples</span>
+store.datalogMaterialize(<span class="s">`@prefix ex: &lt;http://example.org/&gt; .
+  ex:grandparent(?x, ?z) :- ex:parent(?x, ?y), ex:parent(?y, ?z).`</span>);
+
+<span class="c">// Synalog: read them like any other predicate</span>
+store.synalog(<span class="s">`# @table grandparent &lt;http://example.org/grandparent&gt;
+  G(x:, y:) :- grandparent(subject: x, object: y);`</span>, <span class="s">"G"</span>, { includeInferred: <span class="k">true</span> });
+<span class="c">// ada → cy, bob → dee</span></code></pre>
+
+      <h2>Everywhere oxilite runs</h2>
+<pre><code><span class="c">// Rust — oxilite = { version = "0.9", features = ["synalog"] }</span>
+<span class="k">let</span> r = store.synalog(program, <span class="s">"Ancestor"</span>)?;       <span class="c">// columns + rows of SQL values</span>
+<span class="k">let</span> sql = store.synalog_sql(program, <span class="s">"Ancestor"</span>)?;</code></pre>
+<pre><code><span class="c">// Node.js</span>
+<span class="k">const</span> r = store.synalog(program, <span class="s">"Old"</span>);
+r.records   <span class="c">// [{ p: "http://example.org/ada", age: 42 }]</span></code></pre>
+<pre><code><span class="c"># Python</span>
+r = store.synalog(program, <span class="s">"P"</span>, tables={<span class="s">"par"</span>: EX + <span class="s">"parent"</span>}, limit=<span class="s">1</span>, offset=<span class="s">1</span>)</code></pre>
+<pre><code><span class="c"># Command line</span>
+oxilite synalog Ancestor -l kg.db -f anc.l                 <span class="c"># run</span>
+oxilite synalog Ancestor -l kg.db -f anc.l --sql           <span class="c"># the SQL it runs on the store</span>
+oxilite synalog Ancestor -f anc.l --engine duckdb          <span class="c"># Synalog's own SQL for another engine</span></code></pre>
+      <p>That last line is the dialect on its own: <code>compile_for_engine</code> and <code>check</code> need no store and cover all seven of Synalog's engines. <code>@oxilite/d1</code> has the same <code>synalog()</code> method, but as with Datalog, the WebAssembly core only includes it when built with the <code>synalog</code> feature. It adds about 2&nbsp;MB, and a Worker that doesn't use it shouldn't pay for it. D1's own limits are checked before anything is sent: a statement over the length limit, or a predicate with more than five rules (D1 allows five terms in a compound <code>SELECT</code>), fails with a Synalog error rather than an opaque SQLite one.</p>
+
+      <h2>Limits to know</h2>
+      <ul>
+        <li><strong>Not on the store:</strong> <code>ArgMax=</code> / <code>ArgMin=</code>, <code>@Ground</code>, file, solver and model calls, and <code>@Recursive</code> bounds above 20. Each is rejected up front, by name.</li>
+        <li><strong>Values, not terms:</strong> results can't be materialized as triples. Use oxilite's Datalog for conclusions that should become part of the graph.</li>
+        <li><strong>Decoding costs a lookup</strong> for every term that isn't stored inline. Declared tables avoid scanning, not decoding.</li>
+        <li><strong>Triple terms</strong> (RDF 1.2) read as NULL for now.</li>
+      </ul>
+
+      <div class="callout">
+        <p><strong>The takeaway.</strong> An agent can now write the semantic layer it knows how to write — named concepts, composable rules, pages of ordered results — directly over a knowledge graph, without an export or an ETL step, and ask the same questions of the graph as it was yesterday. oxilite's Datalog is still there for rules whose conclusions belong in the graph. Both compile to one SQL statement over the same quads.</p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt="" width="28" height="28"><span>oxilite</span></a>
+      <span>MIT or Apache-2.0</span>
+      <nav aria-label="Rechtliches">
+        <a href="../impressum.html">Impressum</a>
+        <a href="../datenschutz.html">Datenschutz</a>
+        <a href="../agb.html">AGB</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>

@@ -33,7 +33,7 @@
               <span class="nav-label">Capabilities</span>
               <a href="#features">How it works<small>One SQL statement per query</small></a>
               <a href="#versioning">Versioning<small>History and time travel</small></a>
-              <a href="#datalog">Datalog<small>Recursive rules</small></a>
+              <a href="#datalog">Datalog &amp; Synalog<span class="badge">new</span><small>Recursive rules, for agents too</small></a>
               <a href="#credentials">Credentials<small>JSON-LD and VCs</small></a>
             </div>
             <div>
@@ -127,7 +127,7 @@
         </div>
 
         <div class="panel" role="tabpanel" id="p-rust" aria-labelledby="tab-rust">
-<pre><code><span class="c"># Cargo.toml: oxilite = "0.8"   (features: rusqlite (default), dylib, turso, d1, cypher, datalog, reasonable)</span>
+<pre><code><span class="c"># Cargo.toml: oxilite = "0.8"   (features: rusqlite (default), dylib, turso, d1, cypher, datalog, synalog, reasonable)</span>
 <span class="k">use</span> oxilite::store::Store;             <span class="c">// was: use oxigraph::store::Store;</span>
 <span class="k">use</span> oxilite::io::RdfFormat;
 
@@ -324,6 +324,13 @@ store.datalog(<span class="s">r#"
         </div>
         <p style="margin-top:20px">SQLite&rsquo;s restrictions <em>are</em> Datalog&rsquo;s classical safety conditions, so the compiler reports them as rule diagnostics instead of working around them. <code>explain_datalog()</code> shows the strata, the strategy picked for each recursive component, and the SQL.</p>
         <p>Available from Rust, from the CLI (<code>oxilite datalog -l db.sqlite -f rules.dl</code>), from Python (<code>store.datalog(program)</code>), and from JavaScript &mdash; <code>@oxilite/node</code> and <code>@oxilite/d1</code> both return RDF/JS terms. In the WebAssembly core it is an opt-in feature (~0.2&nbsp;MB), so a Worker that does not use rules does not carry it.</p>
+        <h3 style="margin-top:32px">Or write rules in Synalog</h3>
+        <p><a href="https://github.com/SynaLinks/synalog">Synalog</a>, the Datalog-family language for AI agents &mdash; named arguments, expressions, head aggregation, ordered and pageable results &mdash; runs over the same store as a second rule dialect. Triples read as tables: <code>triples(subject, predicate, object, kind, datatype, lang, graph)</code>, plus the ones a program declares with <code># @table parent &lt;http://example.org/parent&gt;</code>, with terms decoded to numbers and strings. Graph scope, inferences and time travel (<code>asOf</code>) work as they do for Datalog.</p>
+<pre><code><span class="c"># @table parent &lt;http://example.org/parent&gt;</span>
+@Recursive(Ancestor, <span class="s">10</span>);
+Ancestor(x:, y:) distinct :- parent(subject: x, object: y);
+Ancestor(x:, y:) distinct :- Ancestor(x:, y: m), parent(subject: m, object: y);</code></pre>
+        <p><code>store.synalog(program, "Ancestor")</code> from Rust, Python, Node.js and D1, or <code>oxilite synalog Ancestor -f rules.l</code>. <a href="articles/synalog-agents.html">Read how it differs from Datalog &rarr;</a></p>
       </div>
     </section>
     <section id="credentials" class="band-black">

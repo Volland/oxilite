@@ -26,6 +26,8 @@ cypher-lite = ["dep:oxilite-cypher"]
 # Datalog over the same data: recursive rules with stratified negation; ~0.2 MB. Off by
 # default, so a Worker that does not use rules does not pay for them.
 datalog = ["dep:oxilite-datalog"]
+# Synalog, the Datalog-family language for AI agents, over the store as relational tables.
+synalog = ["dep:oxilite-synalog"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -34,6 +36,7 @@ crate-type = ["cdylib", "rlib"]
 oxilite-core = { workspace = true, features = ["serde"] }
 oxilite-cypher = { workspace = true, optional = true }
 oxilite-datalog = { workspace = true, optional = true, features = ["json"] }
+oxilite-synalog = { workspace = true, optional = true, features = ["json"] }
 oxilite-jsonld = { workspace = true, optional = true, features = ["json"] }
 oxilite-vc = { workspace = true, optional = true }
 oxrdf.workspace = true

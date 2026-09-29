@@ -173,6 +173,47 @@ enum Command {
         #[arg(long, value_name = "VERSION", conflicts_with = "materialize")]
         as_of: Option<String>,
     },
+    /// Runs a Synalog program (the Datalog-family language for AI agents) and prints the rows
+    /// of one predicate.
+    ///
+    /// The store reads as tables: `triples(subject, predicate, object, kind, datatype, lang,
+    /// graph)`, plus those the program declares with `# @table NAME <IRI>` and
+    /// `# @class NAME <IRI>`. The program is read from `--program`, or from the file named by
+    /// `--file`, or from standard input when neither is given.
+    Synalog {
+        #[command(flatten)]
+        location: Location,
+        /// The predicate whose rows to print.
+        predicate: String,
+        /// The program text.
+        #[arg(long, short, conflicts_with = "file")]
+        program: Option<String>,
+        /// A file holding the program.
+        #[arg(long, short)]
+        file: Option<String>,
+        /// Print the SQL the predicate compiles to on the store, and run nothing.
+        #[arg(long)]
+        sql: bool,
+        /// Print the SQL for this engine (duckdb, psql, bigquery, trino, presto, databricks,
+        /// sqlite) without opening a store.
+        #[arg(long, conflicts_with_all = ["sql", "as_of", "union_graph", "inferred"])]
+        engine: Option<String>,
+        /// At most this many rows.
+        #[arg(long)]
+        limit: Option<u64>,
+        /// Skip this many rows.
+        #[arg(long)]
+        offset: Option<u64>,
+        /// Read every graph, not only the default graph.
+        #[arg(long)]
+        union_graph: bool,
+        /// Also read materialized inferences.
+        #[arg(long)]
+        inferred: bool,
+        /// Run the program on this version of the store.
+        #[arg(long, value_name = "VERSION")]
+        as_of: Option<String>,
+    },
     /// The schema registry: which graphs hold ontologies, SHACL shapes or ShEx schemas.
     Registry {
         #[command(subcommand)]
@@ -370,6 +411,58 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
                 let line: Vec<String> = row
                     .iter()
                     .map(|c| c.as_ref().map(ToString::to_string).unwrap_or_default())
+                    .collect();
+                println!("{}", line.join("\t"));
+            }
+            Ok(())
+        }
+        Command::Synalog {
+            location,
+            predicate,
+            program,
+            file,
+            sql,
+            engine,
+            limit,
+            offset,
+            union_graph,
+            inferred,
+            as_of,
+        } => {
+            let source = read_program(program, file)?;
+            if let Some(engine) = engine {
+                println!(
+                    "{}",
+                    oxilite::synalog::compile_for_engine(
+                        &source, &predicate, &engine, limit, offset
+                    )?
+                );
+                return Ok(());
+            }
+            let db = Db::open(&location)?;
+            if sql {
+                println!("{}", db.synalog_sql(&source, &predicate)?);
+                return Ok(());
+            }
+            let options = oxilite::synalog::Options {
+                union_default_graph: union_graph,
+                include_inferred: inferred,
+                limit,
+                offset,
+                as_of,
+                ..Default::default()
+            };
+            let r = db.synalog(&source, &predicate, &options)?;
+            println!("{}", r.columns.join("\t"));
+            for row in &r.rows {
+                let line: Vec<String> = row
+                    .iter()
+                    .map(|v| match v {
+                        oxilite::synalog::SqlValue::Null => String::new(),
+                        oxilite::synalog::SqlValue::Integer(i) => i.to_string(),
+                        oxilite::synalog::SqlValue::Real(r) => r.to_string(),
+                        oxilite::synalog::SqlValue::Text(t) => t.clone(),
+                    })
                     .collect();
                 println!("{}", line.join("\t"));
             }
