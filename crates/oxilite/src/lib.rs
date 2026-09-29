@@ -30,6 +30,8 @@ mod jsonld_store;
 mod partial;
 mod schema_store;
 pub mod store;
+#[cfg(feature = "synalog")]
+mod synalog_store;
 #[cfg(feature = "vc")]
 mod vc_store;
 mod vector_store;
@@ -101,6 +103,13 @@ pub mod sparql {
 #[cfg(feature = "datalog")]
 pub mod datalog {
     pub use oxilite_datalog::*;
+}
+
+/// Synalog over the dataset: the agent-oriented Datalog-family language, reading the store as
+/// relational tables (`Store::synalog`).
+#[cfg(feature = "synalog")]
+pub mod synalog {
+    pub use oxilite_synalog::*;
 }
 
 /// openCypher over the property-graph view of the dataset (`Store::cypher`).

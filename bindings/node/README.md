@@ -87,6 +87,7 @@ Contexts can also be persisted with `docs.putContext(iri, context)`. Errors are 
 | `dump(options)` | Serialize the store or one graph |
 | `add`, `addAll`, `delete`, `has`, `match`, `size` | Quad-level access with RDF/JS terms |
 | `cypher(query, params?, options?)` | openCypher read or write; returns `{ columns, rows, records, stats }` |
+| `synalog(program, predicate, options?)`, `synalogSql` | [Synalog](https://github.com/SynaLinks/synalog) over the store as tables (`triples`, `# @table`, `# @class`); returns `{ columns, rows, records }` of plain values. Options: `useDefaultGraphAsUnion`, `includeInferred`, `limit`, `offset`, `asOf`, `tables` |
 | `jsonld(options?)` | JSON-LD documents: `put`, `putAll`, `get`, `remove`, `list`, `find`, `graphs`, `documentForGraph`, `putContext`, `removeContext`, `contexts`, `check`, `rebuild` |
 | `credentials(options?)` | Verifiable Credentials: `put`, `putPresentation`, `get`, `remove`, `find`, and `documents` for the rest |
 | `explain(sparql)`, `explainUpdate`, `explainCypher` | The SQL a statement compiles to, with the planner's notes |

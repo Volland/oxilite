@@ -1,0 +1,29 @@
+[package]
+name = "oxilite-synalog"
+description = "Synalog over oxilite: the agent-oriented Datalog-family language, run on the triple store (native and Cloudflare D1)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/oxilite-synalog"
+readme = "README.md"
+authors.workspace = true
+keywords = ["synalog", "datalog", "logica", "rdf", "sqlite"]
+categories = ["database-implementations", "compilers"]
+rust-version.workspace = true
+
+[dependencies]
+oxilite-core.workspace = true
+oxrdf.workspace = true
+thiserror.workspace = true
+synalog = { version = "1.2", default-features = false }
+serde_json = { version = "1", optional = true }
+
+[features]
+default = []
+# JSON forms of options and results, for the JavaScript and Python bindings.
+json = ["dep:serde_json"]
+
+[dev-dependencies]
+oxilite = { path = "../oxilite", features = ["rusqlite", "datalog", "synalog"] }

@@ -54,6 +54,7 @@ from ._types import (
     CypherResult,
     DatalogMaterializeResult,
     DatalogResult,
+    SynalogResult,
     DocumentInput,
     Drift,
     PresentationKeys,
@@ -66,6 +67,7 @@ from ._types import (
     cypher_param,
     cypher_result,
     datalog_result,
+    synalog_result,
     property_shape_entry,
     schema_graph_entry,
     stored_document,
@@ -506,6 +508,54 @@ class Store:
         """How a program runs: its strata, the strategy per recursive component, the SQL."""
         return str(self._native.explain_datalog(program))
 
+    # ----------------------------------------------------------------------------- Synalog
+
+    def synalog(
+        self,
+        program: str,
+        predicate: str,
+        *,
+        use_default_graph_as_union: Optional[bool] = None,
+        include_inferred: Optional[bool] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        as_of: Optional[str] = None,
+        tables: Optional[Dict[str, str]] = None,
+        classes: Optional[Dict[str, str]] = None,
+    ) -> SynalogResult:
+        """Runs a Synalog program (the Datalog-family language for AI agents) over the store as
+        relational tables and returns the rows of ``predicate``.
+
+        The program reads ``triples(subject, predicate, object, kind, datatype, lang, graph)``
+        and the tables it declares with ``# @table NAME <IRI>`` / ``# @class NAME <IRI>``;
+        ``tables`` and ``classes`` declare more from code (name to predicate or class IRI)."""
+        return synalog_result(
+            json.loads(
+                self._native.synalog(
+                    program,
+                    predicate,
+                    _synalog_options(
+                        use_default_graph_as_union, include_inferred, limit, offset, as_of, tables, classes
+                    ),
+                )
+            )
+        )
+
+    def synalog_sql(
+        self,
+        program: str,
+        predicate: str,
+        *,
+        tables: Optional[Dict[str, str]] = None,
+        classes: Optional[Dict[str, str]] = None,
+    ) -> str:
+        """The SQL a Synalog predicate compiles to on this store, without running it."""
+        return str(
+            self._native.synalog_sql(
+                program, predicate, _synalog_options(None, None, None, None, None, tables, classes)
+            )
+        )
+
     # --------------------------------------------------------------------------- reasoning
 
     def materialize(self, engine: str = "sql") -> int:
@@ -881,3 +931,23 @@ class Credentials:
         """Credentials by issuer, subject, type, validity instant and profile (indexed)."""
         return [d for d in map(stored_document, self._call("find", _filter(issuer, subject, type, valid_at, profile, after, limit))) if d]
 
+
+def _synalog_options(
+    union: Optional[bool],
+    inferred: Optional[bool],
+    limit: Optional[int],
+    offset: Optional[int],
+    as_of: Optional[str],
+    tables: Optional[Dict[str, str]],
+    classes: Optional[Dict[str, str]],
+) -> Optional[str]:
+    declared: List[Dict[str, str]] = [{"name": n, "predicate": i} for n, i in (tables or {}).items()]
+    declared += [{"name": n, "class": i} for n, i in (classes or {}).items()]
+    return _options(
+        useDefaultGraphAsUnion=union,
+        includeInferred=inferred,
+        limit=limit,
+        offset=offset,
+        asOf=as_of,
+        tables=declared or None,
+    )

@@ -359,6 +359,33 @@ impl Db {
         Ok(sync_store!(self, s => s.purge(s_, p, o, g, reason), s => s.purge(s_, p, o, g, reason))?)
     }
 
+    /// Runs a Synalog program and returns one predicate's rows.
+    pub fn synalog(
+        &self,
+        program: &str,
+        predicate: &str,
+        options: &oxilite::synalog::Options,
+    ) -> Result<oxilite::synalog::SynalogResult> {
+        Ok(sync_store!(
+            self,
+            s => s.synalog_with(program, predicate, options),
+            s => s.synalog_with(program, predicate, options)
+        )?)
+    }
+
+    /// The SQL a Synalog predicate compiles to on this store.
+    pub fn synalog_sql(&self, program: &str, predicate: &str) -> Result<String> {
+        Ok(match self {
+            Db::Native(s) => s.synalog_sql(program, predicate)?,
+            Db::Library(s) => s.synalog_sql(program, predicate)?,
+            Db::Turso(s) => s.synalog_sql(program, predicate)?,
+            Db::D1(m) => m
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .synalog_sql(program, predicate)?,
+        })
+    }
+
     /// Runs a Datalog program and returns its solutions.
     pub fn datalog(&self, program: &str) -> Result<oxilite::datalog::DatalogResult> {
         Ok(match self {

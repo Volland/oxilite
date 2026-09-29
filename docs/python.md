@@ -30,6 +30,7 @@ Elsewhere, `pip` builds the package from the source distribution, which needs a 
 - [Explain](#explain)
 - [openCypher](#opencypher)
 - [Datalog](#datalog)
+- [Synalog](#synalog)
 - [Reasoning](#reasoning)
 - [Schema registry and system graphs](#schema-registry-and-system-graphs)
 - [JSON-LD documents](#json-ld-documents)
@@ -324,6 +325,36 @@ for record in store.datalog(program).records:
 
 An unsafe or unstratified program raises `ValueError`, and a syntax error raises `SyntaxError`.
 
+## Synalog
+
+```python
+result = store.synalog(program, predicate, *, use_default_graph_as_union=None, include_inferred=None,
+                       limit=None, offset=None, as_of=None, tables=None, classes=None)
+sql = store.synalog_sql(program, predicate, *, tables=None, classes=None)
+```
+
+[Synalog](https://github.com/SynaLinks/synalog), the Datalog-family language for AI agents, runs over
+the store as relational tables: `triples(subject, predicate, object, kind, datatype, lang, graph)`, plus
+the tables a program declares with `# @table NAME <IRI>` / `# @class NAME <IRI>` or that `tables=` /
+`classes=` declare (a dict from name to predicate or class IRI).
+
+- **Results.** `SynalogResult` has `columns` (the predicate's head), `rows` and `records`. Values are
+  plain Python values, not terms: ints and floats for numeric literals, strings for IRIs and other
+  literals, `_:label` for blank nodes, 1/0 for booleans.
+- **Not on the store.** `ArgMax=`, `@Ground` and `@Recursive` bounds above 20 raise
+  `NotImplementedError`; verifier errors raise `ValueError`.
+
+```python
+program = """
+# @table parent <http://example.org/parent>
+@Recursive(Ancestor, 10);
+Ancestor(x:, y:) distinct :- parent(subject: x, object: y);
+Ancestor(x:, y:) distinct :- Ancestor(x:, y: m), parent(subject: m, object: y);
+"""
+for record in store.synalog(program, "Ancestor", as_of="HEAD~1").records:
+    print(record["x"], record["y"])
+```
+
 ## Reasoning
 
 There are two ways to reason:
@@ -422,7 +453,7 @@ are not verified: check them on the stored JSON with a verifier library.
 store = Store("data.sqlite", versioning="log")   # an immutable change log
 with store.commit(author="ada", message="import"):
     store.load(path="people.ttl")
-store.query("SELECT …", as_of="HEAD~1")         # also Cypher and Datalog: as_of=…
+store.query("SELECT …", as_of="HEAD~1")         # also Cypher, Datalog and Synalog: as_of=…
 store.history(limit=20)                         # list[CommitRecord], newest first
 store.changes(after=0, until=None)              # list[Change(tick, added, quad)]
 store.diff("HEAD~1", "HEAD")                    # the net change between two versions

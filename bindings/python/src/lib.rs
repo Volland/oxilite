@@ -139,6 +139,16 @@ fn datalog_error(e: oxilite::datalog::DatalogError) -> PyErr {
     }
 }
 
+fn synalog_error(e: oxilite::synalog::SynalogError) -> PyErr {
+    use oxilite::synalog::SynalogError as E;
+    match e {
+        E::Store(e) => store_error(e),
+        E::Parse(_) | E::Pragma { .. } => PySyntaxError::new_err(e.to_string()),
+        E::Unsupported(_) => PyNotImplementedError::new_err(e.to_string()),
+        _ => PyValueError::new_err(e.to_string()),
+    }
+}
+
 fn jsonld_error(e: oxilite::jsonld::JsonLdError) -> PyErr {
     if let oxilite::jsonld::JsonLdError::Store(e) = e {
         return store_error(e);
@@ -875,6 +885,37 @@ impl NativeStore {
             .map_err(datalog_error)
     }
 
+    /// A Synalog program over the store as relational tables; `options` is JSON
+    /// (`oxilite_synalog::json`). Returns `{"kind": "synalog", "columns", "rows"}`.
+    #[pyo3(signature = (program, predicate, options=None))]
+    fn synalog(
+        &self,
+        py: Python<'_>,
+        program: &str,
+        predicate: &str,
+        options: Option<&str>,
+    ) -> PyResult<String> {
+        let opts = synalog_args(options)?;
+        let r = py
+            .detach(|| with_store!(self, s => s.synalog_with(program, predicate, &opts)))
+            .map_err(synalog_error)?;
+        Ok(oxilite::synalog::json::result_to_json(&r).to_string())
+    }
+
+    /// The SQL a Synalog predicate compiles to on this store.
+    #[pyo3(signature = (program, predicate, options=None))]
+    fn synalog_sql(
+        &self,
+        py: Python<'_>,
+        program: &str,
+        predicate: &str,
+        options: Option<&str>,
+    ) -> PyResult<String> {
+        let opts = synalog_args(options)?;
+        py.detach(|| with_store!(self, s => s.synalog_sql_with(program, predicate, &opts)))
+            .map_err(synalog_error)
+    }
+
     /// Computes the OWL 2 RL closure into the inference table, with SQL rules or (`reasonable`)
     /// in memory; returns the number of inferred triples.
     #[pyo3(signature = (reasonable=false))]
@@ -1111,6 +1152,11 @@ fn cypher_args(
 fn datalog_args(options: Option<&str>) -> PyResult<oxilite::datalog::Options> {
     let value: Value = options.map(parse).transpose()?.unwrap_or(Value::Null);
     oxilite::datalog::json::options_from_json(&value).map_err(datalog_error)
+}
+
+fn synalog_args(options: Option<&str>) -> PyResult<oxilite::synalog::Options> {
+    let value: Value = options.map(parse).transpose()?.unwrap_or(Value::Null);
+    oxilite::synalog::json::options_from_json(&value).map_err(synalog_error)
 }
 
 // ----------------------------------------------------------------------- module functions

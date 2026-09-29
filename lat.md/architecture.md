@@ -25,6 +25,7 @@ The workspace splits a pure, I/O-free core from thin backends and bindings, so t
 | `oxilite-validate` (M5) | rudof `srdf` trait implementation and D1 prefetch adapter |
 | `oxilite-cypher` (M7) | openCypher parser, validation, planning and lowering to SPARQL algebra, the Rust tail (writes, lists, temporal values), see [[architecture#Property graph frontend]] |
 | `oxilite-datalog` (M8) | Datalog parser, stratification and SQL generation, see [[architecture#Datalog frontend]] |
+| `oxilite-synalog` | Synalog, the Datalog-family language for agents, over the store as relational tables, see [[architecture#Synalog frontend]] |
 
 Upstream reuse: `oxrdf`, `oxrdfio`/`oxttl`, `spargebra`, `spareval`, `sparesults`, `oxsdatatypes` (Oxigraph 0.5 family, `rdf-12`/`sparql-12` on), rudof's `srdf`/`shacl_*`/`shex_*` (same Oxigraph family), and `reasonable` for OWL 2 RL.
 
@@ -564,6 +565,30 @@ A user rule is then visible to SPARQL and Cypher through the `include_inferred` 
 The dialect is available from Rust, the command line, WebAssembly and both JavaScript packages, everywhere behind an off-by-default feature.
 
 `oxilite datalog` runs a program, `--explain` prints the strata and strategies, `--materialize` stores the conclusions, and the program comes from `--program`, `--file` or standard input ([[architecture#Command line and HTTP endpoint]]). The WebAssembly core exports `datalog`, `datalog_materialize` and `explain_datalog` under a `datalog` feature that is off by default, so a Worker that does not use rules does not carry the ~0.2 MB ([[architecture#Bindings]]). `@oxilite/common` holds the shared types and the term conversion, so `@oxilite/node` and `@oxilite/d1` return the same shapes; the option names match the Cypher ones for the settings they share.
+
+## Synalog frontend
+
+Synalog, a Datalog-family language for AI agents, as an optional second rule dialect: its own parser, verifier and compiler, run over the store as relational tables. Crate `oxilite-synalog`, behind the `synalog` feature.
+
+[Synalog](https://github.com/SynaLinks/synalog) (a Rust rewrite of Logica, the `synalog` crate) has named arguments, expressions, head aggregation, functors, `@OrderBy`/`@Limit` and a verifier whose errors are written for a model. It is used unchanged, with default features off, so an upgrade is a version bump ([[decisions#D42 Synalog is a guest language, run over the store as tables]]). The crate offers it two ways: on its own, `check` and `compile_for_engine` produce SQL for any of Synalog's seven engines without a store; over the store, `compile` builds one SQLite statement and `Store::synalog` runs it on every backend, D1 included. It complements [[architecture#Datalog frontend]] rather than replacing it: results are SQL values, not RDF terms, so there is no materialization, and recursion is Synalog's — unrolled to its `@Recursive` bound with multiset semantics unless a rule says `distinct`. The CLI has `oxilite synalog PREDICATE` with `--sql` and `--engine` ([[crates/oxilite-cli/src/main.rs]]). `@oxilite/node`, `@oxilite/d1` and the Python package expose `synalog(program, predicate, options)` and `synalogSql` over the JSON forms of [[crates/oxilite-synalog/src/json.rs]]; in the WebAssembly core it is the opt-in `synalog` feature, because it adds about 2 MB, so the published D1 bundle does not carry it.
+
+### Store tables
+
+The store reads as `triples(subject, predicate, object, kind, datatype, lang, graph)` plus declared predicate and class tables, each a CTE over the quad table with terms decoded to native SQL values. See [[crates/oxilite-synalog/src/tables.rs#inject]].
+
+Synalog compares with SQL semantics, and SQLite orders every TEXT after every number, so `object` is a native value: inline integers decode from the id with no lookup, other numeric literals read `terms.num`, booleans are 1/0, blank nodes `_:label`, triple terms NULL, and IRIs and other literals their lexical form; `kind`, `datatype` and `lang` keep the RDF detail. `# @table NAME <IRI>` declares `NAME(subject, object, kind, datatype, lang, graph)` over one predicate and `# @class NAME <IRI>` declares `NAME(subject, graph)` over one class ([[crates/oxilite-synalog/src/tables.rs#pragmas]]); both select by the term id computed in Rust, so an index answers them, whereas a predicate string on `triples` decodes every quad first. The pragmas are Synalog comments, so the program stays valid Synalog. Only the tables a statement references are prepended, as `NOT MATERIALIZED` CTEs so SQLite pushes filters into them, over the quad source the options choose: `quads`, plus `quads_inf` under `include_inferred`, or the time-travel relation under `as_of`, with the default graph only unless `union_default_graph` — the same choices [[architecture#Datalog frontend]] makes.
+
+### Portable SQL
+
+Synalog's SQLite output assumes the Logica runtime registered helper functions, which D1 cannot do; the store rewrites those SQLite can express and rejects the rest before sending anything. See [[crates/oxilite-synalog/src/rewrite.rs#portable]].
+
+A scanner that skips string literals, quoted identifiers and comments finds the calls. `MagicalEntangle(a, b)` (negation's anti-hoisting trick) becomes `(a)`; `IN_LIST`, `JOIN_STRINGS`, `DistinctListAgg` and `SortList` become `JSON_EACH` subqueries and `JSON_GROUP_ARRAY`. `ArgMin`/`ArgMax`, file, solver and model calls, record assembly and BigQuery-only `ARRAY_AGG` are `Unsupported`, naming the construct. So is output that is more than one statement: `@Ground`, `@AttachDatabase` and any `@Recursive` bound above 20, which Synalog evaluates iteratively through tables it creates, since a read must not write. The statement is then checked against the backend's `max_sql_len` and `max_compound_select` ([[crates/oxilite-synalog/src/rewrite.rs#check_limits]]) — on D1 a predicate with six rules is a six-term `UNION ALL`, one more than D1 allows.
+
+### Execution
+
+A compiled predicate runs as a sans-IO job of one read request; its rows are already SQL values, returned with the predicate's head columns. See [[crates/oxilite-synalog/src/exec.rs#SynalogJob]].
+
+There is no term resolution step, unlike SPARQL, Cypher and Datalog, because decoding happened in SQL. The store resolves `as_of` to a tick before compiling, as for Datalog, and Synalog's compiler runs under `catch_unwind` so a panic on an agent's program becomes an error rather than an abort.
 
 ## JSON-LD documents
 

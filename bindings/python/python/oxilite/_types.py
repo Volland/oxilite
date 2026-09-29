@@ -163,6 +163,25 @@ def datalog_result(out: Dict[str, Any]) -> DatalogResult:
     return DatalogResult(columns, rows, [dict(zip(columns, row)) for row in rows], list(out["rounds"]))
 
 
+# --------------------------------------------------------------------------------- Synalog
+
+
+@dataclass(frozen=True)
+class SynalogResult:
+    """The rows of a Synalog predicate. Terms are decoded to plain values: numbers, strings
+    (IRIs, literals, ``_:label`` for blank nodes), 1/0 for booleans, None for NULL."""
+
+    columns: List[str]
+    rows: List[List[Any]]
+    records: List[Dict[str, Any]]
+
+
+def synalog_result(out: Dict[str, Any]) -> SynalogResult:
+    columns: List[str] = out["columns"]
+    rows: List[List[Any]] = [list(row) for row in out["rows"]]
+    return SynalogResult(columns, rows, [dict(zip(columns, row)) for row in rows])
+
+
 # ------------------------------------------------------------------ JSON-LD and credentials
 
 

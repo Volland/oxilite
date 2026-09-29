@@ -114,6 +114,15 @@ fn datalog_options(options: Option<String>) -> Result<oxilite_datalog::Options, 
     oxilite_datalog::json::options_from_json(&value).map_err(js)
 }
 
+#[cfg(feature = "synalog")]
+fn synalog_options(options: Option<String>) -> Result<oxilite_synalog::Options, JsError> {
+    let value = match options {
+        Some(o) => serde_json::from_str::<Value>(&o).map_err(js)?,
+        None => Value::Null,
+    };
+    oxilite_synalog::json::options_from_json(&value).map_err(js)
+}
+
 fn changes_to_json(changes: &[version::Change]) -> Value {
     Value::Array(
         changes
@@ -645,6 +654,54 @@ impl Engine {
             oxilite_datalog::prepare(&program, &caps, &o).map_err(|e| Error::Other(e.to_string()))
         });
         Ok(self.wrap(job, done))
+    }
+
+    #[cfg(feature = "synalog")]
+    /// A Synalog program over the store as relational tables (see `oxilite-synalog`): the rows
+    /// of `predicate`. `options` is JSON (`oxilite_synalog::json`). The result is
+    /// `{"kind": "synalog", "columns", "rows"}`, one request (two with `asOf`).
+    pub fn synalog(
+        &self,
+        program: &str,
+        predicate: &str,
+        options: Option<String>,
+    ) -> Result<Job, JsError> {
+        let options = synalog_options(options)?;
+        let done =
+            |r: oxilite_synalog::SynalogResult| Ok(oxilite_synalog::json::result_to_json(&r));
+        let Some(v) = options.as_of.clone() else {
+            let job =
+                oxilite_synalog::prepare(program, predicate, &self.caps(), &options).map_err(js)?;
+            return Ok(self.wrap(job, done));
+        };
+        // Resolve the version first, then compile against its tick.
+        let resolve =
+            version::resolve_job(vec![v.parse().map_err(js)?], self.stats.borrow().version);
+        let (program, predicate, caps) = (program.to_owned(), predicate.to_owned(), self.caps());
+        let job = oxilite_core::job::Then::new(resolve, move |ticks: Vec<i64>| {
+            let mut o = options;
+            o.as_of_tick = ticks.first().copied();
+            oxilite_synalog::prepare(&program, &predicate, &caps, &o)
+                .map_err(|e| Error::Other(e.to_string()))
+        });
+        Ok(self.wrap(job, done))
+    }
+
+    #[cfg(feature = "synalog")]
+    /// The SQL a Synalog predicate compiles to on this store, without running it.
+    pub fn synalog_sql(
+        &self,
+        program: &str,
+        predicate: &str,
+        options: Option<String>,
+    ) -> Result<String, JsError> {
+        let mut options = synalog_options(options)?;
+        options.as_of = None;
+        Ok(
+            oxilite_synalog::compile(program, predicate, &self.caps(), &options)
+                .map_err(js)?
+                .sql,
+        )
     }
 
     #[cfg(feature = "datalog")]

@@ -77,6 +77,19 @@ Nodes are IRIs, labels are `rdf:type`, properties are literal triples, and relat
 with an RDF 1.2 reifier when they carry properties. So SPARQL sees everything Cypher writes. A Datalog
 program whose recursion is linear runs as one recursive SQL statement.
 
+[Synalog](https://github.com/SynaLinks/synalog), the Datalog-family language for AI agents, runs over
+the same data, reading triples as tables:
+
+```python
+r = store.synalog("""
+# @table knows <http://example.com/KNOWS>
+@Recursive(Reach, 10);
+Reach(a:, b:) distinct :- knows(subject: a, object: b);
+Reach(a:, b:) distinct :- Reach(a:, b: m), knows(subject: m, object: b);
+""", "Reach")
+print(r.records)                          # [{'a': 'http://example.com/…', 'b': '…'}]
+```
+
 ## Reasoning, schemas, documents, history
 
 ```python
@@ -133,6 +146,7 @@ runs all of them against every build.
 | `load`, `bulk_load`, `dump` | Turtle, N-Triples, N-Quads, TriG, N3, RDF/XML, JSON-LD, from `str`, `bytes`, files or paths |
 | `add`, `extend`, `bulk_extend`, `remove`, `in`, `len`, iteration, `quads_for_pattern` | Quad-level access |
 | `named_graphs`, `add_graph`, `clear_graph`, `remove_graph`, `clear`, `optimize`, `backup` | Graphs and maintenance |
+| `synalog(program, predicate, …)`, `synalog_sql` | Synalog over the store as tables; rows of plain values |
 | `explain`, `explain_update`, `explain_cypher`, `explain_datalog` | The SQL each language compiles to |
 | `cypher(query, params, **options)` | openCypher read or write: `CypherResult(columns, rows, records, stats)` |
 | `datalog`, `datalog_materialize` | Recursive rules, stratified negation, aggregation |

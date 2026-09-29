@@ -11,6 +11,9 @@ import {
   type DatalogOptions,
   type DatalogOutput,
   type DatalogResult,
+  type SynalogOptions,
+  type SynalogOutput,
+  type SynalogResult,
   type CypherResult,
   type CypherValue,
   type CredentialOptions,
@@ -24,6 +27,7 @@ import {
   type TermJson,
   cypherResult,
   datalogResult,
+  synalogResult,
   documentText,
   filterJson,
   fromJson,
@@ -88,6 +92,9 @@ export interface WasmEngine {
   datalog?(program: string, options?: string | null): WasmJob;
   datalog_materialize?(program: string, options?: string | null): WasmJob;
   explain_datalog?(program: string, options?: string | null): string;
+  // Present only when the WebAssembly core was built with the `synalog` feature.
+  synalog?(program: string, predicate: string, options?: string | null): WasmJob;
+  synalog_sql?(program: string, predicate: string, options?: string | null): string;
   explainCypher(query: string, params?: string | null, options?: string | null): string;
   update(sparql: string, baseIri?: string | null): WasmJob;
   explainUpdate(sparql: string): string;
@@ -325,6 +332,33 @@ export class D1Store {
   /** How a Datalog program runs: its strata, the strategy per recursive component, the SQL. */
   explainDatalog(program: string, options: DatalogOptions = {}): string {
     return this.requireDatalog(this.engine.explain_datalog)(program, JSON.stringify(options));
+  }
+
+  /**
+   * A Synalog program (the Datalog-family language for AI agents) over the store as
+   * relational tables: `triples(subject, predicate, object, kind, datatype, lang, graph)` and
+   * the tables it declares with `# @table NAME <IRI>` / `# @class NAME <IRI>`. Returns the
+   * rows of `predicate` in one round trip (two with `asOf`).
+   */
+  async synalog(program: string, predicate: string, options: SynalogOptions = {}): Promise<SynalogResult> {
+    const synalog = this.requireSynalog(this.engine.synalog);
+    const out = (await this.run(synalog(program, predicate, JSON.stringify(options)))) as unknown as SynalogOutput;
+    return synalogResult(out);
+  }
+
+  /** The SQL a Synalog predicate compiles to on this store, without running it. */
+  synalogSql(program: string, predicate: string, options: SynalogOptions = {}): string {
+    return this.requireSynalog(this.engine.synalog_sql)(program, predicate, JSON.stringify(options));
+  }
+
+  /** Synalog is an opt-in feature of the WebAssembly core, like Datalog. */
+  private requireSynalog<T>(method: T | undefined): T {
+    if (method === undefined) {
+      throw new Error(
+        "this build of the oxilite WebAssembly core has no Synalog frontend; rebuild it with the `synalog` feature",
+      );
+    }
+    return (method as unknown as { bind(t: unknown): T }).bind(this.engine);
   }
 
   /**

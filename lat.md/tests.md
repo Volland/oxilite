@@ -180,6 +180,10 @@ RDFS subclass chains, an OWL transitive property and SQL-rule materialization (o
 
 On Miniflare D1 the registry's portable SPARQL registers, maps, lists, deactivates and drops schema graphs; a mapping narrows entailments and hiding excludes the registered graphs.
 
+### Synalog runs on D1
+
+On a WebAssembly core built with the `synalog` feature, `D1Store.synalog` runs recursion, negation and a numeric comparison over declared tables and `triples` against Miniflare's D1, and pages the result; on the default core the test is skipped.
+
 ## Reasoning
 
 Query-time RDFS / OWL QL rewriting and OWL 2 RL materialization, each test run on the bundled SQLite and on the system `libsqlite3`, see [[architecture#Reasoning]].
@@ -512,6 +516,10 @@ The Node store registers ontology and shapes graphs by term or IRI, scopes RDFS 
 
 `new Store({ systemGraphs: true })` starts with the vocabulary graph while a default store stays empty, and `installSystemGraphs()` adds it to an existing store once.
 
+### Synalog runs over the store
+
+`store.synalog` runs a recursive program over a declared table, decodes integer literals to JavaScript numbers in `records`, takes tables and pagination from the options, and throws on `ArgMax`.
+
 ## Python
 
 `oxilite` for Python over the PyO3 module, next to the verbatim port of pyoxigraph's tests, see [[architecture#Bindings#Python]]. The port's failures must match `py:` entries of `testsuite/allowlist.toml`.
@@ -583,6 +591,10 @@ A store opened with `library=` (the system SQLite) reads and writes a file that 
 ### Examples and README run as written
 
 Every script in `examples/python/` and the tutorial's `tour.py` exits 0 (each asserts its own output), and the package README's code blocks run in order, so the docs PyPI shows cannot drift from the API.
+
+### Synalog runs over the store
+
+`Store.synalog` returns recursive rows over a declared table, integers as Python ints, tables and pagination from keyword arguments, and raises `NotImplementedError` on `ArgMax`.
 
 ## Cypher
 
@@ -1408,3 +1420,82 @@ The expression form binds a value, the atom forms filter and bind, host-derived 
 
 A rule that calls a host function and depends on its own head is refused as recursive, and an unregistered function IRI is an error naming it.
 
+## Synalog
+
+Synalog over the store: the relational tables, the scope options, recursion and negation, portability and rejection, see [[architecture#Synalog frontend]].
+
+### Rule over triples
+
+A rule reading `triples` with a fixed `predicate` string returns the matching subjects and objects as IRIs, with the predicate's head columns in order.
+
+### Numbers compare as numbers
+
+Integer literals decode to SQL integers, so `age > 18` selects on value and a `+=` aggregate sums to an integer rather than concatenating or comparing text.
+
+### Literal details are kept
+
+A language-tagged string reads with `kind` `literal`, `rdf:langString` and its tag, an integer with `xsd:integer`, and a blank node as `_:label` with `kind` `blank` and no datatype.
+
+### Predicate table selects by term id
+
+A `# @table` pragma gives the same rows as filtering `triples`, and its SQL compares the predicate column with the term id instead of injecting `triples`.
+
+### Class table
+
+A `# @class` pragma yields exactly the instances of that class.
+
+### Named graphs need the union option
+
+A triple only in a named graph is invisible by default and appears under `union_default_graph`, with the graph IRI in `graph` and NULL for default-graph rows.
+
+### Inferences are opt-in
+
+Conclusions materialized by a Datalog rule are read only under `include_inferred`.
+
+### Time travel
+
+`as_of` `HEAD~1` on a log-versioned store reads the state before the last commit, and combining it with `include_inferred` is rejected.
+
+### Recursion agrees with a property path
+
+A `distinct` ancestor predicate with a sufficient `@Recursive` bound returns exactly what the SPARQL property path `ex:parent+` returns over the same data.
+
+### Negation needs no runtime function
+
+A rule negating a table returns the right rows, and its SQL no longer calls `MagicalEntangle`, so it runs where functions cannot be registered.
+
+### Runtime-only functions are rejected
+
+`ArgMax=`, which needs a Logica runtime aggregate, fails before running with an unsupported error naming it.
+
+### Ground is rejected
+
+`@Ground` compiles to statements that create tables, so the program is rejected as unsupported rather than allowed to write.
+
+### Verifier errors are reported
+
+Recursion without `@Recursive` fails `check` and a run with Synalog's verification errors naming the predicate; an undefined predicate to run is reported with the defined ones.
+
+### Compile for another engine
+
+`compile_for_engine` returns Synalog's SQL for DuckDB with the requested limit, needing no store, and refuses an engine Synalog does not support.
+
+### Pagination
+
+`limit` and `offset` over an `@OrderBy` predicate return exactly the requested row.
+
+### D1 limits are checked before sending
+
+Against `Capabilities::d1()`, a small recursion compiles within the length limit, a bound above 20 is rejected as iterative, and a six-rule predicate is rejected for D1's five-term compound SELECT.
+
+### Scanner ignores literals
+
+Function names inside string literals, quoted identifiers and comments are neither rewritten nor rejected, and identifiers are split on word boundaries.
+
+### Runtime helpers are rewritten
+
+Nested `MagicalEntangle`, `IN_LIST`, `DistinctListAgg` and `SortList` calls are replaced by plain SQLite, arguments containing parentheses in strings included.
+
+### Run from the command line
+
+`oxilite synalog PREDICATE` prints the head columns then tab-separated rows, `--sql` prints the store SQL, `--engine` compiles without a store, and an undefined predicate fails.
