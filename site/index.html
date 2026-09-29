@@ -42,6 +42,11 @@
               <a href="ns/">Vocabulary<small>The oxl: namespace</small></a>
               <a href="articles/">All articles<small>Guides and design notes</small></a>
             </div>
+            <div class="nav-extra">
+              <span class="nav-label">Project</span>
+              <a href="#start">Get started<small>Install and run a first query</small></a>
+              <a href="https://github.com/Volland/oxilite">GitHub<small>Source, issues and releases</small></a>
+            </div>
           </div>
         </details>
         <a href="articles/">Articles</a>
@@ -493,18 +498,28 @@ code --install-extension pavlyshyn.oxilite-studio
 
   <script>
     (function () {
-      // The Features menu closes on a pick, on Escape and on a click elsewhere.
+      // The Features menu closes on a pick, on Escape and on a tap elsewhere.
+      // pointerdown, not click: iOS Safari sends no click to the document for
+      // taps on plain content. While open, the page behind it does not scroll.
       var menu = document.querySelector('.nav-menu');
       if (menu) {
-        menu.addEventListener('click', function (e) {
-          if (e.target.closest('.nav-panel a')) menu.open = false;
+        var root = document.documentElement;
+        var close = function () {
+          menu.open = false;
+          root.classList.remove('menu-open');
+        };
+        menu.addEventListener('toggle', function () {
+          root.classList.toggle('menu-open', menu.open);
         });
-        document.addEventListener('click', function (e) {
-          if (menu.open && !menu.contains(e.target)) menu.open = false;
+        menu.addEventListener('click', function (e) {
+          if (e.target.closest('.nav-panel a')) close();
+        });
+        document.addEventListener('pointerdown', function (e) {
+          if (menu.open && !menu.contains(e.target)) close();
         });
         document.addEventListener('keydown', function (e) {
           if (e.key === 'Escape' && menu.open) {
-            menu.open = false;
+            close();
             menu.querySelector('summary').focus();
           }
         });
