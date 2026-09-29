@@ -11,7 +11,7 @@
 
 **[oxilitedb.com](https://oxilitedb.com)** · [crates.io](https://crates.io/crates/oxilite) · [docs.rs](https://docs.rs/oxilite) · [npm](https://www.npmjs.com/package/@oxilite/node)
 
-> **Status: version 0.8, milestones M1–M8 and M9 phase 1 done.** Full SPARQL 1.1 query and update compiled to SQL, on bundled SQLite, your own `libsqlite3`, [Turso](#vector-search-on-turso) and [Cloudflare D1](#using-oxilite-with-cloudflare-d1); RDFS / OWL reasoning; SHACL / ShEx validation; [openCypher](#cypher-and-property-graphs) and [Datalog](#datalog-your-own-recursive-rules) over the same data; [JSON-LD and Verifiable Credentials](#json-ld-and-verifiable-credentials); a [schema registry](#reasoning-and-validation) stored as RDF; [versioning and time travel](#versioning-history-and-time-travel); [vector search and host functions](#vector-search-on-turso); bindings for [Node.js, Workers](#nodejs-typescript) and [Python](#python); and [oxilite studio](#oxilite-studio), a VS Code workbench. Next: branches and merge, then push/pull between stores. See [Roadmap](#roadmap).
+> **Status: version 0.9, milestones M1–M8 and M9 phase 1 done.** Full SPARQL 1.1 query and update compiled to SQL, on bundled SQLite, your own `libsqlite3`, [Turso](#vector-search-on-turso) and [Cloudflare D1](#using-oxilite-with-cloudflare-d1); RDFS / OWL reasoning; SHACL / ShEx validation; [openCypher](#cypher-and-property-graphs), [Datalog](#datalog-your-own-recursive-rules) and [Synalog](https://oxilitedb.com/articles/synalog-agents) over the same data; [JSON-LD and Verifiable Credentials](#json-ld-and-verifiable-credentials); a [schema registry](#reasoning-and-validation) stored as RDF; [versioning and time travel](#versioning-history-and-time-travel); [vector search and host functions](#vector-search-on-turso); bindings for [Node.js, Workers](#nodejs-typescript) and [Python](#python); and [oxilite studio](#oxilite-studio), a VS Code workbench. Next: branches and merge, then push/pull between stores. See [Roadmap](#roadmap).
 
 ---
 
@@ -191,7 +191,7 @@ Every package has its own README with installation, examples and its API:
 
 ```toml
 [dependencies]
-oxilite = "0.8"          # bundled SQLite via rusqlite
+oxilite = "0.9"          # bundled SQLite via rusqlite
 ```
 
 ```rust
@@ -403,7 +403,7 @@ A complete endpoint with its `wrangler.toml`, migration and a Miniflare end-to-e
 use oxilite::{d1::D1Backend, AsyncStore};
 use worker::*;
 
-// oxilite = { version = "0.8", default-features = false, features = ["d1"] }
+// oxilite = { version = "0.9", default-features = false, features = ["d1"] }
 #[event(fetch)]
 async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let store = AsyncStore::open_existing(D1Backend::new(env.d1("DB")?)).await.map_err(|e| e.to_string())?;

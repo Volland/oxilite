@@ -34,7 +34,7 @@ assert_eq!(r.rows.len(), 2);   // ada → bob, ada → cy
 # Result::<_, Box<dyn std::error::Error>>::Ok(())
 ```
 
-Enable it with `oxilite = { version = "0.8", features = ["synalog"] }`.
+Enable it with `oxilite = { version = "0.9", features = ["synalog"] }`.
 
 ## The store as tables
 
