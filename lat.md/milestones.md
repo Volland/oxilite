@@ -68,6 +68,14 @@ Done when pyoxigraph's own tests pass against the package (except allow-listed d
 
 Status: done. pyoxigraph's `test_store.py`, `test_model.py` and `test_io.py` run verbatim with three allow-listed divergences ([[decisions#D37 Python bindings mirror pyoxigraph over the JSON bridge]]); oxilite's Python suite covers every extension ([[tests#Python]]); `mypy --strict` passes; `python-wheels.yml` builds abi3 wheels and publishes with trusted publishing on release tags. Publishing to PyPI needs the one-time trusted-publisher setup of `docs/python-publishing.md`.
 
+## JVM bindings
+
+`com.oxilitedb:oxilite-jvm`, a JNI binding usable directly from Java, Kotlin, Scala and Clojure. Change: `jvm-bindings`; depends on the stores of M1–M9 and the JSON forms of the TypeScript bindings.
+
+Done when the Java store, Cypher, Datalog, JSON-LD and versioning each have a passing JUnit test against the native library, and the README shows a working snippet for all four JVM languages.
+
+Status: in progress. `bindings/jvm` builds a `cdylib` (the `jni` crate) exposing the full store surface ([[architecture#Bindings#JVM (Java/Kotlin/Scala/Clojure)]]); JUnit tests cover the core store, Cypher, Datalog, versioning, JSON-LD and OWL 2 RL materialization ([[tests#JVM bindings]]); packaging bundles one platform (`darwin-aarch64`) so far, with the schema registry, a Maven Central release, and a full platform matrix left as follow-up.
+
 ## JSON-LD and Verifiable Credentials
 
 Store JSON-LD documents verbatim in a keyed table and their RDF in a named graph per document (by default the credential `id`), queryable with SPARQL. Change: `jsonld-vc-storage`.

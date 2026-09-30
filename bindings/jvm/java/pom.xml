@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.oxilitedb</groupId>
+  <artifactId>oxilite-jvm</artifactId>
+  <version>0.9.1</version>
+  <packaging>jar</packaging>
+
+  <name>oxilite</name>
+  <description>
+    JVM bindings for oxilite: an Oxigraph-compatible SPARQL store on SQLite, usable from Java,
+    Kotlin, Scala and Clojure.
+  </description>
+  <url>https://oxilitedb.com</url>
+
+  <licenses>
+    <license>
+      <name>MIT</name>
+      <url>https://github.com/Volland/oxilite/blob/main/LICENSE-MIT</url>
+    </license>
+    <license>
+      <name>Apache-2.0</name>
+      <url>https://github.com/Volland/oxilite/blob/main/LICENSE-APACHE</url>
+    </license>
+  </licenses>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.release>11</maven.compiler.release>
+    <jackson.version>2.17.0</jackson.version>
+    <junit.version>5.10.2</junit.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>${jackson.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.jetbrains</groupId>
+      <artifactId>annotations</artifactId>
+      <version>24.1.0</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>${junit.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.2.5</version>
+      </plugin>
+    </plugins>
+  </build>
+</project>

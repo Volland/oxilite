@@ -694,7 +694,7 @@ Calls are expressions (`?s = fn:slugify(?n)` binds an unbound `?s`; `fn:score(?x
 
 ## Bindings
 
-A Node.js package and a Cloudflare D1 package, both typed TypeScript, and a typed Python package, all over the same core and the same JSON forms.
+A Node.js package and a Cloudflare D1 package, both typed TypeScript, a typed Python package, and a JVM package usable from Java, Kotlin, Scala and Clojure, all over the same core and the same JSON forms.
 
 `@oxilite/node` (napi-rs) wraps `blocking::Store` on rusqlite or a dlopen'ed library: `query`, `update`, `load`, `dump`, `add`/`delete`, `has`, `match`, `size`, `explain`, `optimize`, `backup`, returning RDF/JS-style term objects. `@oxilite/d1` runs the wasm core against a `D1Database` binding and exposes the same API asynchronously.
 
@@ -742,6 +742,22 @@ Packaging:
 - `.github/workflows/python-wheels.yml` builds manylinux x86_64 and aarch64, musllinux x86_64, macOS x86_64 and arm64, Windows x64 and an sdist, smoke-tests the native ones, and publishes with PyPI trusted publishing on `v*` tags. `docs/python-publishing.md` is the guide.
 
 pyoxigraph's `test_store.py`, `test_model.py` and `test_io.py` run verbatim (only the import changed) in `bindings/python/tests/`. Their three failures are `py:` entries of `testsuite/allowlist.toml` (custom functions, custom aggregates, remote `LOAD`), which `conftest.py` turns into strict xfails. The CI job `python` runs them, oxilite's own Python tests and `mypy --strict`; `tests/test_examples.py` also runs the focused scripts in `examples/python/`, the tutorial script `examples/python-tour/tour.py` and the README's code blocks. `docs/python.md` is the reference.
+
+### JVM (Java/Kotlin/Scala/Clojure)
+
+`com.oxilitedb:oxilite-jvm`: a JNI binding over `blocking::Store`, wrapped by a Java `Store` class that Java, Kotlin, Scala and Clojure all call through ordinary interop; see [[decisions#D43 JVM bindings reuse the JSON bridge over JNI, one artifact for every JVM language]].
+
+`bindings/jvm` is the workspace crate `oxilite-jvm` (a cdylib, not published to crates.io) built with the `jni` crate, [[bindings/jvm/src/lib.rs]]. It has no `#[napi]`-style macro layer: every `Java_com_oxilitedb_oxilite_NativeStore_*` function is a plain `extern "system" fn` that converts its `JString` arguments, runs the equivalent of `@oxilite/node`'s method body inside `std::panic::catch_unwind` (a panic must never unwind across the JNI boundary), and either returns a JSON string/primitive or throws through [[bindings/jvm/src/error.rs]]. The module is split by feature area matching Node's: `store.rs` (construction, SPARQL, RDF I/O, quad CRUD, OWL 2 RL materialization), `cypher.rs`, `datalog.rs`, `synalog.rs`, `jsonld.rs` (ported from Node's `document_op`/`jsonld_op` almost unchanged, since both bindings use the same `oxilite_core::json` and crate `json` modules), `schema.rs` and `versioning.rs`. A store handle is a boxed `handle::Backend` (the same `Native`/`Library` enum as Node and Python), addressed by the Java object's `long handle` field, since JNI cannot hold a Rust struct in a Java field directly.
+
+Errors map to a Java exception hierarchy under `com.oxilitedb.oxilite.exceptions`: `OxiliteException` (unchecked base) with `OxiliteSyntaxException`, `OxiliteParseException`, `OxiliteBackendException`, `OxiliteIOException`, `JsonLdException` (carries the JSON-LD error `code`, thrown via a real two-argument constructor rather than encoding the code into the message text as Node's string-only `napi::Error` does), and the JDK's own `UnsupportedOperationException` — the same variant table as Python's `store_error`, adapted to Java's exception model.
+
+`bindings/jvm/java/` is the Maven project (`com.oxilitedb:oxilite-jvm`), Java 11 bytecode:
+- `NativeStore` is the raw native-method surface (static methods taking `long handle` explicitly), matching `@oxilite/node`'s native class method-for-method.
+- `NativeLoader` extracts the native library bundled under `src/main/resources/native/<os>-<arch>/` in the jar to a temp file and `System.load()`s it, the same approach as `sqlite-jdbc`/`grpc-netty`; `scripts/build-native.sh` builds the cdylib and places it there for the host platform.
+- `com.oxilitedb.oxilite.model` (`NamedNode`, `BlankNode`, `Literal`, `TripleTerm`, `Quad`, and the `Rdf` converter) are immutable classes for the RDF/JS-shaped JSON of [[crates/oxilite-core/src/json.rs]], so callers see typed terms and quads rather than raw JSON at the `Store` layer.
+- `Store` wraps `NativeStore`: RDF I/O and quad CRUD are typed (`Term`/`Quad`/`GraphName` in, `List<Quad>` out); query, Cypher, Datalog, Synalog, JSON-LD, schema and versioning results are Jackson `JsonNode`s built from the same JSON the other bindings return, rather than one hand-written POJO per result shape (Python's `_types.py` dataclasses do build one per shape; the JVM binding trades that for less code, per D43).
+
+Packaging bundles one platform per jar build; this first release ships `darwin-aarch64` only, the same starting point `@oxilite/node` had before its own platform matrix grew. The CI job `jvm` builds the native library and runs the JUnit suite on Linux; a Maven Central release and a multi-platform build matrix (mirroring `python-wheels.yml`'s OS/arch matrix) are follow-up work, as is the schema registry's JUnit coverage (the methods exist and compile; Cypher, Datalog, JSON-LD, versioning and OWL 2 RL materialization are exercised, see [[tests#JVM bindings]]).
 
 ## Project website
 

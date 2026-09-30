@@ -122,6 +122,23 @@ jobs:
           python -m pytest            # includes examples/python, the tutorial tour and the README blocks
           mypy --strict python/oxilite
 
+  # The JVM package: builds the JNI native library for the host platform, then runs the Java
+  # test suite (JUnit) against it. Java, Kotlin, Scala and Clojure share this one artifact.
+  jvm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - run: sudo apt-get update && sudo apt-get install -y libsqlite3-0
+      - working-directory: bindings/jvm
+        run: |
+          ./scripts/build-native.sh
+          cd java && mvn -B test
+
   lat:
     runs-on: ubuntu-latest
     steps:
