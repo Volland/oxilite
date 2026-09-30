@@ -34,6 +34,12 @@ Seeded generated datasets and templated query families run on both engines over 
 
 Datasets cover every literal kind (inline and hashed integers, decimals, doubles, dates, booleans, language and directional strings), blank nodes, several named graphs, triples duplicated across graphs, deep class hierarchies and cycles. Query families grow per milestone (M1 BGP shapes × filters × dataset clauses × modifiers; M2 OPTIONAL/UNION/MINUS/aggregates/paths/subqueries; M3 updates, comparing resulting datasets). Every query runs with statistics absent and present, and with the oxilite planner and SQLite planning, since plans must never change results. A mismatch report includes the query, the data seed, both results and oxilite's `explain()` SQL.
 
+### Real-world dataset snapshots
+
+Fixed snapshots of real published RDF from four independent publishers, so parser and store reliability is checked against actual data, not only synthetic fixtures or W3C conformance micro-fixtures.
+
+`testsuite/real-world-data/` vendors FOAF, SKOS, DOAP, DCAT and PROV-O (as published, RDF/XML and Turtle) and one Wikidata and one DBpedia entity (Turtle and JSON-LD), with provenance and licenses in that directory's `README.md`. They are vendored rather than fetched at test time, matching how `rdf-tests` and `oxigraph-tests` are vendored, so the suite stays hermetic and reproducible. See [[tests#Oxigraph compatibility#Real-world datasets round-trip through oxilite]] and [[tests#Oxigraph compatibility#Real-world datasets answer generic queries like Oxigraph]].
+
 ### Allow-list and report
 
 Accepted divergences live in `testsuite/allowlist.toml`, each with a reason and a link to a decision; unlisted divergences fail, and stale entries are reported.
