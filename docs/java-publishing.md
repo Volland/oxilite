@@ -124,28 +124,26 @@ done on your behalf; each step below is something you run yourself.
 3. **Generate a User Token.** In the Central Portal, go to *your account → Generate User Token*.
    This gives you a username and a password-like token — treat it like a password; it is what
    Maven authenticates with, not your login password.
-4. **Generate a GPG key**, on your own machine (never share the private key, including with an
-   AI assistant):
+4. **Generate a GPG key and publish it**, on your own machine (never share the private key,
+   including with an AI assistant — this step has to be run by you, interactively, so the
+   passphrase is never typed anywhere else):
 
    ```bash
-   gpg --full-generate-key       # RSA and RSA, 4096 bits, key does not expire (or a long expiry)
-   gpg --list-secret-keys --keyid-format=long   # note the key id after "sec   rsa4096/"
+   bindings/jvm/scripts/generate-signing-key.sh
    ```
 
-5. **Publish the public key** to a keyserver Central checks against:
+   It asks for a name and email (published to public keyservers permanently), runs
+   `gpg --full-generate-key` (recommended: RSA and RSA, 4096 bits, no expiry or a long one),
+   and publishes the public key to `keyserver.ubuntu.com` and `keys.openpgp.org`. It prints the
+   key id and the exact commands for the next two steps when it's done.
 
-   ```bash
-   gpg --keyserver keyserver.ubuntu.com --send-keys <KEY_ID>
-   gpg --keyserver keys.openpgp.org --send-keys <KEY_ID>
-   ```
-
-6. **Export the private key** for GitHub Actions to import at build time:
+5. **Export the private key** for GitHub Actions to import at build time:
 
    ```bash
    gpg --armor --export-secret-keys <KEY_ID> > oxilite-signing-key.asc
    ```
 
-7. **Create the `maven-central` GitHub environment and its secrets.** In the repository, go to
+6. **Create the `maven-central` GitHub environment and its secrets.** In the repository, go to
    *Settings → Environments → New environment*, name it `maven-central`. Under *Deployment
    branches and tags*, restrict it to the tag pattern `v*` and branch `main`, and consider adding
    yourself as a required reviewer (each publish then waits for your approval in the Actions
@@ -156,7 +154,7 @@ done on your behalf; each step below is something you run yourself.
    |---|---|
    | `MAVEN_CENTRAL_USERNAME` | The username half of the User Token from step 3 |
    | `MAVEN_CENTRAL_PASSWORD` | The token/password half of the User Token from step 3 |
-   | `GPG_PRIVATE_KEY` | The full contents of `oxilite-signing-key.asc` from step 6 |
+   | `GPG_PRIVATE_KEY` | The full contents of `oxilite-signing-key.asc` from step 5 |
    | `GPG_PASSPHRASE` | The passphrase you set in step 4 |
 
    ```bash
@@ -166,7 +164,7 @@ done on your behalf; each step below is something you run yourself.
    gh secret set GPG_PASSPHRASE --env maven-central
    ```
 
-8. **Delete the local export** once the secret is set: `shred -u oxilite-signing-key.asc` (or
+7. **Delete the local export** once the secret is set: `shred -u oxilite-signing-key.asc` (or
    just `rm` if `shred` is unavailable).
 
 After this, `bindings/jvm/java/pom.xml`'s `release` profile and `java-release.yml` have
