@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/oxilite-core", "crates/oxilite-rusqlite", "crates/oxilite-dylib", "crates/oxilite", "testsuite", "crates/oxilite-wasm", "crates/oxilite-d1", "bindings/node", "bindings/python", "crates/oxilite-turso", "crates/oxilite-reason", "crates/oxilite-validate", "crates/oxilite-cypher", "crates/oxilite-datalog", "crates/oxilite-synalog", "crates/oxilite-cli", "bench", "crates/oxilite-jsonld", "crates/oxilite-vc"]
+members = ["crates/oxilite-core", "crates/oxilite-rusqlite", "crates/oxilite-dylib", "crates/oxilite", "testsuite", "crates/oxilite-wasm", "crates/oxilite-d1", "bindings/node", "bindings/python", "bindings/jvm", "crates/oxilite-turso", "crates/oxilite-reason", "crates/oxilite-validate", "crates/oxilite-cypher", "crates/oxilite-datalog", "crates/oxilite-synalog", "crates/oxilite-cli", "bench", "crates/oxilite-jsonld", "crates/oxilite-vc"]
 
 [workspace.package]
 version = "0.9.1"
@@ -25,6 +25,7 @@ thiserror = "2"
 oxiri = "0.2"
 rusqlite = { version = "0.40", features = ["bundled", "functions"] }
 libloading = "0.8"
+jni = "0.21"
 regex = "1"
 md-5 = "0.10"
 sha1 = "0.10"

@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.oxilitedb</groupId>
+  <artifactId>oxilite-jvm</artifactId>
+  <version>0.9.1</version>
+  <packaging>jar</packaging>
+
+  <name>oxilite</name>
+  <description>
+    JVM bindings for oxilite: an Oxigraph-compatible SPARQL store on SQLite, usable from Java,
+    Kotlin, Scala and Clojure.
+  </description>
+  <url>https://oxilitedb.com</url>
+
+  <licenses>
+    <license>
+      <name>MIT</name>
+      <url>https://github.com/Volland/oxilite/blob/main/LICENSE-MIT</url>
+    </license>
+    <license>
+      <name>Apache-2.0</name>
+      <url>https://github.com/Volland/oxilite/blob/main/LICENSE-APACHE</url>
+    </license>
+  </licenses>
+
+  <developers>
+    <developer>
+      <name>Volodymyr Pavlyshyn</name>
+      <url>https://github.com/Volland</url>
+    </developer>
+  </developers>
+
+  <scm>
+    <connection>scm:git:https://github.com/Volland/oxilite.git</connection>
+    <developerConnection>scm:git:git@github.com:Volland/oxilite.git</developerConnection>
+    <url>https://github.com/Volland/oxilite</url>
+    <tag>HEAD</tag>
+  </scm>
+
+  <issueManagement>
+    <system>GitHub</system>
+    <url>https://github.com/Volland/oxilite/issues</url>
+  </issueManagement>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.release>11</maven.compiler.release>
+    <jackson.version>2.17.0</jackson.version>
+    <junit.version>5.10.2</junit.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>${jackson.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.jetbrains</groupId>
+      <artifactId>annotations</artifactId>
+      <version>24.1.0</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>${junit.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.2.5</version>
+      </plugin>
+    </plugins>
+  </build>
+
+  <!--
+    Activated only for a Maven Central release (mvn -P release deploy), so a plain `mvn test`
+    build never needs a GPG key. See docs/java-publishing.md for the one-time account and key
+    setup this profile assumes.
+  -->
+  <profiles>
+    <profile>
+      <id>release</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-source-plugin</artifactId>
+            <version>3.3.1</version>
+            <configuration>
+              <!-- Otherwise this jar would also bundle the (large, binary, platform-specific)
+                   native library from src/main/resources; a sources jar should hold only the
+                   Java sources. -->
+              <excludeResources>true</excludeResources>
+            </configuration>
+            <executions>
+              <execution>
+                <id>attach-sources</id>
+                <goals>
+                  <goal>jar-no-fork</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-javadoc-plugin</artifactId>
+            <version>3.6.3</version>
+            <executions>
+              <execution>
+                <id>attach-javadocs</id>
+                <goals>
+                  <goal>jar</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-gpg-plugin</artifactId>
+            <version>3.2.4</version>
+            <executions>
+              <execution>
+                <id>sign-artifacts</id>
+                <phase>verify</phase>
+                <goals>
+                  <goal>sign</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+          <!--
+            Sonatype's Central Portal plugin: uploads a signed "deployment" bundle. autoPublish
+            is false on purpose — a Central release cannot be deleted or overwritten once public,
+            so CI stages the deployment and a human clicks Publish at
+            https://central.sonatype.com/publishing/deployments after checking it. Flip it to
+            true only once you trust the pipeline end to end.
+          -->
+          <plugin>
+            <groupId>org.sonatype.central</groupId>
+            <artifactId>central-publishing-maven-plugin</artifactId>
+            <version>0.6.0</version>
+            <extensions>true</extensions>
+            <configuration>
+              <publishingServerId>central</publishingServerId>
+              <autoPublish>false</autoPublish>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+</project>

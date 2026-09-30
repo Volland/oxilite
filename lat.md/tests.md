@@ -610,6 +610,34 @@ Every script in `examples/python/` and the tutorial's `tour.py` exits 0 (each as
 
 `Store.synalog` returns recursive rows over a declared table, integers as Python ints, tables and pagination from keyword arguments, and raises `NotImplementedError` on `ArgMax`.
 
+## JVM bindings
+
+`oxilite-jvm` (JNI) over the same `blocking::Store` and JSON wire format as Node and Python, exercised with JUnit, see [[architecture#Bindings#JVM (Java/Kotlin/Scala/Clojure)]].
+
+### Core store round-trips through the native layer
+
+Inserting, querying, matching and removing quads through `Store` returns the same data, a malformed SPARQL query raises `OxiliteSyntaxException`, and `update`/`clear` leave the store empty afterwards.
+
+### Cypher writes and reads through the native layer
+
+`cypher` creates a node SPARQL can then see, `MATCH` reads data inserted with SPARQL, `explainCypher` returns SQL, and an undefined variable raises an exception.
+
+### Datalog evaluates recursive rules
+
+A non-recursive rule returns typed terms keyed by column, and a linearly recursive ancestor rule returns the full transitive closure.
+
+### Versioning records commits and time travels
+
+A `log` store's commit carries the given author and message, a later `asOf` query sees the value as of that commit, and `history` lists the commit by message.
+
+### JSON-LD documents round-trip through the native layer
+
+A document `put` under its `@id` is queryable with SPARQL over its own graph, `get` returns it verbatim, and `remove` reports whether a document was found.
+
+### Reasons per query and materializes OWL 2 RL
+
+`reasoning="rdfs"` entails a subclass membership per query without changing the store, both materialization engines (SQL and `reasonable`) infer the same fact visible only with `include_inferred`, and `clearInferences` removes it.
+
 ## Cypher
 
 openCypher over the RDF store ([[architecture#Property graph frontend]]). Unless noted, each test runs on the bundled SQLite, the system `libsqlite3` (dylib), a D1-capability async store, and Miniflare D1 when `OXILITE_D1_URL` points at `testsuite/d1-sidecar`.

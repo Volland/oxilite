@@ -22,3 +22,5 @@ bench/bsbm-tools/td_data/
 /bindings/python/python/oxilite/*.pyd
 __pycache__/
 /.venv/
+/bindings/jvm/java/target/
+/bindings/jvm/java/src/main/resources/native/
