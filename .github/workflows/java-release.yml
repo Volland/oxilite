@@ -1,0 +1,83 @@
+# Builds the oxilite-jvm native library for every supported platform, bundles them into one
+# jar, and stages a release to Maven Central. See docs/java-publishing.md.
+#
+# - A `v*` tag (the release tag) builds and stages a deployment.
+# - A manual run builds; it stages a deployment only when `publish` is checked.
+# - Central Portal's autoPublish is false (see pom.xml): a human still clicks Publish at
+#   https://central.sonatype.com/publishing/deployments after this workflow uploads it.
+name: Java release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Stage a deployment to Maven Central"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    name: native ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: linux-x86_64, os: ubuntu-latest }
+          - { platform: linux-aarch64, os: ubuntu-24.04-arm }
+          - { platform: darwin-x86_64, os: macos-13 }
+          - { platform: darwin-aarch64, os: macos-14 }
+          - { platform: windows-x86_64, os: windows-latest }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build native library
+        shell: bash
+        working-directory: bindings/jvm
+        run: ./scripts/build-native.sh --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.platform }}
+          path: bindings/jvm/java/src/main/resources/native/${{ matrix.platform }}
+
+  publish:
+    needs: native
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.publish
+    runs-on: ubuntu-latest
+    # The Central Portal namespace com.oxilitedb trusts this repository and this environment.
+    environment:
+      name: maven-central
+      url: https://central.sonatype.com/publishing/deployments
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download every platform's native library
+        uses: actions/download-artifact@v4
+        with:
+          path: bindings/jvm/java/src/main/resources/native
+          pattern: native-*
+      - name: Flatten artifact directories (native-<platform>/ -> <platform>/)
+        working-directory: bindings/jvm/java/src/main/resources/native
+        run: |
+          for d in native-*/; do mv "$d" "${d#native-}"; done
+          find . -maxdepth 2
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          server-id: central
+          server-username: MAVEN_CENTRAL_USERNAME
+          server-password: MAVEN_CENTRAL_PASSWORD
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          gpg-passphrase: MAVEN_GPG_PASSPHRASE
+      - name: Deploy to Maven Central
+        working-directory: bindings/jvm/java
+        run: mvn -B -P release deploy -DskipTests
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}

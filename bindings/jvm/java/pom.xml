@@ -27,6 +27,25 @@
     </license>
   </licenses>
 
+  <developers>
+    <developer>
+      <name>Volodymyr Pavlyshyn</name>
+      <url>https://github.com/Volland</url>
+    </developer>
+  </developers>
+
+  <scm>
+    <connection>scm:git:https://github.com/Volland/oxilite.git</connection>
+    <developerConnection>scm:git:git@github.com:Volland/oxilite.git</developerConnection>
+    <url>https://github.com/Volland/oxilite</url>
+    <tag>HEAD</tag>
+  </scm>
+
+  <issueManagement>
+    <system>GitHub</system>
+    <url>https://github.com/Volland/oxilite/issues</url>
+  </issueManagement>
+
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.release>11</maven.compiler.release>
@@ -63,4 +82,82 @@
       </plugin>
     </plugins>
   </build>
+
+  <!--
+    Activated only for a Maven Central release (mvn -P release deploy), so a plain `mvn test`
+    build never needs a GPG key. See docs/java-publishing.md for the one-time account and key
+    setup this profile assumes.
+  -->
+  <profiles>
+    <profile>
+      <id>release</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-source-plugin</artifactId>
+            <version>3.3.1</version>
+            <configuration>
+              <!-- Otherwise this jar would also bundle the (large, binary, platform-specific)
+                   native library from src/main/resources; a sources jar should hold only the
+                   Java sources. -->
+              <excludeResources>true</excludeResources>
+            </configuration>
+            <executions>
+              <execution>
+                <id>attach-sources</id>
+                <goals>
+                  <goal>jar-no-fork</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-javadoc-plugin</artifactId>
+            <version>3.6.3</version>
+            <executions>
+              <execution>
+                <id>attach-javadocs</id>
+                <goals>
+                  <goal>jar</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-gpg-plugin</artifactId>
+            <version>3.2.4</version>
+            <executions>
+              <execution>
+                <id>sign-artifacts</id>
+                <phase>verify</phase>
+                <goals>
+                  <goal>sign</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+          <!--
+            Sonatype's Central Portal plugin: uploads a signed "deployment" bundle. autoPublish
+            is false on purpose — a Central release cannot be deleted or overwritten once public,
+            so CI stages the deployment and a human clicks Publish at
+            https://central.sonatype.com/publishing/deployments after checking it. Flip it to
+            true only once you trust the pipeline end to end.
+          -->
+          <plugin>
+            <groupId>org.sonatype.central</groupId>
+            <artifactId>central-publishing-maven-plugin</artifactId>
+            <version>0.6.0</version>
+            <extensions>true</extensions>
+            <configuration>
+              <publishingServerId>central</publishingServerId>
+              <autoPublish>false</autoPublish>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>
