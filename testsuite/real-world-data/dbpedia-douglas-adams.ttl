@@ -1,0 +1,1541 @@
+@prefix foaf:	<http://xmlns.com/foaf/0.1/> .
+@prefix wikipedia-en:	<http://en.wikipedia.org/wiki/> .
+@prefix dbr:	<http://dbpedia.org/resource/> .
+wikipedia-en:Douglas_Adams	foaf:primaryTopic	dbr:Douglas_Adams .
+@prefix dbo:	<http://dbpedia.org/ontology/> .
+dbr:Genre_fiction	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:English_literature	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_Google_Easter_eggs	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/So_Long,_and_Thanks_for_All_the_Fish_(A_Perfect_Circle_song)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Tax_exile	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Zaphod_Beeblebrox	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:creator	dbr:Douglas_Adams .
+@prefix dbp:	<http://dbpedia.org/property/> .
+dbr:Zaphod_Beeblebrox	dbp:creator	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Son_of_Dracula_(1974_film)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Culture_of_England	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Stephen_Fry	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Denmark_Street	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Culture_of_the_United_Kingdom	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Robbie_McIntosh	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Pun	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Genghis_Khan	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Santa_Cruz_Operation	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Trilogy	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Eben_Burgoon	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Software_versioning	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Trillian_(software)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Comparison_of_user_features_of_messaging_platforms	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Code42	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Darkside_Detective	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Milkmaid_of_the_Milky_Way	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Thomas_Was_Alone	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Fable_(2004_video_game)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/1979>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/1952_in_philosophy>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/42_(Doctor_Who)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Bernice_Summerfield	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/James_Goss_(producer)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:A_Day_in_the_Death	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/42_(number)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Elvis_Presley\u0027s_Pink_Cadillac>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/List_of_The_Hitchhiker\u0027s_Guide_to_the_Galaxy_characters>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Ashes	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/1979_in_the_United_Kingdom>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Nina_George	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/\u017Deljko_Pahek>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Nameless_Mod	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Foundation_series	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:A113	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_ISBN_registration_groups	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Santa_Fe,_New_Mexico>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/1952_in_literature>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_detective_fiction_authors	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Arvind_Ethan_David	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Last_Chance_to_See_(TV_series)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Richard_Paxton	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_works_published_posthumously	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Horns_of_Nimon	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbp:scriptEditor	dbr:Douglas_Adams .
+dbr:Cambridge_University_Light_Entertainment_Society	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_avian_humanoids	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/1980_in_literature>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Fulking	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Bishop\u0027s_Caundle>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Wix_Wickens	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Hipgnosis	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Trillian_(character)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:creator	dbr:Douglas_Adams ;
+	dbp:creator	dbr:Douglas_Adams .
+dbr:List_of_Doctor_Who_writers	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_Doctor_Who_script_editors	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:One_of_These_Nights	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Fenchurch_Street_railway_station	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Marvin_the_Paranoid_Android	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:creator	dbr:Douglas_Adams ;
+	dbp:creator	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Shada_(Doctor_Who)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbp:writer	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/1981_in_British_television>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_band_name_etymologies	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_fictional_robots_and_androids	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Samuel_Taylor_Coleridge	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+@prefix rdf:	<http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix ns6:	<http://www.ontologydesignpatterns.org/ont/dul/DUL.owl#> .
+dbr:Douglas_Adams	rdf:type	ns6:NaturalPerson ,
+		dbo:Writer .
+@prefix wikidata:	<http://www.wikidata.org/entity/> .
+dbr:Douglas_Adams	rdf:type	wikidata:Q36180 ,
+		wikidata:Q215627 ,
+		wikidata:Q19088 ,
+		wikidata:Q5 ,
+		wikidata:Q729 .
+@prefix owl:	<http://www.w3.org/2002/07/owl#> .
+dbr:Douglas_Adams	rdf:type	owl:Thing .
+@prefix schema:	<http://schema.org/> .
+dbr:Douglas_Adams	rdf:type	schema:Person .
+@prefix umbel-rc:	<http://umbel.org/umbel/rc/> .
+dbr:Douglas_Adams	rdf:type	umbel-rc:Artist .
+@prefix geo:	<http://www.w3.org/2003/01/geo/wgs84_pos#> .
+dbr:Douglas_Adams	rdf:type	geo:SpatialThing ,
+		dbo:Species ,
+		umbel-rc:Writer ,
+		dbo:Person ,
+		dbo:Eukaryote ,
+		umbel-rc:PersonWithOccupation ,
+		dbo:Animal ,
+		foaf:Person .
+@prefix dbpedia-pt:	<http://pt.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-pt:Douglas_Adams .
+@prefix dbpedia-lv:	<http://lv.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-lv:Duglass_Adamss .
+@prefix dbpedia-pl:	<http://pl.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-pl:Douglas_Adams .
+@prefix dbpedia-mg:	<http://mg.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-mg:Douglas_Adams .
+@prefix dbpedia-de:	<http://de.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-de:Douglas_Adams .
+@prefix dbpedia-fi:	<http://fi.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-fi:Douglas_Adams ,
+		wikidata:Q42 ,
+		<http://ru.dbpedia.org/resource/\u0410\u0434\u0430\u043C\u0441,_\u0414\u0443\u0433\u043B\u0430\u0441> .
+@prefix dbpedia-et:	<http://et.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-et:Douglas_Adams .
+@prefix dbpedia-gl:	<http://gl.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-gl:Douglas_Adams .
+@prefix dbpedia-ca:	<http://ca.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-ca:Douglas_Adams .
+@prefix dbpedia-es:	<http://es.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-es:Douglas_Adams ,
+		<http://rdf.freebase.com/ns/m.0282x> ,
+		<http://uk.dbpedia.org/resource/\u0414\u0443\u0433\u043B\u0430\u0441_\u0410\u0434\u0430\u043C\u0441> .
+@prefix dbpedia-sq:	<http://sq.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-sq:Douglas_Adams .
+@prefix dbpedia-no:	<http://no.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-no:Douglas_Adams .
+@prefix dbpedia-la:	<http://la.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-la:Duglassius_Adams .
+@prefix dbpedia-simple:	<http://simple.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-simple:Douglas_Adams .
+@prefix ns26:	<http://data.bibliotheken.nl/id/thes/> .
+dbr:Douglas_Adams	owl:sameAs	ns26:p068744307 ,
+		<http://ky.dbpedia.org/resource/\u0414\u0443\u0433\u043B\u0430\u0441_\u0410\u0434\u0430\u043C\u0441> .
+@prefix dbpedia-it:	<http://it.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-it:Douglas_Adams ,
+		<http://ko.dbpedia.org/resource/\uB354\uAE00\uB7EC\uC2A4_\uC560\uB364\uC2A4> .
+@prefix dbpedia-sco:	<http://sco.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-sco:Douglas_Adams ,
+		<http://ka.dbpedia.org/resource/\u10D3\u10D0\u10D2\u10DA\u10D0\u10E1_\u10D0\u10D3\u10D0\u10DB\u10E1\u10D8> .
+@prefix ns29:	<http://sw.cyc.com/concept/> .
+dbr:Douglas_Adams	owl:sameAs	ns29:Mx4rwPVThpwpEbGdrcN5Y29ycA .
+@prefix dbpedia-nl:	<http://nl.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-nl:Douglas_Adams .
+@prefix dbpedia-sh:	<http://sh.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-sh:Douglas_Adams .
+@prefix dbpedia-cy:	<http://cy.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-cy:Douglas_Adams ,
+		<http://fa.dbpedia.org/resource/\u062F\u0627\u06AF\u0644\u0627\u0633_\u0622\u062F\u0627\u0645\u0632> ,
+		<http://bn.dbpedia.org/resource/\u09A1\u0997\u09B2\u09BE\u09B8_\u0985\u09CD\u09AF\u09BE\u09A1\u09BE\u09AE\u09B8> .
+@prefix dbpedia-sk:	<http://sk.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-sk:Douglas_Adams .
+@prefix dbpedia-lt:	<http://lt.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-lt:Douglas_Adams ,
+		<http://arz.dbpedia.org/resource/\u062F\u0648\u062C\u0644\u0627\u0633_\u0627\u062F\u0627\u0645\u0632> .
+@prefix dbpedia-sv:	<http://sv.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-sv:Douglas_Adams ,
+		<http://ta.dbpedia.org/resource/\u0B9F\u0B95\u0BCD\u0BB3\u0BB8\u0BCD_\u0B86\u0B9F\u0BAE\u0BCD\u0BB8\u0BCD> .
+@prefix dbpedia-bs:	<http://bs.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-bs:Douglas_Adams ,
+		<http://hy.dbpedia.org/resource/\u0534\u0578\u0582\u0563\u056C\u0561\u057D_\u0531\u0564\u0561\u0574\u057D> .
+@prefix dbpedia-oc:	<http://oc.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-oc:Douglas_Adams ,
+		<http://pa.dbpedia.org/resource/\u0A21\u0A17\u0A32\u0A38_\u0A10\u0A21\u0A2E\u0A38> .
+@prefix dbpedia-cs:	<http://cs.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-cs:Douglas_Adams .
+@prefix dbpedia-ia:	<http://ia.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-ia:Douglas_Adams .
+@prefix yago-res:	<http://yago-knowledge.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	yago-res:Douglas_Adams .
+@prefix dbpedia-bar:	<http://bar.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-bar:Douglas_Adams .
+@prefix ns42:	<http://musicbrainz.org/artist/> .
+dbr:Douglas_Adams	owl:sameAs	ns42:e9ed318d-8cc5-4cf8-ab77-505e39ab6ea4 .
+@prefix dbpedia-is:	<http://is.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-is:Douglas_Adams .
+@prefix dbpedia-tr:	<http://tr.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-tr:Douglas_Adams .
+@prefix dbpedia-ro:	<http://ro.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-ro:Douglas_Adams .
+@prefix dbpedia-io:	<http://io.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-io:Douglas_Adams ,
+		<http://ba.dbpedia.org/resource/\u0414\u0443\u0433\u043B\u0430\u0441_\u0410\u0434\u0430\u043C\u0441> .
+@prefix dbpedia-fr:	<http://fr.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-fr:Douglas_Adams ,
+		<http://bg.dbpedia.org/resource/\u0414\u044A\u0433\u043B\u0430\u0441_\u0410\u0434\u0430\u043C\u0441> .
+@prefix dbpedia-jv:	<http://jv.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-jv:Douglas_Adams ,
+		<http://zh.dbpedia.org/resource/\u9053\u683C\u62C9\u65AF\u00B7\u4E9A\u5F53\u65AF> ,
+		<http://azb.dbpedia.org/resource/\u062F\u0627\u0642\u0644\u0627\u0633_\u0622\u062F\u0627\u0645\u0632> .
+@prefix dbpedia-hu:	<http://hu.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-hu:Douglas_Adams ,
+		<http://mk.dbpedia.org/resource/\u0414\u0430\u0433\u043B\u0430\u0441_\u0410\u0434\u0430\u043C\u0441> ,
+		<http://pnb.dbpedia.org/resource/\u0688\u06AF\u0644\u0633_\u0627\u06CC\u0688\u0645\u0633> .
+@prefix dbpedia-da:	<http://da.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-da:Douglas_Adams .
+@prefix dbpedia-eu:	<http://eu.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-eu:Douglas_Adams ,
+		<http://ml.dbpedia.org/resource/\u0D21\u0D17\u0D4D\u0D32\u0D38\u0D4D_\u0D06\u0D21\u0D02\u0D38\u0D4D> ,
+		<http://sr.dbpedia.org/resource/\u0414\u0430\u0433\u043B\u0430\u0441_\u0410\u0434\u0430\u043C\u0441> ,
+		<http://be.dbpedia.org/resource/\u0414\u0443\u0433\u043B\u0430\u0441_\u0410\u0434\u0430\u043C\u0441> .
+@prefix dbpedia-war:	<http://war.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-war:Douglas_Adams ,
+		<http://mr.dbpedia.org/resource/\u0921\u0917\u094D\u0932\u0938_\u0905\u200D\u0945\u0921\u092E\u094D\u0938> ,
+		<http://ar.dbpedia.org/resource/\u062F\u0648\u063A\u0644\u0627\u0633_\u0622\u062F\u0645\u0632> ,
+		dbr:Douglas_Adams .
+@prefix ns53:	<http://data.europa.eu/euodp/jrc-names/> .
+dbr:Douglas_Adams	owl:sameAs	ns53:Douglas_Adams ,
+		<http://d-nb.info/gnd/119033364> .
+@prefix dbpedia-ms:	<http://ms.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-ms:Douglas_Adams ,
+		<http://mrj.dbpedia.org/resource/\u0410\u0434\u0430\u043C\u0441,_\u0414\u0443\u0433\u043B\u0430\u0441> ,
+		<http://he.dbpedia.org/resource/\u05D3\u05D0\u05D2\u05DC\u05E1_\u05D0\u05D3\u05DE\u05E1> .
+@prefix dbpedia-eo:	<http://eo.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-eo:Douglas_Adams .
+@prefix dbpedia-vi:	<http://vi.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-vi:Douglas_Adams ,
+		<http://ur.dbpedia.org/resource/\u0688\u06AF\u0644\u0633_\u0627\u06CC\u0688\u0645\u0633> ,
+		<http://el.dbpedia.org/resource/\u039D\u03C4\u03AC\u03B3\u03BA\u03BB\u03B1\u03C2_\u0386\u03BD\u03C4\u03B1\u03BC\u03C2> .
+@prefix dbpedia-hr:	<http://hr.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-hr:Douglas_Adams .
+@prefix dbpedia-ast:	<http://ast.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-ast:Douglas_Adams ,
+		<http://data.linkedmdb.org/resource/producer/9668> ,
+		<http://ja.dbpedia.org/resource/\u30C0\u30B0\u30E9\u30B9\u30FB\u30A2\u30C0\u30E0\u30BA> .
+@prefix dbpedia-az:	<http://az.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-az:Duqlas_Adams .
+@prefix dbpedia-af:	<http://af.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-af:Douglas_Adams .
+@prefix dbpedia-id:	<http://id.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-id:Douglas_Adams ,
+		ns26:p339433876 .
+@prefix dbpedia-sl:	<http://sl.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-sl:Douglas_Adams .
+@prefix dbpedia-nn:	<http://nn.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-nn:Douglas_Adams .
+@prefix dbpedia-ga:	<http://ga.dbpedia.org/resource/> .
+dbr:Douglas_Adams	owl:sameAs	dbpedia-ga:Douglas_Adams ,
+		<https://global.dbpedia.org/id/3taAh> ,
+		<http://viaf.org/viaf/113230702> ;
+	foaf:name	"Douglas Adams"@en .
+@prefix rdfs:	<http://www.w3.org/2000/01/rdf-schema#> .
+dbr:Douglas_Adams	rdfs:label	"Douglas Adams"@ga ,
+		"Douglas Adams"@eo ,
+		"Douglas Adams"@de ,
+		"Douglas Adams"@in ,
+		"Douglas Adams"@eu ,
+		"Douglas Adams"@es ,
+		"\uB354\uAE00\uB7EC\uC2A4 \uC560\uB364\uC2A4"@ko ,
+		"Douglas Adams"@fr ,
+		"Douglas Adams"@pt ,
+		"Douglas Adams"@it ,
+		"\u30C0\u30B0\u30E9\u30B9\u30FB\u30A2\u30C0\u30E0\u30BA"@ja ,
+		"Douglas Adams"@nl ,
+		"\u062F\u0648\u063A\u0644\u0627\u0633 \u0622\u062F\u0645\u0632"@ar ,
+		"\u0410\u0434\u0430\u043C\u0441, \u0414\u0443\u0433\u043B\u0430\u0441"@ru ,
+		"Douglas Adams"@cs ,
+		"Douglas Adams"@sv ,
+		"Douglas Adams"@pl ,
+		"\u0414\u0443\u0433\u043B\u0430\u0441 \u0410\u0434\u0430\u043C\u0441"@uk ,
+		"Douglas Adams"@en ,
+		"\u9053\u683C\u62C9\u65AF\u00B7\u4E9A\u5F53\u65AF"@zh ,
+		"Douglas Adams"@ca ,
+		"\u039D\u03C4\u03AC\u03B3\u03BA\u03BB\u03B1\u03C2 \u0386\u03BD\u03C4\u03B1\u03BC\u03C2"@el .
+@prefix dct:	<http://purl.org/dc/terms/> .
+@prefix dbc:	<http://dbpedia.org/resource/Category:> .
+dbr:Douglas_Adams	dct:subject	dbc:Writers_from_Cambridge ,
+		dbc:British_non-fiction_environmental_writers ,
+		dbc:English_science_fiction_writers ,
+		dbc:Usenet_people ,
+		dbc:Monty_Python ,
+		dbc:Infocom ,
+		dbc:British_atheism_activists ,
+		dbc:English_essayists ,
+		dbc:English_atheists ,
+		dbc:English_humanists ,
+		dbc:Science_Fiction_Hall_of_Fame_inductees ,
+		<http://dbpedia.org/resource/Category:Alumni_of_St_John\u0027s_College,_Cambridge> ,
+		dbc:British_radio_show_creators ,
+		dbc:British_satirical_radio_show_creators ,
+		<http://dbpedia.org/resource/Category:20th-century_English_screenwriters> ,
+		dbc:English_video_game_designers ,
+		<http://dbpedia.org/resource/Category:21st-century_atheists> ,
+		dbc:British_child_writers ,
+		dbc:English_humorists ,
+		<http://dbpedia.org/resource/Category:1952_births> ,
+		dbc:Comedians_from_Cambridgeshire ,
+		dbc:English_male_comedians ,
+		dbc:English_television_writers ,
+		dbc:English_male_television_writers ,
+		dbc:English_comedy_writers ,
+		<http://dbpedia.org/resource/Category:21st-century_English_novelists> ,
+		<http://dbpedia.org/resource/Category:20th-century_English_novelists> ,
+		dbc:English_radio_writers ,
+		dbc:Douglas_Adams ,
+		dbc:Inkpot_Award_winners ,
+		<http://dbpedia.org/resource/Category:People_educated_at_Brentwood_School,_Essex> ,
+		<http://dbpedia.org/resource/Category:Apple_Inc._people> ,
+		dbc:BBC_radio_producers ,
+		dbc:Burials_at_Highgate_Cemetery ,
+		dbc:Deaths_from_coronary_artery_disease ,
+		dbc:Audiobook_narrators ,
+		<http://dbpedia.org/resource/Category:2001_deaths> ,
+		dbc:Interactive_fiction_writers ,
+		<http://dbpedia.org/resource/Category:20th-century_atheists> ,
+		dbc:English_satirists ,
+		dbc:British_video_game_writers .
+@prefix xsd:	<http://www.w3.org/2001/XMLSchema#> .
+dbr:Douglas_Adams	geo:lat	"-27.58939"^^xsd:float ;
+	geo:long	"-48.662224"^^xsd:float ;
+	foaf:depiction	<http://commons.wikimedia.org/wiki/Special:FilePath/Towelday-Innsbruck.jpg> ,
+		<http://commons.wikimedia.org/wiki/Special:FilePath/DNA_in_Monty_Python.jpg> ,
+		<http://commons.wikimedia.org/wiki/Special:FilePath/Highgate_Cemetery_-_East_-_Douglas_Adams_01.jpg> ,
+		<http://commons.wikimedia.org/wiki/Special:FilePath/Douglas_Adams_San_Francisco.jpg> ,
+		<http://commons.wikimedia.org/wiki/Special:FilePath/Douglas_Adams_Unterschrift_(cropped).jpg> ,
+		<http://commons.wikimedia.org/wiki/Special:FilePath/Douglas_adams_portrait_cropped.jpg> .
+@prefix prov:	<http://www.w3.org/ns/prov#> .
+dbr:Douglas_Adams	prov:wasDerivedFrom	<http://en.wikipedia.org/wiki/Douglas_Adams?oldid=1312286116&ns=0> .
+@prefix georss:	<http://www.georss.org/georss/> .
+dbr:Douglas_Adams	georss:point	"-27.589388888888887 -48.66222222222222" ;
+	dbo:wikiPageWikiLink	dbr:BBC7 ,
+		<http://dbpedia.org/resource/Unbound_(publisher)> ,
+		dbr:Great_Ape_Project ,
+		dbr:Paola_Cavalieri ,
+		dbc:Weird_fiction_writers ,
+		dbr:Book_at_Bedtime ,
+		dbr:Fine-tuned_universe ,
+		dbr:Cambridge ,
+		dbr:BAFTA ,
+		dbr:H2g2 ,
+		dbr:Gregory_Hines ,
+		dbr:William_Todd-Jones ,
+		dbr:Lucasfilm_Games .
+@prefix ns71:	<http://dbpedia.org/resource/Labyrinth:> .
+dbr:Douglas_Adams	dbo:wikiPageWikiLink	ns71:_The_Computer_Game ,
+		<http://dbpedia.org/resource/The_Hitchhiker\u0027s_Guide_to_the_Galaxy_(video_game)> ,
+		dbr:Save_the_Rhino ,
+		<http://dbpedia.org/resource/The_Hitchhiker\u0027s_Guide_to_the_Galaxy> ,
+		dbr:The_God_Delusion ,
+		<http://dbpedia.org/resource/A_Liar\u0027s_Autobiography> ,
+		dbr:The_Private_Life_of_Genghis_Khan ,
+		dbc:People_from_Cambridge ,
+		<http://dbpedia.org/resource/Doctor_in_the_House_(TV_series)> ,
+		dbc:Non-fiction_environmental_writers ,
+		<http://dbpedia.org/resource/25924_Douglasadams> ,
+		dbr:The_Five_Doctors ,
+		<http://dbpedia.org/resource/The_Hitchhiker\u0027s_Guide_to_the_Galaxy_(novel)> ,
+		dbc:Interactive_fiction_writers ,
+		dbr:Disney ,
+		dbr:The_Long_Dark_Tea-Time_of_the_Soul ,
+		dbr:Last_Chance_to_See ,
+		<http://dbpedia.org/resource/John_Lloyd_(producer)> ,
+		dbc:English_humorists ,
+		dbr:Towel_Day ,
+		<http://dbpedia.org/resource/St_John\u0027s_College,_Cambridge> ,
+		<http://dbpedia.org/resource/High_Hopes_(Pink_Floyd_song)> ,
+		dbr:The_Division_Bell ,
+		dbr:David_Gilmour ,
+		dbr:The_Key_to_Time ,
+		<http://dbpedia.org/resource/Brain_Damage_(song)> ,
+		dbr:Tom_Baker ,
+		dbr:John_Cleese ,
+		dbr:Michael_Palin ,
+		dbr:Monty_Python ,
+		<http://dbpedia.org/resource/Monty_Python\u0027s_Flying_Circus> ,
+		dbr:Terry_Jones ,
+		dbr:Inkpot_Award ,
+		dbr:Graham_Chapman ,
+		dbc:Inkpot_Award_winners ,
+		dbr:Professor_Chronotis ,
+		dbr:Kakapo ,
+		<http://dbpedia.org/resource/Wish_You_Were_Here_(Pink_Floyd_song)> ,
+		dbr:Environmental_activist ,
+		<http://dbpedia.org/resource/Eclipse_(Pink_Floyd_song)> ,
+		dbr:Young_Zaphod_Plays_It_Safe ,
+		dbr:Endangered_species ,
+		dbr:Shine_On_You_Crazy_Diamond ,
+		dbr:Apricot_Computers ,
+		dbr:Dirk_Gently ,
+		dbr:David_Agnew ,
+		dbr:The_News_Huddlines ,
+		dbr:Software_and_Information_Industry_Association ,
+		dbr:Radio_Academy ,
+		<http://dbpedia.org/resource/File:Douglas_Adams_San_Francisco.jpg> ,
+		<http://dbpedia.org/resource/File:Towelday-Innsbruck.jpg> ,
+		<http://dbpedia.org/resource/Bureaucracy_(computer_game)> ,
+		dbr:Tanzania ,
+		dbr:BBC_One ,
+		dbr:Doctor_Snuggles ,
+		<http://dbpedia.org/resource/Simon_Jones_(actor)> ,
+		<http://dbpedia.org/resource/Category:Alumni_of_St_John\u0027s_College,_Cambridge> ,
+		<http://dbpedia.org/resource/The_Hitchhiker\u0027s_Guide_to_the_Galaxy_Tertiary_to_Quintessential_Phases> ,
+		dbr:David_Sherlock ,
+		dbr:Set_the_Controls_for_the_Heart_of_the_Sun ,
+		dbr:BBC_Radio_4 ,
+		dbr:Mostly_Harmless ,
+		<http://dbpedia.org/resource/The_Hitchhiker\u0027s_Guide_to_the_Galaxy_(computer_game)> .
+@prefix ns72:	<http://dbpedia.org/resource/Hitchhiker:> .
+dbr:Douglas_Adams	dbo:wikiPageWikiLink	ns72:_A_Biography_of_Douglas_Adams ,
+		dbr:Paul_Neil_Milne_Johnstone ,
+		dbr:Audiobook ,
+		dbc:English_radio_writers ,
+		<http://dbpedia.org/resource/File:Grave_of_Douglas_Adams,_Highgate.jpg> ,
+		<http://dbpedia.org/resource/File:DNA_in_Monty_Python.jpg> ,
+		<http://dbpedia.org/resource/42_Puzzle> ,
+		<http://dbpedia.org/resource/David_A._Yallop> ,
+		dbr:Week_Ending ,
+		dbr:List_of_animal_rights_advocates ,
+		dbr:Hugo_Award ,
+		dbr:The_Times ,
+		dbr:Hugo_Award_for_Best_Dramatic_Presentation ,
+		dbr:BBC_Micro ,
+		dbr:Dian_Fossey ,
+		<http://dbpedia.org/resource/S\u00E3o_Jos\u00E9,_Santa_Catarina> .
+@prefix ns73:	<http://dbpedia.org/resource/The_Hitchhiker\u0027s_Guide_to_the_Galaxy:> .
+dbr:Douglas_Adams	dbo:wikiPageWikiLink	ns73:_The_Original_Radio_Scripts ,
+		<http://dbpedia.org/resource/Brentwood_School_(Essex)> ,
+		<http://dbpedia.org/resource/Exhibition_(scholarship)> ,
+		<http://dbpedia.org/resource/18610_Arthurdent> ,
+		dbr:The_Burkiss_Way ,
+		dbr:Doctor_on_the_Go ,
+		dbr:Peter_Stothard ,
+		dbr:Anthony_Read ,
+		dbr:William_Blake ,
+		dbr:Innsbruck ,
+		dbc:Monty_Python ,
+		dbr:Coronary_artery_disease ,
+		dbr:USENET ,
+		dbr:Heart_attack ,
+		dbr:The_Meaning_of_Liff ,
+		<http://dbpedia.org/resource/List_of_recurring_Monty_Python\u0027s_Flying_Circus_characters> ,
+		dbr:Infocom ,
+		dbr:Qatari ,
+		dbr:Zaire ,
+		dbr:Kevin_Jon_Davies ,
+		dbr:Doctor_Who_spin-offs ,
+		dbr:Microsoft ,
+		dbr:Cambridge_Z88 ,
+		<http://dbpedia.org/resource/Montecito,_California> ,
+		dbc:Burials_at_Highgate_Cemetery ,
+		dbr:Highgate_Cemetery ,
+		dbr:Neil_Gaiman ,
+		dbr:Academic_conference ,
+		<http://dbpedia.org/resource/Artemis_Fowl_(series)> ,
+		dbr:Minor_Planet_Center ,
+		dbr:The_Beatles ,
+		<http://dbpedia.org/resource/Life,_the_Universe_and_Everything> ,
+		dbr:Crowdfunding ,
+		<http://dbpedia.org/resource/Category:1952_births> ,
+		<http://dbpedia.org/resource/Category:20th-century_English_novelists> ,
+		<http://dbpedia.org/resource/Category:21st-century_English_novelists> ,
+		<http://dbpedia.org/resource/And_Another_Thing..._(novel)> ,
+		dbr:The_Restaurant_at_the_End_of_the_Universe ,
+		<http://dbpedia.org/resource/List_of_Doctor_Who_episodes_(1963\u20131989)> ,
+		dbr:AppleMasters ,
+		dbr:Ted_Nelson ,
+		dbr:Peter_Fincham ,
+		dbc:British_child_writers ,
+		<http://dbpedia.org/resource/Writer\u0027s_block> ,
+		<http://dbpedia.org/resource/Dirk_Gently\u0027s_Holistic_Detective_Agency> ,
+		dbr:The_Independent ,
+		dbr:Richard_Dawkins ,
+		<http://dbpedia.org/resource/Brentwood,_Essex> ,
+		dbr:Terry_Nation ,
+		dbr:Eoin_Colfer ,
+		dbr:Geoffrey_Perkins ,
+		dbr:IMovie ,
+		<http://dbpedia.org/resource/Hitch-hiker\u0027s_Guide_to_Europe> ,
+		dbr:Royal_Institution_Christmas_Lectures ,
+		<http://dbpedia.org/resource/Gareth_Roberts_(writer)> ,
+		dbr:List_of_humorists ,
+		dbc:English_social_commentators ,
+		dbr:The_Album_of_the_Soundtrack_of_the_Trailer_of_the_Film_of_Monty_Python_and_the_Holy_Grail ,
+		dbr:Sally_Emerson ,
+		dbc:Infocom ,
+		<http://dbpedia.org/resource/Simon_&_Schuster> ,
+		dbr:E-book ,
+		dbr:The_Digital_Village ,
+		dbr:Out_of_the_Trees ,
+		dbr:Edinburgh_Fringe ,
+		dbc:British_atheism_activists ,
+		dbr:Interactive_fiction ,
+		<http://dbpedia.org/resource/So_Long,_and_Thanks_for_All_the_Fish> ,
+		<http://dbpedia.org/resource/Category:People_educated_at_Brentwood_School,_Essex> ,
+		dbr:Fourth_Doctor ,
+		dbr:Mountain_gorilla ,
+		<http://dbpedia.org/resource/Category:20th-century_atheists> ,
+		dbr:Mark_Carwardine ,
+		dbr:English_literature ,
+		dbr:Northern_white_rhinoceros ,
+		<http://dbpedia.org/resource/Not_the_Nine_O\u0027Clock_News> ,
+		dbr:Islington ,
+		dbr:Embedded_system ,
+		dbr:Dirk_Maggs ,
+		<http://dbpedia.org/resource/Shada_(Doctor_Who)> .
+@prefix ns74:	<http://dbpedia.org/resource/Douglas_Adams\u0027s_Starship_Titanic:> .
+dbr:Douglas_Adams	dbo:wikiPageWikiLink	ns74:_A_Novel ,
+		dbr:The_Snowmen ,
+		dbc:English_comedy_writers ,
+		<http://dbpedia.org/resource/Cocoa_(API)> ,
+		dbr:Paul_McGann ,
+		<http://dbpedia.org/resource/The_Hitchhiker\u0027s_Guide_to_the_Galaxy_(TV_series)> ,
+		dbr:Big_Finish_Productions ,
+		dbr:BBC_America ,
+		<http://dbpedia.org/resource/Eagle_(comic)> ,
+		<http://dbpedia.org/resource/Category:Apple_Inc._people> ,
+		dbr:Neil_Innes ,
+		dbr:Peter_Singer ,
+		<http://dbpedia.org/resource/Category:21st-century_atheists> ,
+		dbr:Steven_Moffat ,
+		dbr:Patient_Abuse ,
+		<http://dbpedia.org/resource/Don\u0027t_Panic:_The_Official_Hitchhiker\u0027s_Guide_to_the_Galaxy_Companion> ,
+		dbc:British_male_television_writers ,
+		dbc:English_television_writers ,
+		<http://dbpedia.org/resource/Doctor_Who_(season_17)> ,
+		dbr:Footlights ,
+		dbr:Trafalgar_Square ,
+		<http://dbpedia.org/resource/List_of_Monty_Python\u0027s_Flying_Circus_episodes> ,
+		dbc:Douglas_Adams ,
+		<http://dbpedia.org/resource/The_Hitchhiker\u0027s_Guide_to_the_Galaxy_(radio_series)> ,
+		dbr:Digital_Equipment_Corporation ,
+		<http://dbpedia.org/resource/David_Fisher_(writer)> ,
+		dbr:Tandy_1000 ,
+		<http://dbpedia.org/resource/James_Goss_(producer)> ,
+		dbr:Rainbow_100 ,
+		dbr:Commodore_PET ,
+		<http://dbpedia.org/resource/Christopher_H._Bidmead> ,
+		dbr:The_Pirate_Planet ,
+		dbr:City_of_Death ,
+		dbr:RSPCA ,
+		dbr:Destiny_of_the_Daleks ,
+		dbr:MacUser ,
+		dbr:Black_rhino ,
+		dbr:Hyperland ,
+		dbr:Knowledge_Navigator ,
+		dbr:Archive_on_4 ,
+		dbr:Starship_Titanic ,
+		dbr:Kim_Fuller ,
+		dbr:Baiji ,
+		dbr:American_Atheists ,
+		<http://dbpedia.org/resource/Category:2001_deaths> ,
+		dbc:Audiobook_narrators ,
+		dbr:Procol_Harum ,
+		dbr:Hypertext ,
+		<http://dbpedia.org/resource/Brentwood_School_(England)> ,
+		dbr:East_End_of_London ,
+		dbr:The_Salmon_of_Doubt ,
+		dbr:The_Centre_for_Computing_History ,
+		dbr:Atheist ,
+		dbr:Doctor_Who ,
+		dbr:Frank_Wedekind ,
+		dbr:Madagascar ,
+		dbr:Simon_Brett ,
+		dbr:MacOS ,
+		dbr:Stephen_Fry ,
+		<http://dbpedia.org/resource/Christopher_Cerf_(musician_and_television_producer)> ,
+		dbr:BBC_Online ,
+		<http://dbpedia.org/resource/The_Hitchhiker\u0027s_Guide_to_the_Galaxy_(book)> ,
+		dbr:Pink_Floyd ,
+		dbr:NPR ,
+		dbr:BBC_Two ,
+		dbr:Webcast ,
+		dbr:Macintosh ,
+		<http://dbpedia.org/resource/The_Hitchhiker\u0027s_Guide_to_the_Galaxy_(film)> ,
+		dbr:Mount_Kilimanjaro ,
+		dbr:The_Utterly_Utterly_Merry_Comic_Relief_Christmas_Book ,
+		dbc:BBC_radio_producers ,
+		dbr:Upper_Street ,
+		dbc:English_essayists ,
+		<http://dbpedia.org/resource/Graham_Williams_(television_producer)> ,
+		<http://dbpedia.org/resource/The_Hitchhiker\u0027s_Guide_to_the_Future> ,
+		<http://dbpedia.org/resource/Doctor_Who_(season_16)> ,
+		dbc:English_atheists ,
+		<http://dbpedia.org/resource/Channel_9_(discussion_forum)> ,
+		dbr:The_Deeper_Meaning_of_Liff ,
+		dbr:Professional_Developers_Conference ,
+		dbc:English_humanists ,
+		dbr:Black_Cinderella_Two_Goes_East ,
+		dbr:St_Martin-in-the-Fields ,
+		<http://dbpedia.org/resource/The_Hitchhiker\u0027s_Guide_to_the_Galaxy_Primary_and_Secondary_Phases> ,
+		<http://dbpedia.org/resource/Santa_Barbara,_California> ,
+		dbr:Steve_Meretzky ,
+		dbr:West_End_of_London ,
+		<http://dbpedia.org/resource/Preparatory_school_(United_Kingdom)> ,
+		<http://dbpedia.org/resource/ITV_(TV_network)> ,
+		<http://dbpedia.org/resource/.Mac> ,
+		dbc:Usenet_people ,
+		dbr:Collaborative_writing ,
+		<http://dbpedia.org/resource/Category:20th-century_English_screenwriters> ,
+		dbc:English_science_fiction_writers ,
+		dbr:Karey_Kirkpatrick ;
+	dbo:wikiPageExternalLink	<https://web.archive.org/web/20080129164511/http:/www.biota.org/podcast/%23DNA> ,
+		<https://web.archive.org/web/20201108195950/http:/www.bookslut.com/nonfiction/2004_05_002057.php> ,
+		<http://www.biota.org/podcast/%23DNA> .
+@prefix ns75:	<https://www.theguardian.com/books/2008/jun/09/> .
+dbr:Douglas_Adams	dbo:wikiPageExternalLink	ns75:douglasadams ,
+		<http://www.oxforddnb.com/view/article/75853> ,
+		<https://web.archive.org/web/20110720193159/http:/www.douglasadams.com/> ,
+		<https://web.archive.org/web/20130302151540/http:/www.biota.org/people/douglasadams/> ,
+		<http://www.bookslut.com/nonfiction/2004_05_002057.php> ,
+		<http://www.biota.org/people/douglasadams/> .
+@prefix ns76:	<https://www.alumni.cam.ac.uk/> .
+dbr:Douglas_Adams	dbo:wikiPageExternalLink	ns76:magazine .
+@prefix ns77:	<https://www.bbc.co.uk/programmes/> .
+dbr:Douglas_Adams	dbo:wikiPageExternalLink	ns77:p00fpvbm ,
+		<https://www.youtube.com/watch%3Fv=_ZG8HBuDjgc> ,
+		<http://www.vintagemacworld.com/iifx.html> ,
+		<https://www.youtube.com/watch%3Fv=Cq181uAbdVQ> ;
+	dbo:description	"engelsk forfatter (1952-2001)"@da ,
+		"\u0430\u043D\u0433\u043B\u0456\u0439\u0441\u043A\u0456 \u043F\u0456\u0441\u044C\u043C\u0435\u043D\u043D\u0456\u043A"@be ,
+		"scrittore e umorista britannico (1952\u20132001)"@it ,
+		"britanski radijski dramaturg i pisac znanstvene fantastike"@hr ,
+		"Muwandisi wa fiction"@lg ,
+		"scritore brit\u00E0nego"@vec ,
+		"\u0641\u06CC\u0644\u0645\u0646\u0627\u0645\u0647\u200C\u0646\u0648\u06CC\u0633 \u0648 \u0646\u0648\u06CC\u0633\u0646\u062F\u0647 \u0628\u0631\u06CC\u062A\u0627\u0646\u06CC\u0627\u06CC\u06CC"@fa ,
+		"angl\u0173 ra\u0161ytojas"@lt ,
+		"scr\u00EDbhneoir Sasanach (1952\u20132001)"@ga ,
+		"Ingliz yozuvchisi, dramaturg va ssenariynavis, \u201CHitchikerning Galaktikaga qo\u02BBllanma\u201D turkum kitoblari muallifi."@uz ,
+		"\u0D2C\u0D4D\u0D30\u0D3F\u0D1F\u0D4D\u0D1F\u0D40\u0D37\u0D4D \u0D0E\u0D34\u0D41\u0D24\u0D4D\u0D24\u0D41\u0D15\u0D3E\u0D30\u0D28\u0D41\u0D02 \u0D39\u0D3E\u0D38\u0D4D\u0D2F\u0D38\u0D3E\u0D39\u0D3F\u0D24\u0D4D\u0D2F\u0D3E\u0D15\u0D3E\u0D30\u0D28\u0D41\u0D02"@ml ,
+		"Onye edemede sayens\u1ECB sayens\u1ECB Bekee na onye \u1ECDch\u1ECB \u1ECDch\u1ECB"@ig ,
+		"escritor y humorista ingl\u00E9s"@ast ,
+		"\u0643\u0627\u062A\u0628 \u0646\u06AD\u0644\u064A\u0632\u064A \u062F\u064A\u0627\u0644 \u0644\u062E\u064A\u0627\u0644 \u0644\u0639\u0644\u0645\u064A \u0648 \u0644\u0641\u0643\u0627\u0647\u0629"@ary ,
+		"English write who dey write or act in funny way bi"@gpe ,
+		"ang\u013Cu zin\u0101tnisk\u0101s fantastikas rakstnieks un humorists"@lv ,
+		"britischer Science-Fiction-Autor und Humorist"@de ,
+		"\u07CA\u07F2\u07EC\u07DC\u07ED\u07CC\u07EC\u07DF\u07CB\u07EC \u07DB\u07D3\u07CD\u07E6\u07DF\u07CA \u07DE\u07CE\u07F2\u07EC\u07D8\u07D0\u07EC\u07D5\u07CD\u07F0 \u07DF\u07D0\u07F2\u07DE\u07CF \u07DE\u07CA\u07F2\u07EC"@nqo ,
+		"Marubucin Ingilishi kuma \u0257an \u0257an adam (1952-2001)"@ha ,
+		"\uC601\uAD6D\uC758 \uC791\uAC00"@ko ,
+		"penulis dan pelawak Inggeris"@ms ,
+		"scriptor, scriptor scaenicus, et mythistoricus (1952\u20132001)"@la ,
+		"penulis dan humoris asal Britania Raya (1952-2001)"@in ,
+		"Panulih jo palawak dari Inggirih"@min ,
+		"anglick\u00FD spisovate\u013E"@sk ,
+		"scritturi c\u00F2micu ngrisi (1952\u20132001)"@scn ,
+		"Engelse schrijver (1952-2001)"@nl ,
+		"escritor e guionista brit\u00E1nico"@gl ,
+		"\u30A4\u30F3\u30B0\u30E9\u30F3\u30C9\u306E\u4F5C\u5BB6"@ja ,
+		"\u0987\u0982\u09B0\u09C7\u099C \u0995\u09B2\u09CD\u09AA\u09AC\u09BF\u099C\u09CD\u099E\u09BE\u09A8 \u09B2\u09C7\u0996\u0995 \u0993 \u0995\u09CC\u09A4\u09C1\u0995\u09AC\u09BF\u09A6"@bn ,
+		"forfattar"@nn ,
+		"\u0905\u0919\u094D\u0917\u094D\u0930\u0947\u091C\u0940 \u0932\u0947\u0916\u0915 \u0930 \u0935\u094D\u092F\u0919\u094D\u0917\u094D\u092F\u0915\u093E\u0930"@ne ,
+		"\u0435\u043D\u0433\u043B\u0435\u0441\u043A\u0438 \u043F\u0438\u0441\u0430\u0446 \u0438 \u0445\u0443\u043C\u043E\u0440\u0438\u0441\u0442\u0430"@sr ,
+		"\u0431\u0440\u0438\u0442\u0430\u043D\u0441\u044C\u043A\u0438\u0439 \u043A\u043E\u043C\u0456\u0447\u043D\u0438\u0439 \u0440\u0430\u0434\u0456\u043E\u0434\u0440\u0430\u043C\u0430\u0442\u0443\u0440\u0433, \u043F\u0438\u0441\u044C\u043C\u0435\u043D\u043D\u0438\u043A"@uk ,
+		"englischer Schriftsteller"@nds ,
+		"angla a\u016Dtoro de sciencfikcio-romanoj kaj humoristo"@eo ,
+		"\u0438\u043D\u0433\u043B\u0438\u0437 \u044F\u0499\u044B\u0443\u0441\u044B\u04BB\u044B, \u0434\u0440\u0430\u043C\u0430\u0442\u0443\u0440\u0433 \u04BB\u04D9\u043C \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u0441\u0442, \u044E\u043C\u043E\u0440\u0438\u0441\u0442\u0438\u043A \u0444\u0430\u043D\u0442\u0430\u0441\u0442\u0438\u043A \u04D9\u04AB\u04D9\u0440\u0499\u04D9\u0440 \u0430\u0432\u0442\u043E\u0440\u044B"@ba ,
+		"\u0E19\u0E31\u0E01\u0E40\u0E02\u0E35\u0E22\u0E19\u0E41\u0E25\u0E30\u0E1C\u0E39\u0E49\u0E40\u0E25\u0E48\u0E32\u0E40\u0E23\u0E37\u0E48\u0E2D\u0E07\u0E2D\u0E32\u0E23\u0E21\u0E13\u0E4C\u0E02\u0E31\u0E19\u0E0A\u0E32\u0E27\u0E2D\u0E31\u0E07\u0E01\u0E24\u0E29"@th ,
+		"\u0438\u043D\u0433\u043B\u0438\u0437 \u044F\u0437\u0443\u0447\u044B\u0441\u044B, \u0434\u0440\u0430\u043C\u0430\u0442\u0443\u0440\u0433 \u04BB\u04D9\u043C \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u0441\u0442"@tt ,
+		"Eng-kok b\u00FBn-ha\u030Dk-ka, chh\u00F9-b\u012B chok-ka (1952\u20132001)"@nan ,
+		"skrivagner saoznek"@br ,
+		"\u078D\u07A8\u0794\u07AA\u0782\u07B0\u078C\u07AC\u0783\u07A8\u0787\u07AC\u0787\u07B0"@dv ,
+		"\u10D8\u10DC\u10D2\u10DA\u10D8\u10E1\u10D4\u10DA\u10D8 \u10DB\u10EC\u10D4\u10E0\u10D0\u10DA\u10D8 \u10D3\u10D0 \u10D8\u10E3\u10DB\u10DD\u10E0\u10D8\u10E1\u10E2\u10D8"@ka ,
+		"escritor y humorista brit\u00E1nico"@es ,
+		"Siliminsili buku sabra kabi d\u0254\u0263\u0254 (1952-2001)"@dag ,
+		"nh\u00E0 v\u0103n v\u00E0 nh\u00E0 so\u1EA1n h\u00E0i k\u1ECBch ng\u01B0\u1EDDi Anh (1952-2001)"@vi ,
+		"\u0A85\u0A82\u0A97\u0ACD\u0AB0\u0AC7\u0A9C\u0AC0 \u0AB2\u0AC7\u0A96\u0A95 \u0A85\u0AA8\u0AC7 \u0AB9\u0ABE\u0AB8\u0ACD\u0AAF\u0A95\u0ABE\u0AB0"@gu ,
+		"awdur a dychanwr Seisnig"@cy ,
+		"britsk\u00FD spisovatel, humorista a dramatik"@cs ,
+		"\u0905\u0902\u0917\u094D\u0930\u0947\u091C\u0940 \u0932\u0947\u0916\u0915"@hi ,
+		"mwandishi Mwingereza"@sw ,
+		"\u00FChteks kaiki\u0161 tetabambi\u0161p\u00E4i"@vep ,
+		"\u0430\u043D\u0433\u043B\u0438\u0439\u0441\u043A\u0438 \u043F\u0438\u0441\u0430\u0442\u0435\u043B \u0438 \u0445\u0443\u043C\u043E\u0440\u0438\u0441\u0442"@bg ,
+		"idazle eta umorista britaniarra"@eu ,
+		"\u0386\u03B3\u03B3\u03BB\u03BF\u03C2 \u03C3\u03C5\u03B3\u03B3\u03C1\u03B1\u03C6\u03AD\u03B1\u03C2"@el ,
+		"sgr\u00ECobhadair Sasannach"@gd ,
+		"taga-Inglatera na manunulat at tagapagpatawa"@tl ,
+		"\u0430\u043D\u0433\u043B\u0438\u0441\u043A\u0438 \u043F\u0438\u0441\u0430\u0442\u0435\u043B \u0438 \u0445\u0443\u043C\u043E\u0440\u0438\u0441\u0442"@mk ,
+		"escritor e comediante brit\u00E2nico (1952\u20132001)"@pt ,
+		"\u00E9crivain et humoriste anglais (1952\u20132001)"@fr ,
+		"\u0643\u0627\u062A\u0628 \u0625\u0646\u062C\u0644\u064A\u0632\u064A \u0641\u0643\u0627\u0647\u064A"@ar ,
+		"scriitor, dramaturg englez"@ro ,
+		"engleski pisac i humorist"@bs ,
+		"a englischer Science-Fiction-Schriftsteller"@bar ,
+		"angol \u00EDr\u00F3 \u00E9s humorista (1952\u20132001)"@hu ,
+		"\u82F1\u570B\u6587\u5B78\u5BB6\u3001\u5E7D\u9ED8\u4F5C\u5BB6 (1952\u20132001)"@zh ,
+		"\u0D89\u0D82\u0D9C\u0DCA\u200D\u0DBB\u0DD3\u0DC3\u0DD2 \u0D9A\u0DC0\u0DD2\u0DBA\u0DD9\u0D9A\u0DCA"@si ,
+		"escriptor angl\u00E8s"@ca ,
+		"angle\u0161ki pisatelj, humorist in dramatik (1952\u20132001)"@sl ,
+		"britischer Schriftsteller"@gsw ,
+		"\u1C64\u1C5D\u1C5E\u1C64\u1C65 \u1C69\u1C6D\u1C66\u1C5F\u1C79\u1C68 \u1C65\u1C5F\u1C6C\u1C6E\u1C65 \u1C5A\u1C71\u1C5A\u1C5E\u1C64\u1C6D\u1C5F\u1C79 \u1C5F\u1C68 \u1C5E\u1C5F\u1C78\u1C6B\u1C5F \u1C68\u1C69\u1C65\u1C64\u1C60\u1C5F"@sat ,
+		"\u0C07\u0C02\u0C17\u0C4D\u0C32\u0C40\u0C37\u0C41 \u0C30\u0C1A\u0C2F\u0C3F\u0C24, \u0C39\u0C3E\u0C38\u0C4D\u0C2F\u0C15\u0C3E\u0C30\u0C41\u0C21\u0C41"@te ,
+		"\u0430\u043D\u0433\u043B\u0438\u0439\u0441\u043A\u0438\u0439 \u043F\u0438\u0441\u0430\u0442\u0435\u043B\u044C, \u0434\u0440\u0430\u043C\u0430\u0442\u0443\u0440\u0433 \u0438 \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u0441\u0442, \u0430\u0432\u0442\u043E\u0440 \u0441\u0435\u0440\u0438\u0438 \u043A\u043D\u0438\u0433 \u00AB\u0410\u0432\u0442\u043E\u0441\u0442\u043E\u043F\u043E\u043C \u043F\u043E \u0433\u0430\u043B\u0430\u043A\u0442\u0438\u043A\u0435\u00BB"@ru ,
+		"inglise ulmekirjanik"@et ,
+		"brittil\u00E4inen kirjailija ja humoristi"@fi ,
+		"\u0130ngiliz bilim kurgu ve mizah yazar\u0131"@tr ,
+		"autor dhe humorist anglez"@sq ,
+		"\u0561\u0576\u0563\u056C\u056B\u0561\u0581\u056B \u0563\u0580\u0578\u0572, \u0564\u0580\u0561\u0574\u0561\u057F\u0578\u0582\u0580\u0563, \u057D\u0581\u0565\u0576\u0561\u0580\u056B\u057D\u057F, \u00AB\u0531\u057E\u057F\u0578\u057D\u057F\u0578\u057A\u0578\u057E \u0566\u0562\u0578\u057D\u0561\u0577\u0580\u057B\u056B\u056F\u056B \u0574\u056B\u057B\u0563\u0561\u056C\u0561\u056F\u057F\u056B\u056F\u0561\u056F\u0561\u0576 \u0578\u0582\u0572\u0565\u0581\u0578\u0582\u0575\u0581\u00BB \u057E\u0565\u057A\u0565\u0580\u056B \u0577\u0561\u0580\u0584"@hy ,
+		"\u092C\u094D\u0930\u093F\u091F\u093F\u0936 \u0932\u0947\u0916\u0915 \u0935 \u0928\u093E\u091F\u0915\u0915\u093E\u0930"@mr ,
+		"brytyjski pisarz"@pl ,
+		"Enskur h\u00F6fundur"@is ,
+		"\u05E1\u05D5\u05E4\u05E8 \u05D5\u05D4\u05D5\u05DE\u05D5\u05E8\u05D9\u05E1\u05D8\u05DF \u05D1\u05E8\u05D9\u05D8\u05D9"@iw ,
+		"English science fiction writer and humorist (1952\u20132001)"@en ,
+		"\u0B86\u0B99\u0BCD\u0B95\u0BBF\u0BB2 \u0B8E\u0BB4\u0BC1\u0BA4\u0BCD\u0BA4\u0BBE\u0BB3\u0BB0\u0BCD \u0BAE\u0BB1\u0BCD\u0BB1\u0BC1\u0BAE\u0BCD \u0BA8\u0B95\u0BC8\u0B9A\u0BCD\u0B9A\u0BC1\u0BB5\u0BC8\u0BAF\u0BBE\u0BB3\u0BB0\u0BCD"@ta ,
+		"Engelse skrywer en humoris (1952\u20132001)"@af ,
+		"\u0C87\u0C82\u0C97\u0CCD\u0CB2\u0CBF\u0CB7\u0CCD \u0CAD\u0CBE\u0CB7\u0CC6\u0CAF \u0CAC\u0CB0\u0CB9\u0C97\u0CBE\u0CB0 \u0CB9\u0CBE\u0C97\u0CC2 \u0CB9\u0CBE\u0CB8\u0CCD\u0CAF \u0CB2\u0CC7\u0C96\u0C95"@kn ,
+		"brittisk f\u00F6rfattare (1952\u20132001)"@sv ,
+		"\u0A05\u0A70\u0A17\u0A30\u0A47\u0A1C\u0A3C\u0A40 \u0A32\u0A47\u0A16\u0A15"@pa ,
+		"Engiresini \u0254kyer\u025Bwfo ne aseres\u025Bm kyer\u025Bwfo (1952\u20132001)"@tw ;
+	dbo:thumbnail	<http://commons.wikimedia.org/wiki/Special:FilePath/Douglas_adams_portrait_cropped.jpg?width=300> .
+@prefix dbt:	<http://dbpedia.org/resource/Template:> .
+dbr:Douglas_Adams	dbp:wikiPageUsesTemplate	dbt:S-ttl ,
+		dbt:Authority_control ,
+		dbt:S-start ,
+		dbt:S-aft ,
+		dbt:S-bef ,
+		dbt:S-end ,
+		dbt:Cite_web ,
+		dbt:Dirk_Gently ,
+		dbt:Use_dmy_dates ,
+		dbt:Wikiquote ,
+		dbt:HitchhikerBooks ,
+		dbt:Reflist ,
+		dbt:Short_description ,
+		dbt:Refbegin ,
+		dbt:Refend ,
+		dbt:Convert ,
+		dbt:ISBN ,
+		dbt:Main ,
+		dbt:Death_date_and_age ,
+		dbt:Birth_date ,
+		dbt:Infobox_writer ,
+		dbt:Use_British_English ,
+		dbt:Other_people ,
+		dbt:Commons_category ,
+		dbt:Coord ,
+		dbt:TED_speaker ,
+		dbt:As_written ,
+		dbt:Douglas_Adams ,
+		dbt:Official_website ,
+		dbt:Cite_book ,
+		dbt:Infocom_games ,
+		dbt:Cite_magazine ,
+		dbt:British_Comedy_Guide ,
+		dbt:Snf ,
+		dbt:Webarchive ,
+		dbt:Library_resources_box ,
+		dbt:IMDb_name ,
+		dbt:CN ,
+		dbt:Cite_ODNB ,
+		dbt:URL ,
+		dbt:Citation ,
+		dbt:ISBNT ,
+		dbt:Inkpot_Award_1980s ,
+		dbt:Nom ;
+	dbp:genre	"Science fiction, comedy, satire"@en ;
+	dbp:date	"2013-03-02"^^xsd:date ,
+		"2008-01-29"^^xsd:date ,
+		"2011-07-20"^^xsd:date ;
+	dbp:birthDate	"1952-03-11"^^xsd:date ;
+	dbo:award	dbr:Inkpot_Award ;
+	dbp:awards	dbr:Inkpot_Award ;
+	dbp:name	"Douglas Adams"@en ;
+	dbp:birthPlace	"Cambridge, England"@en ;
+	dbp:title	"Adams's official web site"@en ,
+		"Doctor Who script editor"@en ;
+	dbp:years	1979 ;
+	dbo:birthPlace	dbr:Cambridge ;
+	dbo:birthDate	"1952-03-11"^^xsd:date ;
+	dbo:deathDate	"2001-05-11"^^xsd:date ;
+	dbp:deathPlace	"Santa Barbara, California, U.S."@en ;
+	dbp:deathDate	"2001-05-11"^^xsd:date .
+@prefix ns79:	<http://www.w3.org/2006/03/wn/wn20/instances/> .
+dbr:Douglas_Adams	dbp:wordnet_type	ns79:synset-writer-noun-1 ;
+	dbp:birthName	"Douglas Noel Adams"@en ;
+	dbp:yearsActive	1974 ;
+	dbp:url	<https://web.archive.org/web/20110720193159/http:/www.douglasadams.com/> ,
+		<https://web.archive.org/web/20130302151540/http:/www.biota.org/people/douglasadams/> ,
+		<https://web.archive.org/web/20080129164511/http:/www.biota.org/podcast/%23DNA> ;
+	dbp:label	"Douglas Adams"@en ;
+	dbo:deathPlace	<http://dbpedia.org/resource/Santa_Barbara_County,_California> ;
+	dbp:occupation	"humorist"@en ,
+		"dramatist"@en ,
+		"essayist"@en ,
+		"screenwriter"@en ,
+		""@en ,
+		"satirist"@en ,
+		"Author"@en ;
+	dbp:almaMater	<http://dbpedia.org/resource/St_John\u0027s_College,_Cambridge> ;
+	dbo:almaMater	<http://dbpedia.org/resource/St_John\u0027s_College,_Cambridge> ;
+	dbp:spouse	""@en ,
+		"Jane Belson"@en ,
+		"1991-11-25"^^xsd:date .
+@prefix gold:	<http://purl.org/linguistics/gold/> .
+dbr:Douglas_Adams	gold:hypernym	dbr:Writer ;
+	foaf:isPrimaryTopicOf	wikipedia-en:Douglas_Adams .
+@prefix ogcgs:	<http://www.opengis.net/ont/geosparql#> .
+dbr:Douglas_Adams	geo:geometry	"POINT(-48.662223815918 -27.589389801025)"^^ogcgs:wktLiteral ;
+	dbp:viaf	113230702 ;
+	schema:sameAs	<http://viaf.org/viaf/113230702> ;
+	dbo:occupation	dbr:List_of_humorists ;
+	dbp:restingPlace	"Highgate Cemetery, London"@en ;
+	dbo:restingPlace	dbr:Highgate_Cemetery ;
+	dbp:signature	"Douglas Adams Unterschrift .jpg"@en ;
+	dbp:notablework	"The Hitchhiker's Guide to the Galaxy"@en ;
+	dbp:by	"yes"@en ;
+	dbp:children	1 ;
+	dbo:birthName	"Douglas Noel Adams"@en .
+<http://dbpedia.org/resource/The_Hitchhiker\u0027s_Guide_to_the_Galaxy>	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbp:creator	dbr:Douglas_Adams .
+dbr:Culture_of_Dorset	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Cricket_in_fiction	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/List_of_English_writers_(A\u2013C)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Richard_Dawkins	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Neil_Gaiman_bibliography	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Christopher_Priest_(novelist)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Restaurant_at_the_End_of_the_Universe	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:author	dbr:Douglas_Adams ;
+	dbp:author	dbr:Douglas_Adams .
+dbr:Misotheism	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/2009_in_British_television>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+@prefix ns82:	<http://dbpedia.org/resource/A_Liar\u0027s_Autobiography:> .
+ns82:_Volume_VI	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:To_a_Mouse	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Burkiss_Way	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Eyre_Affair	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Meaning_of_Liff	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbp:author	dbr:Douglas_Adams .
+dbr:Randal_Graham	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Religious_satire	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Brian_Cox_(physicist)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Bernard_McKenna_(writer)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Duck_test	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Simon_Jones_(actor)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/The_Hitchhiker\u0027s_Guide_to_the_Galaxy_(radio_series)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:creator	dbr:Douglas_Adams ;
+	dbp:creator	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Discworld_(video_game)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Doctor_in_the_House_(franchise)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Douglas_Adams\u0027s_Guide_to_The_Hitchhiker\u0027s_Guide_to_the_Galaxy>	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:author	dbr:Douglas_Adams .
+dbr:List_of_British_comedians	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Branwell_Bront\u00EB>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Three-letter_acronym	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:David_Quantick	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Trees_A_Crowd	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Catherine_(video_game)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Gin_and_tonic	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Uncivilization_(manifesto)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:AppleMasters	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Gerald_Arpino	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Nosy_Mangabe	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Sniglet	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/The_Late_Philip_J._Fry>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Starstruck_(play)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:H2g2	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:author	dbr:Douglas_Adams ;
+	dbp:author	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Meanings_of_minor_planet_names:_266001\u2013267000>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Hugo_Award_for_Best_Dramatic_Presentation	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Tablet_computer	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Southend-on-Sea	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Islington	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/List_of_fiction_works_made_into_feature_films_(D\u2013J)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_comedians	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Hitch-hiker\u0027s_Guide_to_Europe>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Conjoined_twins	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Oscar_Chichoni	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Hitchhiking	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+@prefix ns83:	<http://dbpedia.org/resource/List_of_acronyms:> .
+ns83:_D	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Achewood	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Highgate	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Parallel_universes_in_fiction	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Charles_Thomson_(artist)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_films_based_on_radio_series	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_unmade_Doctor_Who_serials_and_films	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_Doctor_Who_audio_plays_by_Big_Finish	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_Doctor_Who_audiobooks	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_Doctor_Who_radio_stories	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Geoffrey_McGivern	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Maria_Alexander	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Symbiosis_in_fiction	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Psychic_detective	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Eoin_Colfer	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Peter_Jones_(actor)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Break_the_Science_Barrier	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:starring	dbr:Douglas_Adams ;
+	dbp:starring	dbr:Douglas_Adams .
+dbr:Week_Ending	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Matt_Jones_(writer)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Fiordland_brotula	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Space_Museum	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:LucasArts_adventure_games	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Person_from_Porlock	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Michael_Bywater	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Steve_Meretzky	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Last_Chance_to_See	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:author	dbr:Douglas_Adams .
+dbr:Struan_Sutherland	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/List_of_k\u0101k\u0101p\u014D>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Last_Chance_to_See__Last_Chance_to_See__1	dbo:starring	dbr:Douglas_Adams .
+dbr:Vogon	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Chris_Brookmyre	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Graham_Chapman	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Monty_Python	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Monty_Python\u0027s_Flying_Circus>	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:author	dbr:Douglas_Adams .
+dbr:Terry_Jones	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Stellaris_(video_game)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:AC_adapter	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Titanic_in_popular_culture	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/1979_in_literature>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Anton_Zeilinger	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_American_films_of_2005	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_20th-century_writers	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Brentwood,_Essex>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Command-line_interface	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Nonsense	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/List_of_Private_Passions_episodes_(1995\u20131999)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Infinite_monkey_theorem_in_popular_culture	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Pierre_Menard,_Author_of_the_Quixote>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Derek_Muller	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Falcon_Heavy_test_flight	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Howard_Overman	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Bartleby,_the_Scrivener>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Mostly_Harmless	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:author	dbr:Douglas_Adams ;
+	dbp:author	dbr:Douglas_Adams .
+dbr:Fictional_currency	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Grand_Hotel_(album)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_Doctor_Who_audio_releases	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Peter_Mennim	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Babel_Fishh	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Injury_Time_(radio_series)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:writer	dbr:Douglas_Adams .
+dbr:John_Nathan-Turner	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:University_of_Cambridge	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/1982_in_the_United_Kingdom>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Do-Re-Mi	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Level_42	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/1952_in_radio>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Simulated_reality_in_fiction	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Puddle	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_humorous_units_of_measurement	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/List_of_works_by_Stanis\u0142aw_Lem_and_their_adaptations>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Adams_(surname)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Pilot_(Preacher)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Nonsense_verse	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Norse_mythology_in_popular_culture	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Murmansk_Airport	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/List_of_fictional_presidents_of_the_United_States_(G\u2013H)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Liff,_Angus>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Deaths_in_May_2001	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Adam_Rex	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Triumph_of_the_Nerds	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Loudest_band	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/25924_Douglasadams>	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbp:namedAfter	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Warmonger_(novel)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Lisi_Mangold	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Dirk_Gently	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Cambridge	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Doug_Fine	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Patient_Abuse	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Neil_Innes	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Footlights	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_fictional_diseases	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/List_of_Monty_Python\u0027s_Flying_Circus_episodes>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_satirists_and_satires	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+@prefix ns84:	<http://dbpedia.org/resource/Monty_Python\u0027s_Flying_Circus:> .
+ns84:_Just_the_Words	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Polymelia	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Album_of_the_Soundtrack_of_the_Trailer_of_the_Film_of_Monty_Python_and_the_Holy_Grail	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Out_of_the_Trees	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:author	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Not_the_Nine_O\u0027Clock_News>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+ns74:_A_Novel	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_fictional_private_investigators	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_Easter_eggs_in_Tesla_products	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Cultural_depictions_of_George_III	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Magnetic_Scrolls	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_text-based_computer_games	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Index_of_DOS_games_(H)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Dirk_Maggs	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Aphorism	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/1987_in_video_games>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Space_pirate	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/John_Lloyd_(producer)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Tom_Baker	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Cranleigh	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Badlesmere,_Kent>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_fictional_psychiatrists	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Save_the_Rhino	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Virtual_Revolution	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:From_Hell	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/The_Skeptics\u0027_Guide_to_the_Universe>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Adrian_Malone	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Literary_nonsense	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Kevin_Davies_(director)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Joseph_Costello_(software_executive)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Interdimensional_being	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Starbar	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+ns73:_The_Original_Radio_Scripts	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Robert_Marks_(management)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:May_25	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Cultured_meat	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_English-language_poets	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Friday_Night,_Saturday_Morning>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:March_11	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/2001>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Lalla_Ward	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:May_11	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/St_John\u0027s_College,_Cambridge>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Montecito,_California>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Daily_Nexus	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_non-fiction_writers	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Everyman	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:BSFA_Award	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_English_novelists	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/1984_in_the_United_Kingdom>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Museum_of_Pop_Culture	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Mighty_Boosh	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_former_Footlights_members	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Stalbridge	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Ed_Victor	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Romana_(Doctor_Who)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Anthony_Read	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbp:after	dbr:Douglas_Adams .
+dbr:Doctor_Who_spin-offs	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Josiah_Bancroft	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Mark_Wing-Davey	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Thursday	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:ClueQuest	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Christian_Ulmen	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Raincloud_Man	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Ambient_intelligence	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/The_Hitchhiker\u0027s_Guide_to_the_Galaxy_Tertiary_to_Hexagonal_Phases>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/The_Hitchhiker\u0027s_Guide_to_the_Galaxy_cast_lists>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Robert_Duncan_(actor)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:British_television_science_fiction	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Sverre_Knudsen	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Suffian_Hakim	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Meaning_of_Liff__The_Meaning_of_Liff__1	dbo:author	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/1970s>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_travel_books	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Tor_Books	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:I_Ching	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_apocalyptic_and_post-apocalyptic_fiction	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Doctor_Who	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Timeline_of_science_fiction	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Invader_Zim	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_years_in_literature	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/108_(number)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:English_novel	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Twentieth-century_English_literature	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:British_literature	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Origin_of_Consciousness_in_the_Breakdown_of_the_Bicameral_Mind	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Thug_Notes	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/List_of_Desert_Island_Discs_episodes_(2001\u20132010)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_fictional_dogs_in_prose_and_poetry	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Encyclopedia	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Alan_Moore	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_Apple_II_games	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/List_of_games_on_I\u0027m_Sorry_I_Haven\u0027t_a_Clue>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/List_of_Desert_Island_Discs_episodes_(1991\u20132000)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Great_Lives	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/List_of_multimedia_franchises_originating_in_games,_toys,_and_merchandise>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/1952>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Tredegar	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:J-Hope	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Natalia_Magnat	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/George_Watson_(scholar)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Charlie_Bean_(economist)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Brentwood_School,_Essex>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_fictional_Cambridge_colleges	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Dirk_Gently\u0027s_Holistic_Detective_Agency>	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbp:writer	dbr:Douglas_Adams ;
+	dbo:author	dbr:Douglas_Adams ;
+	dbp:author	dbr:Douglas_Adams .
+dbr:Geoffrey_Perkins	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Jon_Canter	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Professor_Chronotis	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Publius_Enigma	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Baron_of_Beef	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/1952_in_British_radio>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Meanings_of_minor_planet_names:_25001\u201326000>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Leigh_Blackmore	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Creature_Features	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Pink_Floyd	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/1983_in_comics>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Mavis_Enderby	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_BBC_Radio_4_programmes	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Stark_(novel)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Sonny_Mehta	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Babbel	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_people_from_the_London_Borough_of_Islington	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Idiot-proof	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Hypermedia	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Online_encyclopedia	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Lethal_Inspection	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Big_Read	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_fictional_British_and_Irish_universities	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Jabberwocky	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Big_Read_(Hungarian)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Peter_Fincham	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Detective_fiction	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/List_of_fantasy_novels_(A\u2013H)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_fantasy_authors	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_science_fiction_and_fantasy_detectives	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Discworld	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Chris_Riddell	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/1987_in_literature>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Interactive_fiction	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Greg_Rucka	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_religious_ideas_in_science_fiction	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Science_fiction_comedy	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Garth_Jennings	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Occult_detective_fiction	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/James_Coombes_(actor)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/359_(number)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/42_(school)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/1952_in_the_United_Kingdom>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Trillium_Digital_Systems	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Ursula_Dirichs	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Baiji	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Carl_G._Jones>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Snowmen	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:A_True_Story	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Mighty_Book_of_Boosh	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/The_Hitchhiker\u0027s_Guide_to_the_Galaxy_(novel)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:author	dbr:Douglas_Adams ;
+	dbp:author	dbr:Douglas_Adams .
+dbr:Nev_Fountain	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Starstruck_(comics)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Doctor_Snuggles	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbp:writer	dbr:Douglas_Adams ;
+	dbo:author	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Don\u0027t_Panic:_The_Official_Hitchhiker\u0027s_Guide_to_the_Galaxy_Companion>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Bruce_Hyman	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/18610_Arthurdent>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Aaron_Duran	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/1978>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:San_Diego_Comic-Con	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Criticism_of_religion	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Erechthias	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/I_Ching\u0027s_influence>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Announcer\u0027s_test>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:IBM_Watson	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Outline_of_natural_language_processing	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Shoeburyness	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:BBC_Online	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Zooey_Deschanel	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Gweek	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Nacton	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_Have_I_Got_News_for_You_episodes	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Timeline_of_BBC_Two	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Lists_of_holidays	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/1977_in_literature>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Pan_Books	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/List_of_Desert_Island_Discs_episodes_(2011\u20132020)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Edward_Pilgrim	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Graham_Williams_(television_producer)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Ken_Grieve	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Voyager_Company	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/The_Time_Traveler\u0027s_Almanac>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Pronunciation_of_%22www%22>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Babel_Fish_(website)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/The_Hitchhiker\u0027s_Guide_to_the_Galaxy_Primary_and_Secondary_Phases>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Ford_Prefect	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:John_Dimes	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Sally_Emerson	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Big_Read_(Bulgaria)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Perry_DeAngelis	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Destiny_of_the_Daleks	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbp:scriptEditor	dbr:Douglas_Adams .
+dbr:The_Pirate_Planet	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbp:writer	dbr:Douglas_Adams .
+dbr:InteGrate	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/M._J._Simpson>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Brief_Candle_in_the_Dark	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/M_(comic_strip)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Moving_sofa_problem	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Douglas_Adams_(disambiguation)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:wikiPageDisambiguates	dbr:Douglas_Adams .
+dbr:Jane_Belson	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Adams,_Douglas>	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:wikiPageRedirects	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Adams,_Douglas_Noel>	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:wikiPageRedirects	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Adams,_Douglas_No\u00EBl>	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:wikiPageRedirects	dbr:Douglas_Adams .
+dbr:Adamsian	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:wikiPageRedirects	dbr:Douglas_Adams .
+dbr:Bop_Ad	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:wikiPageRedirects	dbr:Douglas_Adams .
+dbr:Douglas_Adams_Biography	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:wikiPageRedirects	dbr:Douglas_Adams .
+dbr:Douglas_Adams_bibliography	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:wikiPageRedirects	dbr:Douglas_Adams .
+dbr:Douglas_Noel_Adams	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:wikiPageRedirects	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Douglas_No\u00EBl_Adams>	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:wikiPageRedirects	dbr:Douglas_Adams .
+dbr:Douglas_adams	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:wikiPageRedirects	dbr:Douglas_Adams .
+dbr:Douglass_adams	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:wikiPageRedirects	dbr:Douglas_Adams .
+dbr:English_people	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Apocalyptic_and_post-apocalyptic_fiction	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Bloom_County	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Blowin\u0027_in_the_Wind>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:City_of_Death	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Monty_Python\u0027s_The_Meaning_of_Life>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Starship_Titanic	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:writer	dbr:Douglas_Adams ;
+	dbp:designer	dbr:Douglas_Adams ;
+	dbo:composer	dbr:Douglas_Adams ;
+	dbo:designer	dbr:Douglas_Adams .
+dbr:Absolutely_Anything	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/2001_in_radio>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Time_Lord	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Fourth_Doctor	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Highgate_Cemetery	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/K\u0101k\u0101p\u014D>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Cetacea	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Unicorn_and_the_Wasp	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Adam_Rutherford	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_South_Bank_Show	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Sums_of_three_cubes	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Lost_in_a_Good_Book	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Christopher_Moore_(author)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Hell_Bent_for_Letters	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Dirk_Gently\u0027s_Holistic_Detective_Agency_(TV_series)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Vancouver_Public_Library	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Set_the_Controls_for_the_Heart_of_the_Sun	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/1992_in_the_United_Kingdom>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Bernie_Leadon_discography	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Goosnargh	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Sheila_Steafel	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Ghost_Light_(Doctor_Who)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Bluebottle_(character)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Jason_Cosmo	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Geoff_Atkinson	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Laschamp_event	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Ainderby_Quernhow	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Wiener\u2013Araya_graph>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/David_Tate_(actor)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Innsbruck	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:January_1981	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/David_Morley_(writer)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:BBC_Radio	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Robert_Sheckley	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_prostitutes_and_courtesans	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_animal_rights_advocates	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Wikipedia_in_culture	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Fabian_Hamilton	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:David_Gilmour	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/High_Hopes_(Pink_Floyd_song)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Division_Bell	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:St_Pancras_Renaissance_London_Hotel	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/List_of_atheists_in_film,_radio,_television_and_theater>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Arthur_Byron_Cover	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Jim_Jorgensen	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Supersoft	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Ian_McNeice	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Richard_Hope_(actor)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Coming_of_the_Terraphiles	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Gareth_Roberts_(writer)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Past_Doctor_Adventures	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Jonathan_Morris_(author)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Shaggy_God_story	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Deep_Thought_(chess_computer)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:SCO_Forum	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Creature_from_the_Pit	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbp:scriptEditor	dbr:Douglas_Adams .
+dbr:Dagenham_Girl_Pipers	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Doctor_Poo_(radio_series)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Startopia	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Layered_Image_File_Format	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/The_Hitchhiker\u0027s_Guide_to_the_Galaxy_(fictional)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:creator	dbr:Douglas_Adams ;
+	dbp:creator	dbr:Douglas_Adams .
+dbr:Hitchcon	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Josh_Fix	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Mouseland	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Young_Zaphod_Plays_It_Safe	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Pseudonym	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:World_Wide_Web	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Joanna_Lumley	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/The_Hitchhiker\u0027s_Guide_to_the_Galaxy_(film)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:writer	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/List_of_Desert_Island_Discs_episodes_(1981\u20131990)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Simulated_reality	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_best-selling_books	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Algorithmic_efficiency	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Comic_novel	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/2001_in_literature>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Grammy_Award_for_Best_Audio_Book,_Narration_&_Storytelling_Recording>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Max_Landis	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_fictional_bars_and_pubs	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/The_Gathering_(LAN_party)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Liar_paradox	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+@prefix ns85:	<http://dbpedia.org/resource/List_of_authors_by_name:> .
+ns85:_A	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Simon_Rich	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Mike_Omer	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/John_Dies_at_the_End_(film)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Betelgeuse	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Alternate_reality_game	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_God_Delusion	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Cynthia_Heimel	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Time_travel_in_fiction	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:OK_Computer	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Evan_Mandery	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Roger_Highfield	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:History_of_Google	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:History_of_alternate_reality_games	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Brian_Blessed	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Falling_Hare	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Elon_Musk\u0027s_Tesla_Roadster>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Holloway,_London>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Maynard_(broadcaster)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_supplementary_Doctor_Who_episodes	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Creatures_(video_game_series)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Anand_Gandhi	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:History_of_Doctor_Who	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/The_End_of_the_World_(Doctor_Who)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Hyperland	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbp:presenter	dbr:Douglas_Adams ;
+	dbo:presenter	dbr:Douglas_Adams ;
+	dbo:author	dbr:Douglas_Adams .
+dbr:Timeline_of_hypertext_technology	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Rock_Bottom_Remainders	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Armageddon_Factor	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbp:scriptEditor	dbr:Douglas_Adams .
+dbr:The_Salmon_of_Doubt	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:author	dbr:Douglas_Adams ;
+	dbp:author	dbr:Douglas_Adams .
+dbr:Didcot	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Adventure_Game	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Black_Cinderella_Two_Goes_East	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Classic_Text_Adventure_Masterpieces_of_Infocom	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Life,_the_Universe_and_Everything>	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:author	dbr:Douglas_Adams ;
+	dbp:author	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Dirk_Gently_(TV_series)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Mary_Allen	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Journey_of_the_Sorcerer	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Wish_You_Were_Here	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Doctor_Who_fandom	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_chatbots	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:So_Long_and_Thanks_for_All_the_Shoes	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Kiitoksia	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Huntsham_Court	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Dorset	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Wikipedia	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/2001_in_the_United_Kingdom>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Woking	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Where_no_man_has_gone_before	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Fictional_book	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:A_Rainbow_in_Curved_Air	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Infocom	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/1990_in_literature>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Andrew_McGibbon	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/2017_in_British_radio>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/One-Trick_Pony_(album)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Halma	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Samuel_Barnett_(actor)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:William_Todd-Jones	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Sandra_Dickinson	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Unbound_(publisher)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Ballycumber	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Pilot_(Dirk_Gently)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbp:story	dbr:Douglas_Adams .
+dbr:List_of_language_interpreters_in_fiction	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Octet_(musical)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Ford_Prefect_(character)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:creator	dbr:Douglas_Adams ;
+	dbp:creator	dbr:Douglas_Adams .
+dbr:Meirion_Jones	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Towel_Day	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:country	dbr:Douglas_Adams ;
+	dbo:similar	dbr:Douglas_Adams ;
+	dbp:relatedto	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/The_Hitchhiker\u0027s_Guide_to_the_Future>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_minor_planets_named_after_people	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Outline_of_robotics	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_organisms_named_after_works_of_fiction	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Guildford	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Meaning_of_life	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Schr\u00F6dinger\u0027s_cat_in_popular_culture>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Zebra_crossing	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Prisoners_of_Gravity	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/The_Hitchhiker\u0027s_Guide_to_the_Galaxy_(TV_series)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:creator	dbr:Douglas_Adams ;
+	dbp:creator	dbr:Douglas_Adams .
+dbr:Jane_Horrocks	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Eleanor_Bron	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_fictional_rodents_in_literature	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Stylite	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/And_Another_Thing..._(novel)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Timeline_of_The_Hitchhiker\u0027s_Guide_to_the_Galaxy_versions>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Dugan	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Doctor_on_the_Go	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/The_Atheist\u0027s_Guide_to_Christmas>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_non-fiction_environmental_writers	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Upper_Street	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/The_Hitchhiker\u0027s_Guide_to_the_Galaxy_(video_game)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbp:designer	dbr:Douglas_Adams ;
+	dbo:designer	dbr:Douglas_Adams .
+dbr:Robbie_Stamp	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Private_Life_of_Genghis_Khan	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Frank_Wedekind	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Inkpot_Award	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Life,_the_Universe,_&_Everything>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:BayCon	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_atheist_authors	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Literary_Wonderlands	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Ancient_astronauts_in_popular_culture	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/1978_in_literature>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Fictional_planets_of_the_Solar_System	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_science_fiction_comedy_works	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_science-fiction_authors	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_fictional_computers	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Take_me_to_your_leader_(phrase)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_science_fiction_short_stories	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Wizards_of_Odd	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_science_fiction_novels	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:SF_Masterworks	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Bureaucracy_(video_game)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbp:designer	dbr:Douglas_Adams ;
+	dbo:designer	dbr:Douglas_Adams .
+dbr:Immortality_in_fiction	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_fictional_universes_in_literature	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_time_travel_works_of_fiction	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Ditmar_Award_results	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Hour_25	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Profanity_in_science_fiction	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Stars_and_planetary_systems_in_fiction	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Orders_of_magnitude_(numbers)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Dark_Night_of_the_Soul	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_University_of_Cambridge_people	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Mill_Road,_Cambridge>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Growing_Up_in_the_Universe	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/List_of_alumni_of_St_John\u0027s_College,_Cambridge>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Alojz_Kodre	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Rickmansworth	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:River_dolphin	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Paul_Rosenstein-Rodan	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:FullWrite_Professional	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Phrases_from_The_Hitchhiker\u0027s_Guide_to_the_Galaxy>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Somerset_College	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Anthony_Howell_(actor)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Rime_of_the_Ancient_Mariner_in_popular_culture	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:MindGym	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Snowclone	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Sunset_at_Blandings	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Helen_Mirren	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Mathematical_joke	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:List_of_humorists	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Mark_Carwardine	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/2008_Haltemprice_and_Howden_by-election>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Stephen_Fry_bibliography_and_filmography	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+ns71:_The_Computer_Game	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:designer	dbr:Douglas_Adams .
+dbr:Folio_Society	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Jacques_Sternberg	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/1980_in_the_United_Kingdom>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Evolutionary_origin_of_religions	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Stephen_Mangan	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Bidenichthys_beeblebroxi	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:TriadCity	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Shehan_Karunatilaka	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Thomas_Thwaites_(designer)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Zero_Punctuation	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Andrew_Marshall_(screenwriter)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Arthur_Dent	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:creator	dbr:Douglas_Adams ;
+	dbp:creator	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/So_Long,_and_Thanks_for_All_the_Fish>	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:author	dbr:Douglas_Adams ;
+	dbp:author	dbr:Douglas_Adams .
+dbr:Douglas_Adams_at_the_BBC	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Jeff_Strand	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Blackmore_Vale	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Mad_Cow-Girl	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Quote..._Unquote>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/MarsCon_(Bloomington,_Minnesota)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Hour_of_the_Wolf_(radio_show)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Blithbury	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:David_Agnew	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Gary_Cox_(philosopher)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+ns72:_A_Biography_of_Douglas_Adams	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:nonFictionSubject	dbr:Douglas_Adams ;
+	dbp:subject	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Dirk_(play)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Doctor_Who_(season_18)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/The_Long_Dark_Tea-Time_of_the_Soul_(radio_serial)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Long_Dark_Tea-Time_of_the_Soul	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:author	dbr:Douglas_Adams ;
+	dbp:author	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Sky_Pirates!>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Babel_Fish_(band)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Doctor_Who_(season_16)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Nightmare_of_Eden	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbp:scriptEditor	dbr:Douglas_Adams .
+@prefix ns86:	<http://dbpedia.org/resource/BBC_Sound_Effects_No._26:> .
+ns86:_Sci-Fi_Sound_Effects	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Forbidden_Planet_(retail_store)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Gone-Away_World	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Phil_Janes	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Waiting_for_the_Galactic_Bus	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Alien_language_in_science_fiction	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Slartibartfast	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbo:creator	dbr:Douglas_Adams ;
+	dbp:creator	dbr:Douglas_Adams .
+dbr:Dimension_of_Miracles	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Galaxy_Award_(China)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Antipope	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Man_from_Primrose_Lane	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Sirens_of_Titan	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Bubonicon	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Wormery	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Doctor_Who_(season_17)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Life_on_Other_Planets	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:MTropolis	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:IAAA	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Florian_Brody	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Christopher_H._Bidmead>	dbo:wikiPageWikiLink	dbr:Douglas_Adams ;
+	dbp:before	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Russell_Payne_(author)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/David_Fisher_(writer)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Encyclopedic_knowledge	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:The_Utterly_Utterly_Merry_Comic_Relief_Christmas_Book	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Big_Thinkers_(TV_series)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Somebody_else\u0027s_problem>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Knight_Orc	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/\u017DVPL>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Paul_Voermans	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:Above_the_Title_Productions	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Dirk_Gently\u0027s_Holistic_Detective_Agency__Dirk_Gently\u0027s_Holistic_Detective_Agency__1>	dbo:writer	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/The_Skeptics\u0027_Guide_to_the_Universe_(book)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+dbr:High_Offley	dbo:wikiPageWikiLink	dbr:Douglas_Adams .
+<http://dbpedia.org/resource/Adams_Prize_(disambiguation)>	dbo:wikiPageWikiLink	dbr:Douglas_Adams .

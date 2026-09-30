@@ -132,6 +132,14 @@ Oxigraph's OPTIONAL-on-foreign-key regression (20 persons × 20 orders) returns 
 
 Every SPARQL UPDATE in the differential update corpus, applied to the seeded dataset, leaves oxilite and Oxigraph with the same quads; divergences must be allow-listed.
 
+### Real-world datasets round-trip through oxilite
+
+FOAF, SKOS, DOAP, DCAT and PROV-O (RDF/XML and Turtle) and a Wikidata and a DBpedia entity (Turtle and JSON-LD), vendored in `testsuite/real-world-data/`, load and dump unchanged (isomorphic, canonicalized) on every oxilite variant.
+
+### Real-world datasets answer generic queries like Oxigraph
+
+The same real-world snapshots answer a shared battery of generic SPARQL (count, GROUP BY/ORDER BY, OPTIONAL, a language-tagged literal filter) identically on every oxilite variant and on Oxigraph.
+
 ## D1
 
 `@oxilite/d1` tests running the wasm core against a Miniflare D1 database, see [[architecture#Backends#Cloudflare D1]].
