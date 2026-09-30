@@ -560,6 +560,8 @@ What a program derives can be stored instead of queried, in `quads_inf` — the 
 
 A user rule is then visible to SPARQL and Cypher through the `include_inferred` option that already exists ([[architecture#Reasoning]]), and each run replaces only its own producer's conclusions ([[decisions#D28 Inferences are attributed to producers]]). Only rule heads with an RDF form are storable — an IRI with two arguments is a predicate, with one a class — so a head that is not a triple is rejected before anything is written rather than half-applied. A component needing iteration is evaluated once and read by every head, since they share a run.
 
+A program reading with `include_inferred` sees asserted and materialized quads merged as a set ([[crates/oxilite-core/src/reason.rs#with_inferences]]): a rule may re-derive an asserted fact, and that fact must still match once, or counts and bag-semantics readers would see it twice.
+
 ### Reach
 
 The dialect is available from Rust, the command line, WebAssembly and both JavaScript packages, everywhere behind an off-by-default feature.
@@ -577,6 +579,8 @@ Synalog, a Datalog-family language for AI agents, as an optional second rule dia
 The store reads as `triples(subject, predicate, object, kind, datatype, lang, graph)` plus declared predicate and class tables, each a CTE over the quad table with terms decoded to native SQL values. See [[crates/oxilite-synalog/src/tables.rs#inject]].
 
 Synalog compares with SQL semantics, and SQLite orders every TEXT after every number, so `object` is a native value: inline integers decode from the id with no lookup, other numeric literals read `terms.num`, booleans are 1/0, blank nodes `_:label`, triple terms NULL, and IRIs and other literals their lexical form; `kind`, `datatype` and `lang` keep the RDF detail. `# @table NAME <IRI>` declares `NAME(subject, object, kind, datatype, lang, graph)` over one predicate and `# @class NAME <IRI>` declares `NAME(subject, graph)` over one class ([[crates/oxilite-synalog/src/tables.rs#pragmas]]); both select by the term id computed in Rust, so an index answers them, whereas a predicate string on `triples` decodes every quad first. The pragmas are Synalog comments, so the program stays valid Synalog. Only the tables a statement references are prepended, as `NOT MATERIALIZED` CTEs so SQLite pushes filters into them, over the quad source the options choose: `quads`, plus `quads_inf` under `include_inferred`, or the time-travel relation under `as_of`, with the default graph only unless `union_default_graph` — the same choices [[architecture#Datalog frontend]] makes.
+
+With `include_inferred` the tables read the merge of asserted and materialized quads as a set, as Datalog does: an inference that repeats an asserted quad is skipped ([[crates/oxilite-core/src/reason.rs#with_inferences]]).
 
 ### Portable SQL
 
@@ -730,7 +734,7 @@ Paths and read-only stores:
 - A path that is an existing directory stores `oxilite.sqlite` inside it, the shape of pyoxigraph's RocksDB paths.
 - `Store.read_only` opens SQLite read-only.
 
-The native module raises built-in exceptions from the Rust error enums: `SyntaxError` with `filename`, `lineno` and `offset` for RDF and results parsers, then `ValueError`, `OSError`, `NotImplementedError` and `RuntimeError`, plus its own `JsonLdError(ValueError)` with `code`. Leniently parsed terms (relative IRIs, over-long language tags) serialize through an unchecked JSON-to-quad path, so `parse(..., lenient=True)` round-trips.
+The native module raises built-in exceptions from the Rust error enums: `SyntaxError` with `filename`, `lineno` and `offset` for RDF and results parsers, then `ValueError`, `OSError`, `NotImplementedError` and `RuntimeError`, plus its own `JsonLdError(ValueError)` with `code`. Leniently parsed terms (relative IRIs, over-long language tags) serialize through an unchecked JSON-to-quad path, so `parse(..., lenient=True)` round-trips; `Store.load` and `Store.bulk_load` take the same `lenient` keyword, passed through to `RdfParser::lenient` ([[bindings/python/src/lib.rs#NativeStore#load]]), for the data files (Wikidata dumps in particular) that use language subtags like `zh-classical` that other parsers accept without RFC 5646 validation.
 
 Packaging:
 - Wheels use `abi3-py39`, one per platform, and `pyproject.toml` takes its version from the Cargo workspace.

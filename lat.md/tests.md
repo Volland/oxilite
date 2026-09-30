@@ -552,6 +552,12 @@ Invalid IRIs, blank-node ids and language tags raise `ValueError` at constructio
 
 A dump to an `.nq` path loads back with the format inferred from the extension, a graph dumps as Turtle, a syntax error carries the file name and line, and the named-graph helpers clear and remove graphs.
 
+### Store.load accepts lenient parsing
+
+`Store.load` and `Store.bulk_load` reject an over-long language subtag (e.g. Wikidata's `zh-classical`) by default, but accept it with `lenient=True`, matching `parse_rdf`'s existing option.
+
+This mirrors what other RDF libraries accept without RFC 5646 validation, so real-world Turtle files (Wikidata dumps in particular) that were previously unloadable through `Store` can still be loaded.
+
 ### Cypher reads and writes the same dataset
 
 `cypher` creates nodes and a relationship with a property that SPARQL finds, returns typed node and relationship objects and records, reads data inserted with SPARQL, and raises `SyntaxError` for bad Cypher.
@@ -817,6 +823,10 @@ A non-recursive program compiles to a single SQL statement, with no statement se
 ### Options scope graphs
 
 A rule matches the default graph by default; `union_default_graph` widens it to every graph, which makes a triple in a named graph visible.
+
+### Inferences merge with asserted triples
+
+Under `include_inferred` a materialized conclusion that repeats an asserted triple is read once, so a `COUNT` over the merged store counts it once.
 
 ### Even and odd
 
@@ -1451,6 +1461,10 @@ A triple only in a named graph is invisible by default and appears under `union_
 ### Inferences are opt-in
 
 Conclusions materialized by a Datalog rule are read only under `include_inferred`.
+
+### Inferences merge with asserted triples
+
+Under `include_inferred`, `triples` and declared tables return a quad that is both asserted and materialized once, not twice.
 
 ### Time travel
 

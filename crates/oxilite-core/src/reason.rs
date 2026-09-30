@@ -307,6 +307,18 @@ pub fn transitive_statement(id_col: impl Fn(&str) -> String) -> Statement {
     ))
 }
 
+/// The merge of asserted and materialized quads as a set: `asserted` (a quad table or derived
+/// table), plus each inference not also asserted. An inference can repeat an asserted quad
+/// (a rule re-deriving a fact, or a fact asserted after it was inferred), and a plain
+/// `UNION ALL` would then return that triple twice. Both arms stay `UNION ALL`, so SQLite
+/// still pushes a caller's filters into them and reads the indexes.
+pub fn with_inferences(asserted: &str) -> String {
+    format!(
+        "(SELECT s, p, o, g FROM {asserted} UNION ALL SELECT i.s, i.p, i.o, i.g FROM quads_inf i \
+         WHERE NOT EXISTS (SELECT 1 FROM {asserted} a WHERE a.s = i.s AND a.p = i.p AND a.o = i.o AND a.g = i.g))"
+    )
+}
+
 /// Which graphs a reasoned pattern reads.
 #[derive(Debug, Clone)]
 pub enum GraphFilter {

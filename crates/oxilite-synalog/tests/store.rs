@@ -177,6 +177,33 @@ fn inferences_are_opt_in() {
     );
 }
 
+// @lat: [[tests#Synalog#Inferences merge with asserted triples]]
+#[test]
+fn an_inference_that_is_also_asserted_reads_once() {
+    let s = store();
+    // Re-derives every asserted `ex:parent` triple of the default graph.
+    s.datalog_materialize(
+        "@prefix ex: <http://example.org/> .
+         ex:parent(?x, ?y) :- triple(?x, ex:parent, ?y).",
+    )
+    .unwrap();
+    let inferred = Options {
+        include_inferred: true,
+        ..Default::default()
+    };
+    for program in [
+        format!("{PARENT}P(x:, y:) :- parent(subject: x, object: y);"),
+        "P(x:, y:) :- triples(subject: x, predicate: \"http://example.org/parent\", object: y);"
+            .to_owned(),
+    ] {
+        assert_eq!(
+            rows(&s.synalog_with(&program, "P", &inferred).unwrap()),
+            ["ada|bob", "bob|cy", "cy|dee"],
+            "{program}"
+        );
+    }
+}
+
 // @lat: [[tests#Synalog#Time travel]]
 #[test]
 fn time_travel() {
