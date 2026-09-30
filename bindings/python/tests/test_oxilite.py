@@ -147,6 +147,19 @@ def test_files_round_trip(tmp_path: Path) -> None:
     assert not store.contains_named_graph(ex("g"))
 
 
+# @lat: [[tests#Python#Store.load accepts lenient parsing]]
+def test_load_lenient() -> None:
+    data = '<http://a> <http://b> "classical Chinese"@zh-classical .'
+    store = Store()
+    with pytest.raises(SyntaxError):
+        store.load(data, RdfFormat.TURTLE)
+    store.load(data, RdfFormat.TURTLE, lenient=True)
+    assert len(store) == 1
+    bulk = Store()
+    bulk.bulk_load(data, RdfFormat.TURTLE, lenient=True)
+    assert len(bulk) == 1
+
+
 # @lat: [[tests#Python#Cypher reads and writes the same dataset]]
 def test_cypher() -> None:
     store = Store()

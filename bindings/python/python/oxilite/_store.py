@@ -279,6 +279,7 @@ class Store:
         base_iri: Optional[str],
         to_graph: Optional[GraphName],
         bulk: bool,
+        lenient: bool,
     ) -> None:
         f = rdf_format(format, path)
         self._native.load(
@@ -288,6 +289,7 @@ class Store:
             base_iri,
             _j(to_graph),
             bulk,
+            lenient,
         )
 
     def load(
@@ -298,10 +300,12 @@ class Store:
         path: Optional[PathArg] = None,
         base_iri: Optional[str] = None,
         to_graph: Optional[GraphName] = None,
+        lenient: bool = False,
     ) -> None:
         """Loads RDF atomically from a str, bytes, a file object or ``path=``; the format is
-        guessed from the path's extension when not given."""
-        self._load(input, format, path, base_iri, to_graph, False)
+        guessed from the path's extension when not given. ``lenient=True`` skips syntax
+        validations (over-long language tags, relative IRIs) instead of rejecting them."""
+        self._load(input, format, path, base_iri, to_graph, False, lenient)
 
     def bulk_load(
         self,
@@ -311,9 +315,10 @@ class Store:
         path: Optional[PathArg] = None,
         base_iri: Optional[str] = None,
         to_graph: Optional[GraphName] = None,
+        lenient: bool = False,
     ) -> None:
         """Loads RDF in chunks (not atomic) and refreshes planner statistics."""
-        self._load(input, format, path, base_iri, to_graph, True)
+        self._load(input, format, path, base_iri, to_graph, True, lenient)
 
     def dump(
         self,

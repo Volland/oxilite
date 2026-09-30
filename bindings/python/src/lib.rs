@@ -602,8 +602,10 @@ impl NativeStore {
     }
 
     /// Loads RDF from `data` or the file at `path`: atomically, or in chunks (`bulk`) followed
-    /// by a statistics refresh.
-    #[pyo3(signature = (data, path, format, base_iri=None, to_graph=None, bulk=false))]
+    /// by a statistics refresh. `lenient` skips syntax validations (over-long language tags,
+    /// relative IRIs) instead of rejecting them, matching how `parse_rdf` and most other RDF
+    /// libraries treat real-world data.
+    #[pyo3(signature = (data, path, format, base_iri=None, to_graph=None, bulk=false, lenient=false))]
     #[allow(clippy::too_many_arguments)]
     fn load(
         &self,
@@ -614,6 +616,7 @@ impl NativeStore {
         base_iri: Option<&str>,
         to_graph: Option<&str>,
         bulk: bool,
+        lenient: bool,
     ) -> PyResult<()> {
         let mut parser = RdfParser::from_format(rdf_format(format)?);
         if let Some(b) = base_iri {
@@ -621,6 +624,9 @@ impl NativeStore {
         }
         if let Some(g) = graph(to_graph)? {
             parser = parser.with_default_graph(g);
+        }
+        if lenient {
+            parser = parser.lenient();
         }
         let filename = path.as_ref().map(|p| p.to_string_lossy().into_owned());
         py.detach(|| -> PyResult<()> {

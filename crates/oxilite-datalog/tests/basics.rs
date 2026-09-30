@@ -329,6 +329,34 @@ fn union_default_graph_option_widens_the_scope() {
     assert_eq!(s.datalog_with(&program, &opts).unwrap().rows.len(), 1);
 }
 
+// @lat: [[tests#Datalog#Inferences merge with asserted triples]]
+#[test]
+fn an_inference_that_is_also_asserted_counts_once() {
+    let s = Store::new().unwrap();
+    s.update(
+        "PREFIX ex: <http://example.org/>
+         INSERT DATA { ex:a ex:p ex:b . ex:a ex:q ex:b . ex:a ex:q ex:c }",
+    )
+    .unwrap();
+    // Re-derives the asserted `ex:a ex:q ex:b`.
+    s.datalog_materialize(&format!("{PREFIX} ex:q(?x, ?y) :- ex:p(?x, ?y)."))
+        .unwrap();
+    let opts = Options {
+        include_inferred: true,
+        ..Options::default()
+    };
+    let r = s
+        .datalog_with(
+            &format!("{PREFIX} n(?x, COUNT(?y)) :- ex:q(?x, ?y).\n?- n(?x, ?c)."),
+            &opts,
+        )
+        .unwrap();
+    assert_eq!(
+        rows(&r),
+        ["<http://example.org/a>|\"2\"^^<http://www.w3.org/2001/XMLSchema#integer>"]
+    );
+}
+
 // @lat: [[tests#Datalog#A unary atom is a class]]
 #[test]
 fn a_unary_atom_is_a_class() {

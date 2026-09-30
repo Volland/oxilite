@@ -436,7 +436,7 @@ impl<'a> Compiler<'a> {
             return oxilite_core::version::as_of_sql(&t.to_string());
         }
         if self.options.include_inferred {
-            "(SELECT s, p, o, g FROM quads UNION ALL SELECT s, p, o, g FROM quads_inf)".to_owned()
+            oxilite_core::reason::with_inferences("quads")
         } else {
             "quads".to_owned()
         }
