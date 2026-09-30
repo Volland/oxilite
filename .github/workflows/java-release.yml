@@ -5,6 +5,10 @@
 # - A manual run builds; it stages a deployment only when `publish` is checked.
 # - Central Portal's autoPublish is false (see pom.xml): a human still clicks Publish at
 #   https://central.sonatype.com/publishing/deployments after this workflow uploads it.
+# - darwin-x86_64 (Intel Mac) is left out of the matrix for now: GitHub's macos-13 hosted
+#   runners have no reliable capacity as of this writing (a build queued for 45+ minutes with
+#   no runner assigned). Add it back once that improves, or once GitHub Actions removes the
+#   macos-13 label rather than just deprioritizing it.
 name: Java release
 
 on:
@@ -29,7 +33,6 @@ jobs:
         include:
           - { platform: linux-x86_64, os: ubuntu-latest }
           - { platform: linux-aarch64, os: ubuntu-24.04-arm }
-          - { platform: darwin-x86_64, os: macos-13 }
           - { platform: darwin-aarch64, os: macos-14 }
           - { platform: windows-x86_64, os: windows-latest }
     runs-on: ${{ matrix.os }}

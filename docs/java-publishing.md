@@ -185,8 +185,10 @@ A release is tagged in the usual way:
 3. Create an annotated tag `vX.Y.Z` and push it.
 
 Pushing the tag starts `java-release.yml`:
-1. **`native`** builds the native library on five platforms (`linux-x86_64`, `linux-aarch64`,
-   `darwin-x86_64`, `darwin-aarch64`, `windows-x86_64`) and uploads each as an artifact.
+1. **`native`** builds the native library on four platforms (`linux-x86_64`, `linux-aarch64`,
+   `darwin-aarch64`, `windows-x86_64`) and uploads each as an artifact. `darwin-x86_64` (Intel
+   Mac) is left out for now — GitHub's `macos-13` hosted runners had no available capacity when
+   this was set up; see the comment in `java-release.yml` for adding it back.
 2. **`publish`** downloads every platform's native library into
    `java/src/main/resources/native/<platform>/`, so the built jar bundles all five, then runs
    `mvn -P release deploy`: builds the jar, sources jar and javadoc jar, signs all three with

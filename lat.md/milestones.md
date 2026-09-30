@@ -74,7 +74,7 @@ Status: done. pyoxigraph's `test_store.py`, `test_model.py` and `test_io.py` run
 
 Done when the Java store, Cypher, Datalog, JSON-LD and versioning each have a passing JUnit test against the native library, and the README shows a working snippet for all four JVM languages.
 
-Status: in progress. `bindings/jvm` builds a `cdylib` (the `jni` crate) exposing the full store surface ([[architecture#Bindings#JVM (Java/Kotlin/Scala/Clojure)]]); JUnit tests cover the core store, Cypher, Datalog, versioning, JSON-LD and OWL 2 RL materialization ([[tests#JVM bindings]]); `java-release.yml` builds a five-platform jar and stages a Maven Central deployment on tags, but publishing needs the one-time Central Portal/GPG setup of `docs/java-publishing.md` before the first release, and the schema registry still has no JUnit coverage.
+Status: in progress. `bindings/jvm` builds a `cdylib` (the `jni` crate) exposing the full store surface ([[architecture#Bindings#JVM (Java/Kotlin/Scala/Clojure)]]); JUnit tests cover the core store, Cypher, Datalog, versioning, JSON-LD and OWL 2 RL materialization ([[tests#JVM bindings]]); `java-release.yml` builds a four-platform jar (`darwin-x86_64` left out for now, see the workflow's comment) and stages a Maven Central deployment on tags, but publishing needs the one-time Central Portal/GPG setup of `docs/java-publishing.md` before the first release, and the schema registry still has no JUnit coverage.
 
 ## JSON-LD and Verifiable Credentials
 
