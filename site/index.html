@@ -26,6 +26,7 @@
             <div>
               <span class="nav-label">Run it on</span>
               <a href="#python">Python<small>pyoxigraph's API, one file</small></a>
+              <a href="#java">Java &amp; Kotlin<span class="badge">new</span><small>One jar, every JVM language</small></a>
               <a href="#vectors">Turso &amp; vectors<span class="badge">new</span><small>Vector search in SPARQL</small></a>
               <a href="#d1">Cloudflare D1<small>SPARQL at the edge</small></a>
             </div>
@@ -123,6 +124,7 @@
           <button class="tab" role="tab" id="tab-rust" aria-controls="p-rust" aria-selected="true">Rust</button>
           <button class="tab" role="tab" id="tab-node" aria-controls="p-node" aria-selected="false" tabindex="-1">Node.js</button>
           <button class="tab" role="tab" id="tab-python" aria-controls="p-python" aria-selected="false" tabindex="-1">Python</button>
+          <button class="tab" role="tab" id="tab-java" aria-controls="p-java" aria-selected="false" tabindex="-1">Java</button>
           <button class="tab" role="tab" id="tab-cli" aria-controls="p-cli" aria-selected="false" tabindex="-1">CLI</button>
         </div>
 
@@ -159,6 +161,20 @@ store.load(<span class="s">"@prefix ex: &lt;http://ex/&gt; . ex:a ex:knows ex:b 
 
 <span class="k">for</span> solution <span class="k">in</span> store.query(<span class="s">"SELECT ?x WHERE { ?x ?p ?o }"</span>):
     print(solution[<span class="s">"x"</span>].value)</code></pre>
+        </div>
+
+        <div class="panel" role="tabpanel" id="p-java" aria-labelledby="tab-java" hidden>
+<pre><code><span class="c">// Maven: com.oxilitedb:oxilite-jvm:0.9.1</span>
+<span class="k">import</span> com.oxilitedb.oxilite.Store;
+<span class="k">import</span> com.oxilitedb.oxilite.model.*;
+
+<span class="k">try</span> (Store store = <span class="k">new</span> Store(<span class="s">"data.sqlite"</span>)) {
+  store.load(<span class="s">"@prefix ex: &lt;http://ex/&gt; . ex:a ex:knows ex:b ."</span>, <span class="s">"text/turtle"</span>);
+
+  <span class="k">for</span> (var row : store.query(<span class="s">"SELECT ?x WHERE { ?x ?p ?o }"</span>).get(<span class="s">"rows"</span>)) {
+    System.out.println(row.get(0).get(<span class="s">"value"</span>).asText());
+  }
+}</code></pre>
         </div>
 
         <div class="panel" role="tabpanel" id="p-cli" aria-labelledby="tab-cli" hidden>
@@ -217,6 +233,33 @@ store.cypher(<span class="s">"MATCH (a)-[:knows]-&gt;(b) RETURN b.name AS friend
 store.datalog(<span class="s">"reach(?x, ?z) :- ex:knows(?x, ?y), reach(?y, ?z). …"</span>)
 store.query(<span class="s">"SELECT * WHERE { ?s ?p ?o }"</span>, as_of=<span class="s">"HEAD~1"</span>)   <span class="c"># the store one commit ago</span></code></pre>
         <p style="margin-top:20px"><a href="articles/oxilite-python.html">How to use oxilite with Python →</a> · <a href="https://github.com/Volland/oxilite/blob/main/docs/python.md">Python reference →</a></p>
+      </div>
+    </section>
+
+    <section id="java">
+      <div class="wrap">
+        <span class="eyebrow">New · JVM</span>
+        <h2>One jar for Java, Kotlin, Scala and Clojure<span class="dot">.</span></h2>
+        <p class="sub"><code>com.oxilitedb:oxilite-jvm</code> on Maven Central wraps the same store Node.js and Python already have, over JNI. RDF terms and quads are typed classes, not raw JSON, and the native library for every platform ships inside one jar, so any JVM language reaches it through ordinary interop.</p>
+        <div class="backends">
+          <div class="backend"><strong>One jar</strong><span>Native libraries for Linux, macOS and Windows bundled in. Java 11 and later.</span></div>
+          <div class="backend"><strong>Every JVM language</strong><span>Java, Kotlin, Scala and Clojure call the same <em>Store</em> class through ordinary interop.</span></div>
+          <div class="backend"><strong>Everything else too</strong><span>Cypher, Datalog, reasoning, the schema registry, JSON-LD, credentials, time travel.</span></div>
+          <div class="backend"><strong>Typed, not raw JSON</strong><span>RDF terms and quads are real classes; a Java exception hierarchy instead of error strings.</span></div>
+        </div>
+<pre style="margin-top:20px"><code><span class="k">import</span> com.oxilitedb.oxilite.Store;
+<span class="k">import</span> com.oxilitedb.oxilite.model.*;
+
+<span class="k">try</span> (Store store = <span class="k">new</span> Store(<span class="s">"team.sqlite"</span>, <span class="k">null</span>, <span class="s">"{\"versioning\": \"log\"}"</span>)) {
+  store.setCommitInfo(<span class="s">"{\"author\": \"ada\", \"message\": \"import\"}"</span>);
+  store.load(Files.readString(Path.of(<span class="s">"team.ttl"</span>)), <span class="s">"text/turtle"</span>);
+
+  store.query(<span class="s">"SELECT ?p WHERE { ?p a ex:Person }"</span>, <span class="s">"{\"reasoning\": \"rdfs\"}"</span>);
+  store.cypher(<span class="s">"MATCH (a)-[:knows]-&gt;(b) RETURN b.name AS friend"</span>, <span class="k">null</span>, <span class="s">"{\"base\": \"http://ex/\"}"</span>);
+  store.datalog(<span class="s">"reach(?x, ?z) :- ex:knows(?x, ?y), reach(?y, ?z). …"</span>);
+  store.query(<span class="s">"SELECT * WHERE { ?s ?p ?o }"</span>, <span class="s">"{\"asOf\": \"HEAD~1\"}"</span>);   <span class="c">// the store one commit ago</span>
+}</code></pre>
+        <p style="margin-top:20px"><a href="https://github.com/Volland/oxilite/blob/main/bindings/jvm/README.md">How to use oxilite on the JVM →</a> · <a href="https://central.sonatype.com/artifact/com.oxilitedb/oxilite-jvm">Maven Central →</a></p>
       </div>
     </section>
 
