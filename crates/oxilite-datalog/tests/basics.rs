@@ -44,7 +44,7 @@ fn rows(r: &DatalogResult) -> Vec<String> {
 
 const PREFIX: &str = "@prefix ex: <http://example.org/> .\n";
 
-// @lat: [[tests#Datalog#Derived relation from a triple pattern]]
+// @tg: verifies:: [[tests#Datalog#Derived relation from a triple pattern]] {since: "2026-09-24", level: integration}
 #[test]
 fn derived_relation_from_a_triple_pattern() {
     let s = store();
@@ -64,7 +64,7 @@ fn derived_relation_from_a_triple_pattern() {
     );
 }
 
-// @lat: [[tests#Datalog#Join of two atoms]]
+// @tg: verifies:: [[tests#Datalog#Join of two atoms]] {since: "2026-09-24", level: integration}
 #[test]
 fn join_of_two_atoms() {
     let s = store();
@@ -82,7 +82,7 @@ fn join_of_two_atoms() {
     );
 }
 
-// @lat: [[tests#Datalog#Transitive closure agrees with a property path]]
+// @tg: verifies:: [[tests#Datalog#Transitive closure agrees with a property path]] {since: "2026-09-24", level: integration}
 #[test]
 fn linear_recursion_matches_a_property_path() {
     let s = store();
@@ -112,7 +112,7 @@ fn linear_recursion_matches_a_property_path() {
     assert_eq!(datalog.len(), 6);
 }
 
-// @lat: [[tests#Datalog#Numeric comparison]]
+// @tg: verifies:: [[tests#Datalog#Numeric comparison]] {since: "2026-09-24", level: integration}
 #[test]
 fn numeric_constraint() {
     let s = store();
@@ -127,7 +127,7 @@ fn numeric_constraint() {
     );
 }
 
-// @lat: [[tests#Datalog#Arithmetic in a constraint]]
+// @tg: verifies:: [[tests#Datalog#Arithmetic in a constraint]] {since: "2026-09-24", level: integration}
 #[test]
 fn arithmetic_in_a_constraint() {
     let s = store();
@@ -142,7 +142,7 @@ fn arithmetic_in_a_constraint() {
     );
 }
 
-// @lat: [[tests#Datalog#Negation over a derived relation]]
+// @tg: verifies:: [[tests#Datalog#Negation over a derived relation]] {since: "2026-09-24", level: integration}
 #[test]
 fn stratified_negation() {
     let s = store();
@@ -157,7 +157,7 @@ fn stratified_negation() {
     assert_eq!(rows(&r), vec!["<http://example.org/ada>"]);
 }
 
-// @lat: [[tests#Datalog#Negation compiles to NOT EXISTS]]
+// @tg: verifies:: [[tests#Datalog#Negation compiles to NOT EXISTS]] {since: "2026-09-24", level: integration}
 #[test]
 fn negation_compiles_to_not_exists() {
     let s = store();
@@ -169,7 +169,7 @@ fn negation_compiles_to_not_exists() {
     assert!(sql.contains("NOT EXISTS"), "expected NOT EXISTS in:\n{sql}");
 }
 
-// @lat: [[tests#Datalog#Count grouped by key]]
+// @tg: verifies:: [[tests#Datalog#Count grouped by key]] {since: "2026-09-24", level: integration}
 #[test]
 fn aggregation_counts_per_group() {
     let s = store();
@@ -199,7 +199,7 @@ fn aggregation_counts_per_group() {
     );
 }
 
-// @lat: [[tests#Datalog#Unstratified negation is rejected]]
+// @tg: verifies:: [[tests#Datalog#Unstratified negation is rejected]] {since: "2026-09-24", level: integration}
 #[test]
 fn unstratified_negation_is_rejected() {
     let s = store();
@@ -213,7 +213,7 @@ fn unstratified_negation_is_rejected() {
     assert!(msg.contains('p'), "the cycle must be named: {msg}");
 }
 
-// @lat: [[tests#Datalog#Unbound head variable]]
+// @tg: verifies:: [[tests#Datalog#Unbound head variable]] {since: "2026-09-24", level: integration}
 #[test]
 fn unsafe_head_variable_is_rejected() {
     let s = store();
@@ -226,7 +226,7 @@ fn unsafe_head_variable_is_rejected() {
     assert!(msg.contains("?y"), "got: {msg}");
 }
 
-// @lat: [[tests#Datalog#Unbound negated variable]]
+// @tg: verifies:: [[tests#Datalog#Unbound negated variable]] {since: "2026-09-24", level: integration}
 #[test]
 fn unsafe_negated_variable_is_rejected() {
     let s = store();
@@ -238,7 +238,7 @@ fn unsafe_negated_variable_is_rejected() {
     assert!(err.to_string().contains("?y"), "got: {err}");
 }
 
-// @lat: [[tests#Datalog#Quantifying over the predicate]]
+// @tg: verifies:: [[tests#Datalog#Quantifying over the predicate]] {since: "2026-09-24", level: integration}
 #[test]
 fn triple_atom_binds_the_predicate() {
     let s = store();
@@ -258,7 +258,7 @@ fn triple_atom_binds_the_predicate() {
     );
 }
 
-// @lat: [[tests#Datalog#Cycle terminates]]
+// @tg: verifies:: [[tests#Datalog#Cycle terminates]] {since: "2026-09-24", level: integration}
 #[test]
 fn recursion_over_a_cycle_terminates() {
     let s = Store::new().unwrap();
@@ -277,7 +277,7 @@ fn recursion_over_a_cycle_terminates() {
     assert_eq!(r.rows.len(), 9);
 }
 
-// @lat: [[tests#Datalog#Goal with a constant]]
+// @tg: verifies:: [[tests#Datalog#Goal with a constant]] {since: "2026-09-24", level: integration}
 #[test]
 fn goal_with_a_constant_projects_one_column() {
     let s = store();
@@ -298,7 +298,7 @@ fn goal_with_a_constant_projects_one_column() {
     );
 }
 
-// @lat: [[tests#Datalog#Request count]]
+// @tg: verifies:: [[tests#Datalog#Request count]] {since: "2026-09-24", level: integration}
 #[test]
 fn a_non_recursive_program_is_one_statement() {
     let s = store();
@@ -311,7 +311,7 @@ fn a_non_recursive_program_is_one_statement() {
     assert!(!sql.contains(';'), "one statement only:\n{sql}");
 }
 
-// @lat: [[tests#Datalog#Options scope graphs]]
+// @tg: verifies:: [[tests#Datalog#Options scope graphs]] {since: "2026-09-24", level: integration}
 #[test]
 fn union_default_graph_option_widens_the_scope() {
     let s = Store::new().unwrap();
@@ -329,7 +329,7 @@ fn union_default_graph_option_widens_the_scope() {
     assert_eq!(s.datalog_with(&program, &opts).unwrap().rows.len(), 1);
 }
 
-// @lat: [[tests#Datalog#Inferences merge with asserted triples]]
+// @tg: verifies:: [[tests#Datalog#Inferences merge with asserted triples]] {since: "2026-09-30", level: integration}
 #[test]
 fn an_inference_that_is_also_asserted_counts_once() {
     let s = Store::new().unwrap();
@@ -357,7 +357,7 @@ fn an_inference_that_is_also_asserted_counts_once() {
     );
 }
 
-// @lat: [[tests#Datalog#A unary atom is a class]]
+// @tg: verifies:: [[tests#Datalog#A unary atom is a class]] {since: "2026-09-24", level: integration}
 #[test]
 fn a_unary_atom_is_a_class() {
     let s = store();
@@ -367,7 +367,7 @@ fn a_unary_atom_is_a_class() {
     assert_eq!(r.rows.len(), 4, "every ex:Person, via rdf:type");
 }
 
-// @lat: [[tests#Datalog#An aggregate with no inline form is rejected]]
+// @tg: verifies:: [[tests#Datalog#An aggregate with no inline form is rejected]] {since: "2026-09-24", level: integration}
 #[test]
 fn an_aggregate_with_no_inline_form_is_rejected() {
     let s = store();
@@ -382,7 +382,7 @@ fn an_aggregate_with_no_inline_form_is_rejected() {
     }
 }
 
-// @lat: [[tests#Datalog#Sum and min over a group]]
+// @tg: verifies:: [[tests#Datalog#Sum and min over a group]] {since: "2026-09-24", level: integration}
 #[test]
 fn sum_and_min_aggregate_to_terms() {
     let s = store();
@@ -398,7 +398,7 @@ fn sum_and_min_aggregate_to_terms() {
     );
 }
 
-// @lat: [[tests#Datalog#String constraint]]
+// @tg: verifies:: [[tests#Datalog#String constraint]] {since: "2026-09-24", level: integration}
 #[test]
 fn string_constraints_work_on_lexical_forms() {
     let s = store();
@@ -412,7 +412,7 @@ fn string_constraints_work_on_lexical_forms() {
 
 /// The program the README and the website print, run end to end, so the documentation cannot
 /// drift away from what the dialect actually accepts.
-// @lat: [[tests#Datalog#The documented program runs]]
+// @tg: verifies:: [[tests#Datalog#The documented program runs]] {since: "2026-09-24", level: integration}
 #[test]
 fn the_documented_program_runs() {
     let s = store();

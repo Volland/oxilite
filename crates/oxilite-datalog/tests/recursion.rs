@@ -36,7 +36,7 @@ even(?x) :- ex:succ(?y, ?x), odd(?y).
 odd(?x)  :- ex:succ(?y, ?x), even(?y).
 ";
 
-// @lat: [[tests#Datalog#Even and odd]]
+// @tg: verifies:: [[tests#Datalog#Even and odd]] {since: "2026-09-24", level: integration}
 #[test]
 fn mutual_recursion_even() {
     let s = chain();
@@ -53,7 +53,7 @@ fn mutual_recursion_even() {
     );
 }
 
-// @lat: [[tests#Datalog#Even and odd]]
+// @tg: verifies:: [[tests#Datalog#Even and odd]] {since: "2026-09-24", level: integration}
 #[test]
 fn mutual_recursion_odd() {
     let s = chain();
@@ -66,7 +66,7 @@ fn mutual_recursion_odd() {
     );
 }
 
-// @lat: [[tests#Datalog#Mutual recursion uses one tagged member]]
+// @tg: verifies:: [[tests#Datalog#Mutual recursion uses one tagged member]] {since: "2026-09-24", level: integration}
 #[test]
 fn mutual_recursion_is_one_tagged_member() {
     let s = chain();
@@ -89,7 +89,7 @@ path(?x, ?y) :- ex:succ(?x, ?y).
 path(?x, ?z) :- path(?x, ?y), path(?y, ?z).
 ";
 
-// @lat: [[tests#Datalog#Non-linear recursion agrees with the linear form]]
+// @tg: verifies:: [[tests#Datalog#Non-linear recursion agrees with the linear form]] {since: "2026-09-24", level: integration}
 #[test]
 fn non_linear_recursion_agrees_with_the_linear_form() {
     let s = chain();
@@ -119,7 +119,7 @@ fn non_linear_recursion_agrees_with_the_linear_form() {
     );
 }
 
-// @lat: [[tests#Datalog#Doubling reaches the fixpoint faster]]
+// @tg: verifies:: [[tests#Datalog#Doubling reaches the fixpoint faster]] {since: "2026-09-24", level: integration}
 #[test]
 fn the_non_linear_rule_doubles_each_round() {
     let s = chain();
@@ -132,7 +132,7 @@ fn the_non_linear_rule_doubles_each_round() {
     assert!(r.rounds[0] <= 4, "took {} rounds", r.rounds[0]);
 }
 
-// @lat: [[tests#Datalog#Iterated component is reported]]
+// @tg: verifies:: [[tests#Datalog#Iterated component is reported]] {since: "2026-09-24", level: integration}
 #[test]
 fn explain_reports_the_iterated_component() {
     let s = chain();
@@ -146,7 +146,7 @@ fn explain_reports_the_iterated_component() {
     );
 }
 
-// @lat: [[tests#Datalog#Iteration bound]]
+// @tg: verifies:: [[tests#Datalog#Iteration bound]] {since: "2026-09-24", level: integration}
 #[test]
 fn a_divergent_component_hits_the_bound() {
     let s = chain();
@@ -160,7 +160,7 @@ fn a_divergent_component_hits_the_bound() {
     assert!(err.to_string().contains("fixpoint"), "got: {err}");
 }
 
-// @lat: [[tests#Datalog#Iteration leaves no rows behind]]
+// @tg: verifies:: [[tests#Datalog#Iteration leaves no rows behind]] {since: "2026-09-24", level: integration}
 #[test]
 fn iteration_cleans_up_its_work_rows() {
     let s = chain();
@@ -180,7 +180,7 @@ fn fmt(t: &Option<oxrdf::Term>) -> String {
     t.as_ref().map(ToString::to_string).unwrap_or_default()
 }
 
-// @lat: [[tests#Datalog#Linear rewrite of a non-linear closure]]
+// @tg: verifies:: [[tests#Datalog#Linear rewrite of a non-linear closure]] {since: "2026-09-24", level: integration}
 #[test]
 fn the_linear_rewrite_gives_the_same_answer() {
     let s = chain();
@@ -194,7 +194,7 @@ fn the_linear_rewrite_gives_the_same_answer() {
     assert_eq!(r.rows.len(), 10);
 }
 
-// @lat: [[tests#Datalog#Derived facts become queryable]]
+// @tg: verifies:: [[tests#Datalog#Derived facts become queryable]] {since: "2026-09-24", level: integration}
 #[test]
 fn materialized_rules_are_visible_to_sparql() {
     let s = Store::new().unwrap();
@@ -231,7 +231,7 @@ fn materialized_rules_are_visible_to_sparql() {
     assert_eq!(count(inferred), 3);
 }
 
-// @lat: [[tests#Datalog#Asserted data is untouched]]
+// @tg: verifies:: [[tests#Datalog#Asserted data is untouched]] {since: "2026-09-24", level: integration}
 #[test]
 fn materializing_does_not_touch_asserted_data() {
     let s = Store::new().unwrap();
@@ -251,7 +251,7 @@ fn materializing_does_not_touch_asserted_data() {
     assert_eq!(s.len().unwrap(), before);
 }
 
-// @lat: [[tests#Datalog#Re-running replaces]]
+// @tg: verifies:: [[tests#Datalog#Re-running replaces]] {since: "2026-09-24", level: integration}
 #[test]
 fn re_running_materialization_replaces_the_previous_set() {
     let s = Store::new().unwrap();
@@ -270,7 +270,7 @@ fn re_running_materialization_replaces_the_previous_set() {
     assert_eq!(s.datalog_materialize(&base).unwrap().inferred, 2);
 }
 
-// @lat: [[tests#Datalog#Non-triple head is rejected]]
+// @tg: verifies:: [[tests#Datalog#Non-triple head is rejected]] {since: "2026-09-24", level: integration}
 #[test]
 fn a_head_with_no_rdf_form_is_rejected() {
     let s = chain();
@@ -280,7 +280,7 @@ fn a_head_with_no_rdf_form_is_rejected() {
     assert!(err.to_string().contains("materialize"), "got: {err}");
 }
 
-// @lat: [[tests#Datalog#Unary head materializes as rdf:type]]
+// @tg: verifies:: [[tests#Datalog#Unary head materializes as rdf:type]] {since: "2026-09-24", level: integration}
 #[test]
 fn a_unary_head_materializes_as_rdf_type() {
     let s = Store::new().unwrap();
@@ -306,7 +306,7 @@ fn a_unary_head_materializes_as_rdf_type() {
     assert_eq!(count(r), 1);
 }
 
-// @lat: [[tests#Datalog#Backend without compound recursive CTEs]]
+// @tg: verifies:: [[tests#Datalog#Backend without compound recursive CTEs]] {since: "2026-09-24", level: integration}
 #[test]
 fn mutual_recursion_needs_the_capability() {
     use oxilite_core::sql::Capabilities;
@@ -328,7 +328,7 @@ fn count(r: oxilite::sparql::QueryResults) -> usize {
     }
 }
 
-// @lat: [[tests#Datalog#Materializing an iterated component]]
+// @tg: verifies:: [[tests#Datalog#Materializing an iterated component]] {since: "2026-09-24", level: integration}
 #[test]
 fn materializing_a_non_linear_component_works() {
     let s = chain();
@@ -353,7 +353,7 @@ fn materializing_a_non_linear_component_works() {
     assert_eq!(count(r), 4, "n0 reaches n1..n4");
 }
 
-// @lat: [[tests#Datalog#Iterated materialization cleans up]]
+// @tg: verifies:: [[tests#Datalog#Iterated materialization cleans up]] {since: "2026-09-24", level: integration}
 #[test]
 fn materializing_an_iterated_component_cleans_up() {
     let s = chain();
@@ -367,7 +367,7 @@ fn materializing_an_iterated_component_cleans_up() {
     assert_eq!(s.datalog_materialize(&program).unwrap().inferred, 10);
 }
 
-// @lat: [[tests#Datalog#Producers keep their own conclusions]]
+// @tg: verifies:: [[tests#Datalog#Producers keep their own conclusions]] {since: "2026-09-24", level: integration}
 #[test]
 fn producers_keep_their_own_conclusions() {
     use oxilite::model::{NamedNode, Quad};

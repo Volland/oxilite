@@ -1,3 +1,6 @@
+---
+type: Decision
+---
 # Decisions
 
 Architecture decisions agreed during the design interview (2026-09-22), each with its rationale and the alternatives rejected.
@@ -90,6 +93,8 @@ Nodes created by Cypher get fresh IRIs (`urn:oxilite:node:<random>-<n>`) minted 
 
 Writes are computed in Rust from the rows of the read ([[decisions#D16 Lowering to SPARQL algebra, with a Rust tail]]), so new terms are hashed as usual and no id needs to be generated inside SQL. The marker keeps nodes without labels, properties or relationships in existence (an RDF resource exists only through its triples); it is optional (`node_marker`) and hidden from `labels()`.
 
+- motivated_by:: [[decisions#D16 Lowering to SPARQL algebra, with a Rust tail]] {weight: primary, since: "2026-09-22", note: "writes are computed in Rust from the rows of the read"}
+
 ## D16 Lowering to SPARQL algebra, with a Rust tail
 
 Cypher reads are lowered to `spargebra` algebra for the unchanged SPARQL compiler; what SQL cannot express — writes, lists, maps, `collect()`, temporal arithmetic — runs in Rust over the rows. This replaces the planned `Op` algebra.
@@ -132,11 +137,15 @@ A graph that holds an ontology or SHACL shapes is registered by role; its triple
 
 Moving schema into its own tables would force a `UNION` into every pattern scan and would stop SPARQL reading shapes, which are RDF people query; `GRAPH ?g` already separates them. Registering instead makes drop and replace one `DELETE FROM quads WHERE g = ?` with no read, as `jsonld_graphs` does for documents ([[decisions#D18 The raw document is the source of truth]]). An empty registry means "every graph", so the feature is purely additive. See [[architecture#Schema registry]].
 
+- motivated_by:: [[decisions#D18 The raw document is the source of truth]] {weight: secondary, since: "2026-09-24", note: "same drop-and-replace by graph as jsonld_graphs"}
+
 ## D23 Datalog as a third frontend, sharing the store
 
 A Datalog program is parsed, checked and compiled to SQL over the same quads and the same term encoding as SPARQL and Cypher, rather than evaluated by an engine of its own.
 
 This is [[decisions#D13 Cypher as a second frontend over the RDF store]] applied a third time, and it is what makes rules affordable: the storage schema, the encoding, the backends and the sans-IO protocol are all reused. A native engine — the shape Soufflé, Nemo and Cozo take — would duplicate four backends and, decisively, would have to read the graph out of the store to evaluate it, which on D1 is the network. Rules must run where the data is. See [[architecture#Datalog frontend]].
+
+- motivated_by:: [[decisions#D13 Cypher as a second frontend over the RDF store]] {weight: primary, since: "2026-09-24", note: "D13 applied a third time: schema, encoding, backends and protocol reused"}
 
 ## D24 SQLite's recursive-CTE restrictions are the safety conditions
 
@@ -149,6 +158,8 @@ Stratification and linearity are enforced because SQLite enforces them, so the c
 A recursive component becomes a `WITH RECURSIVE` member of the same statement; a component whose rules are non-linear, which SQLite cannot express, is iterated to a fixpoint in a work table instead, one request per round.
 
 `compiler/ops.rs` already inlines property-path CTEs this way, so the in-statement shape is proven on every backend. The recursive term uses `UNION`, not `UNION ALL`: deduplication is both Datalog's set semantics and what makes cyclic data terminate, which [[architecture#Reasoning]]'s transitive closure already relies on. Iteration is the fallback rather than the default because each round is a network hop on D1, the cost this project exists to avoid ([[decisions#D1 SQL executor trait instead of the SQLite C API]]); everything expressible stays in one statement and `explain()` says when it could not. The rounds are naive rather than semi-naive: the work table's primary key covers every column, so `INSERT OR IGNORE` deduplicates and the row count is monotone, making the fixpoint detectable with a count instead of a delta relation. A delta would cut re-derivation but not round trips, which dominate here. See [[architecture#Datalog frontend#Iteration]].
+
+- motivated_by:: [[decisions#D1 SQL executor trait instead of the SQLite C API]] {weight: primary, since: "2026-09-24", note: "each iteration round is a network hop on D1"}
 
 ## D25a The work table is scoped by run, not by connection
 
@@ -167,6 +178,8 @@ SQLite has no mutually recursive CTEs, but since 3.34.0 the recursive term may b
 Materializing a rule program writes into the inference table OWL 2 RL materialization already uses, instead of a table of its own.
 
 SPARQL and Cypher already read that table through `include_inferred`, so a user rule becomes visible to every dialect the moment it is materialized, with no new schema, no new option and no new cache to invalidate — rules extend the reasoner rather than forming a second inference universe ([[architecture#Reasoning]]). The shared lifecycle this first implied (running either materialization replaced the whole inferred set) proved painful for the studio, which runs OWL 2 RL and several rule files side by side; [[decisions#D28 Inferences are attributed to producers]] resolves it.
+
+- motivated_by:: [[architecture#Reasoning]] {weight: primary, since: "2026-09-24", note: "rules extend the reasoner rather than forming a second inference universe"}
 
 ## D28 Inferences are attributed to producers
 
@@ -210,6 +223,8 @@ Registrations are triples of `<oxilite:schema>` in the `oxl:` vocabulary, not ro
 
 A table is invisible to SPARQL, lost in an N-Quads dump, and only oxilite's SQL can maintain it. As RDF, a registry travels with the dataset, is registered and read by plain SPARQL that runs unchanged on Oxigraph, and can express which data each schema describes. Only the derived caches (`tbox_closure`, the shape index) stay SQL: they read the registry triples in place, so scoping costs no extra round trip. Supersedes the `schema_graphs` table of [[decisions#D22 Schema graphs registered, not separated]]; see [[architecture#Schema registry]].
 
+- supersedes:: [[decisions#D22 Schema graphs registered, not separated]] {since: "2026-09-26", reason: "the schema_graphs table becomes RDF in <oxilite:schema>"}
+
 ## D35 Registry vocabulary 2: canonical, self-validating, import-aware
 
 The registry writes canonical forms, ships SHACL shapes for itself, resolves `owl:imports` between registered ontologies, and every reader agrees on edge cases. Keeps the flat "graph IRI as subject" model of [[decisions#D34 The schema registry is RDF in a system graph]].
@@ -243,6 +258,8 @@ A feasibility probe drove the real `Store` over Turso first: 0.7.2 fails every r
 The definition of an index is data in a system graph, as the schema registry is ([[decisions#D34 The schema registry is RDF in a system graph]]); its table is a cache that triggers keep exact and a sync rebuilds.
 
 Triggers on `quads` maintain the table in the transaction of every write path without code in the writer, as `terms_fts` is maintained; malformed or wrong-length embeddings abort the write, so an index is never silently partial. Rejected: one generic table for all indexes, which SPARQL could have maintained without DDL, because Turso's sparse IVF index method matches only `SELECT … FROM {table} ORDER BY distance LIMIT ?` over a whole table; and a definitions table as the source of truth, invisible to queries and dumps. See [[architecture#Vector indexes#Definitions]].
+
+- motivated_by:: [[decisions#D34 The schema registry is RDF in a system graph]] {weight: secondary, since: "2026-09-28", note: "an index definition is data in a system graph, as the registry is"}
 
 ## D40 One k-NN statement, three languages
 

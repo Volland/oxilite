@@ -21,7 +21,7 @@ beforeEach(async () => {
 });
 
 describe("D1Store Synalog", () => {
-  // @lat: [[tests#D1#Synalog runs on D1]]
+  // @tg: verifies:: [[tests#D1#Synalog runs on D1]] {since: "2026-09-29", level: integration}
   it.skipIf(!built)("runs recursion and negation over declared tables in D1", async () => {
     await store.update(`PREFIX ex: <http://example.org/>
       INSERT DATA { ex:ada ex:parent ex:bob . ex:bob ex:parent ex:cy .

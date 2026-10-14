@@ -266,6 +266,7 @@ pub fn write_tick_statements(info: &CommitInfo) -> Vec<Statement> {
 /// The request with a tick opened first, when the level requires one and the request writes
 /// quads. `None`: run the request unchanged. The first [`PREFIX_LEN`] results belong to the
 /// tick ([`strip`]).
+// @tg: implements:: [[decisions#D30 One tick per atomic write, opened by the store]] {since: "2026-09-25"}
 pub fn prepare(request: &Request, level: Versioning, info: &CommitInfo) -> Option<Request> {
     if level < Versioning::Stamped
         || request.mode != Mode::Atomic

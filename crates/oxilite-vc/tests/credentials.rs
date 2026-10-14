@@ -47,7 +47,7 @@ fn opts() -> CredentialOptions {
 const DEGREE_ID: &str = "http://university.example/credentials/3732";
 const VC: &str = "https://www.w3.org/2018/credentials#";
 
-// @lat: [[tests#Verifiable Credentials#Credential id is key and graph]]
+// @tg: verifies:: [[tests#Verifiable Credentials#Credential id is key and graph]] {since: "2026-09-22", level: integration}
 #[test]
 fn credential_id_is_key_and_graph() {
     let degree = fixture("degree-v2.json");
@@ -66,7 +66,7 @@ fn credential_id_is_key_and_graph() {
     }
 }
 
-// @lat: [[tests#Verifiable Credentials#Key and graph are configurable]]
+// @tg: verifies:: [[tests#Verifiable Credentials#Key and graph are configurable]] {since: "2026-09-22", level: integration}
 #[test]
 fn key_and_graph_are_configurable() {
     let degree = fixture("degree-v2.json");
@@ -80,7 +80,7 @@ fn key_and_graph_are_configurable() {
     }
 }
 
-// @lat: [[tests#Verifiable Credentials#Credentials without id]]
+// @tg: verifies:: [[tests#Verifiable Credentials#Credentials without id]] {since: "2026-09-22", level: integration}
 #[test]
 fn credentials_without_id() {
     let member = fixture("no-id-v2.json");
@@ -104,7 +104,7 @@ fn credentials_without_id() {
     }
 }
 
-// @lat: [[tests#Verifiable Credentials#Structure is checked]]
+// @tg: verifies:: [[tests#Verifiable Credentials#Structure is checked]] {since: "2026-09-22", level: integration}
 #[test]
 fn structure_is_checked() {
     let degree = fixture("degree-v2.json");
@@ -146,7 +146,7 @@ fn structure_is_checked() {
     }
 }
 
-// @lat: [[tests#Verifiable Credentials#Proofs live in owned graphs]]
+// @tg: verifies:: [[tests#Verifiable Credentials#Proofs live in owned graphs]] {since: "2026-09-22", level: integration}
 #[test]
 fn proofs_live_in_owned_graphs() {
     let degree = fixture("degree-v2.json");
@@ -162,7 +162,7 @@ fn proofs_live_in_owned_graphs() {
     }
 }
 
-// @lat: [[tests#Verifiable Credentials#Presentations store embedded credentials]]
+// @tg: verifies:: [[tests#Verifiable Credentials#Presentations store embedded credentials]] {since: "2026-09-22", level: integration}
 #[test]
 fn presentations_store_embedded_credentials() {
     let vp = fixture("presentation-v2.json");
@@ -206,7 +206,7 @@ fn presentations_store_embedded_credentials() {
     }
 }
 
-// @lat: [[tests#Verifiable Credentials#Metadata across data model versions]]
+// @tg: verifies:: [[tests#Verifiable Credentials#Metadata across data model versions]] {since: "2026-09-22", level: integration}
 #[test]
 fn metadata_across_data_model_versions() {
     for e in Engine::all() {
@@ -243,7 +243,7 @@ fn metadata_across_data_model_versions() {
     }
 }
 
-// @lat: [[tests#Verifiable Credentials#Metadata indexes are configurable]]
+// @tg: verifies:: [[tests#Verifiable Credentials#Metadata indexes are configurable]] {since: "2026-09-22", level: integration}
 #[test]
 fn metadata_indexes_are_configurable() {
     for e in Engine::all() {
@@ -262,7 +262,7 @@ fn metadata_indexes_are_configurable() {
     }
 }
 
-// @lat: [[tests#Verifiable Credentials#Find valid credentials]]
+// @tg: verifies:: [[tests#Verifiable Credentials#Find valid credentials]] {since: "2026-09-22", level: integration}
 #[test]
 fn find_valid_credentials() {
     let make = |id: &str, until: &str| {
@@ -310,7 +310,7 @@ fn find_valid_credentials() {
     }
 }
 
-// @lat: [[tests#Verifiable Credentials#SPARQL selects credentials]]
+// @tg: verifies:: [[tests#Verifiable Credentials#SPARQL selects credentials]] {since: "2026-09-22", level: integration}
 #[test]
 fn sparql_selects_credentials() {
     for e in Engine::all() {
@@ -362,7 +362,7 @@ fn sparql_selects_credentials() {
     }
 }
 
-// @lat: [[tests#Verifiable Credentials#Blank-node labels are stable]]
+// @tg: verifies:: [[tests#Verifiable Credentials#Blank-node labels are stable]] {since: "2026-09-22", level: integration}
 #[test]
 fn blank_node_labels_are_stable() {
     let quads = oxilite::jsonld::document_quads(

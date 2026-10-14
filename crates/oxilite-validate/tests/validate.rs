@@ -45,7 +45,7 @@ fn focus_nodes(r: &oxilite_validate::ValidationReport) -> Vec<String> {
     v
 }
 
-// @lat: [[tests#Validation#SHACL violation reported]]
+// @tg: verifies:: [[tests#Validation#SHACL violation reported]] {since: "2026-09-22", level: integration}
 #[test]
 fn shacl_violation_reported() {
     for mode in [ShaclValidationMode::Native, ShaclValidationMode::Sparql] {
@@ -64,7 +64,7 @@ fn shacl_violation_reported() {
     }
 }
 
-// @lat: [[tests#Validation#ShEx conforming node]]
+// @tg: verifies:: [[tests#Validation#ShEx conforming node]] {since: "2026-09-22", level: integration}
 #[test]
 fn shex_conforming_node() {
     let schema =
@@ -166,7 +166,7 @@ async fn check_prefetch<B: AsyncBackend>(store: AsyncStore<B>) {
     assert!(r.iter().all(|(_, _, s)| s.is_conformant()));
 }
 
-// @lat: [[tests#Validation#Bounded prefetch matches full validation]]
+// @tg: verifies:: [[tests#Validation#Bounded prefetch matches full validation]] {since: "2026-09-22", level: integration}
 #[test]
 fn bounded_prefetch_matches_full_validation() {
     futures::executor::block_on(async {
@@ -216,7 +216,7 @@ fn register_shapes(s: &Store, graph: &str) {
     .unwrap();
 }
 
-// @lat: [[tests#Validation#Shapes read from the store]]
+// @tg: verifies:: [[tests#Validation#Shapes read from the store]] {since: "2026-09-24", level: integration}
 #[test]
 fn stored_shapes_give_the_same_report() {
     let graph = "http://example.com/shapes";
@@ -237,7 +237,7 @@ fn stored_shapes_give_the_same_report() {
     assert_eq!(focus_nodes(&named), focus_nodes(&from_text));
 }
 
-// @lat: [[tests#Validation#Stored shapes need an unambiguous graph]]
+// @tg: verifies:: [[tests#Validation#Stored shapes need an unambiguous graph]] {since: "2026-09-24", level: integration}
 #[test]
 fn stored_shapes_need_an_unambiguous_graph() {
     // Nothing registered.
@@ -255,7 +255,7 @@ fn stored_shapes_need_an_unambiguous_graph() {
     assert!(matches!(err, Error::AmbiguousShapesGraph(2, _)), "{err}");
 }
 
-// @lat: [[tests#Validation#The registry shapes check a registry]]
+// @tg: verifies:: [[tests#Validation#The registry shapes check a registry]] {since: "2026-09-26", level: integration}
 #[test]
 fn registry_shapes_check_a_registry() {
     const REGISTRY: &str = r#"

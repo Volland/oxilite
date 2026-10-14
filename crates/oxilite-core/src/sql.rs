@@ -387,7 +387,7 @@ mod tests {
         assert_eq!(sql_f64(1e300), "1e300");
     }
 
-    // @lat: [[tests#D1#SQL values survive arbitrary-precision JSON]]
+    // @tg: verifies:: [[tests#D1#SQL values survive arbitrary-precision JSON]] {since: "2026-09-22", level: unit}
     #[cfg(feature = "serde")]
     #[test]
     fn sql_values_survive_arbitrary_precision_json() {

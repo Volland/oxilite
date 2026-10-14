@@ -302,7 +302,7 @@ fn convention(relative: &Path, file_iri: &str, content: &str) -> Option<Assignme
 mod tests {
     use super::*;
 
-    // @lat: [[tests#Studio server#Manifest assigns graphs and roles]]
+    // @tg: verifies:: [[tests#Studio server#Manifest assigns graphs and roles]] {since: "2026-09-24", level: unit}
     #[test]
     fn manifest_assigns_graphs_and_roles() {
         let l = Layout::from_toml(
@@ -332,7 +332,7 @@ files = ["rules/*.dl"]
         assert!(Layout::from_toml("[[graph]]\nfiles = 3").is_err());
     }
 
-    // @lat: [[tests#Studio server#Conventions sniff roles]]
+    // @tg: verifies:: [[tests#Studio server#Conventions sniff roles]] {since: "2026-09-24", level: unit}
     #[test]
     fn conventions_sniff_roles() {
         let l = Layout::convention();

@@ -26,7 +26,7 @@ fn defaults() -> JsonLdOptions {
     JsonLdOptions::default()
 }
 
-// @lat: [[tests#JSON-LD documents#Documents round-trip verbatim]]
+// @tg: verifies:: [[tests#JSON-LD documents#Documents round-trip verbatim]] {since: "2026-09-22", level: integration}
 #[test]
 fn documents_round_trip_verbatim() {
     for e in Engine::all() {
@@ -47,7 +47,7 @@ fn documents_round_trip_verbatim() {
     }
 }
 
-// @lat: [[tests#JSON-LD documents#Key strategies]]
+// @tg: verifies:: [[tests#JSON-LD documents#Key strategies]] {since: "2026-09-22", level: integration}
 #[test]
 fn key_strategies() {
     let no_id = r#"{"@context": {"name": "http://schema.org/name"}, "name": "anonymous"}"#;
@@ -96,7 +96,7 @@ fn key_strategies() {
     }
 }
 
-// @lat: [[tests#JSON-LD documents#Graph strategies]]
+// @tg: verifies:: [[tests#JSON-LD documents#Graph strategies]] {since: "2026-09-22", level: integration}
 #[test]
 fn graph_strategies() {
     let doc = r#"{"@context": {"name": "http://schema.org/name"}, "@id": "thing", "name": "x"}"#;
@@ -125,7 +125,7 @@ fn graph_strategies() {
     }
 }
 
-// @lat: [[tests#JSON-LD documents#Invalid JSON-LD is rejected atomically]]
+// @tg: verifies:: [[tests#JSON-LD documents#Invalid JSON-LD is rejected atomically]] {since: "2026-09-22", level: integration}
 #[test]
 fn invalid_json_ld_is_rejected_atomically() {
     for e in Engine::all() {
@@ -163,7 +163,7 @@ const WITH_PROOF: &str = r#"{
   "proof": {"proofValue": "z3abc"}
 }"#;
 
-// @lat: [[tests#JSON-LD documents#Graph containers are owned by the document]]
+// @tg: verifies:: [[tests#JSON-LD documents#Graph containers are owned by the document]] {since: "2026-09-22", level: integration}
 #[test]
 fn graph_containers_are_owned_by_the_document() {
     for e in Engine::all() {
@@ -183,7 +183,7 @@ fn graph_containers_are_owned_by_the_document() {
     }
 }
 
-// @lat: [[tests#JSON-LD documents#Blank nodes are document-scoped]]
+// @tg: verifies:: [[tests#JSON-LD documents#Blank nodes are document-scoped]] {since: "2026-09-22", level: integration}
 #[test]
 fn blank_nodes_are_document_scoped() {
     let a = r#"{"@context": {"name": "http://schema.org/name", "has": "http://schema.org/has"}, "@id": "urn:a", "has": {"name": "x"}}"#;
@@ -205,7 +205,7 @@ fn blank_nodes_are_document_scoped() {
     }
 }
 
-// @lat: [[tests#JSON-LD documents#Replace is atomic]]
+// @tg: verifies:: [[tests#JSON-LD documents#Replace is atomic]] {since: "2026-09-22", level: integration}
 #[test]
 fn replace_is_atomic() {
     let v = |n: &str| {
@@ -242,7 +242,7 @@ fn replace_is_atomic() {
     }
 }
 
-// @lat: [[tests#JSON-LD documents#Remove clears owned graphs only]]
+// @tg: verifies:: [[tests#JSON-LD documents#Remove clears owned graphs only]] {since: "2026-09-22", level: integration}
 #[test]
 fn remove_clears_owned_graphs_only() {
     for e in Engine::all() {
@@ -260,7 +260,7 @@ fn remove_clears_owned_graphs_only() {
     }
 }
 
-// @lat: [[tests#JSON-LD documents#Shared graphs delete exact triples]]
+// @tg: verifies:: [[tests#JSON-LD documents#Shared graphs delete exact triples]] {since: "2026-09-22", level: integration}
 #[test]
 fn shared_graphs_delete_exact_triples() {
     let doc = |id: &str, v: &str| {
@@ -287,7 +287,7 @@ fn shared_graphs_delete_exact_triples() {
     }
 }
 
-// @lat: [[tests#JSON-LD documents#Contexts load offline]]
+// @tg: verifies:: [[tests#JSON-LD documents#Contexts load offline]] {since: "2026-09-22", level: integration}
 #[test]
 fn contexts_load_offline() {
     let ctx = r#"{"@context": {"name": "http://schema.org/name"}}"#;
@@ -326,7 +326,7 @@ fn contexts_load_offline() {
     }
 }
 
-// @lat: [[tests#JSON-LD documents#Nested contexts load in rounds]]
+// @tg: verifies:: [[tests#JSON-LD documents#Nested contexts load in rounds]] {since: "2026-09-22", level: integration}
 #[test]
 fn nested_contexts_load_in_rounds() {
     let outer =
@@ -351,7 +351,7 @@ fn nested_contexts_load_in_rounds() {
     }
 }
 
-// @lat: [[tests#JSON-LD documents#SPARQL finds documents]]
+// @tg: verifies:: [[tests#JSON-LD documents#SPARQL finds documents]] {since: "2026-09-22", level: integration}
 #[test]
 fn sparql_finds_documents() {
     for e in Engine::all() {
@@ -388,7 +388,7 @@ fn sparql_finds_documents() {
     }
 }
 
-// @lat: [[tests#JSON-LD documents#Check and rebuild repair drift]]
+// @tg: verifies:: [[tests#JSON-LD documents#Check and rebuild repair drift]] {since: "2026-09-22", level: integration}
 #[test]
 fn check_and_rebuild_repair_drift() {
     for e in Engine::all() {
@@ -413,7 +413,7 @@ fn check_and_rebuild_repair_drift() {
     }
 }
 
-// @lat: [[tests#JSON-LD documents#Metadata lookup]]
+// @tg: verifies:: [[tests#JSON-LD documents#Metadata lookup]] {since: "2026-09-22", level: integration}
 #[test]
 fn metadata_lookup() {
     for e in Engine::all() {
@@ -468,7 +468,7 @@ fn metadata_lookup() {
     }
 }
 
-// @lat: [[tests#JSON-LD documents#Tables are created on demand]]
+// @tg: verifies:: [[tests#JSON-LD documents#Tables are created on demand]] {since: "2026-09-22", level: integration}
 #[test]
 fn tables_are_created_on_demand() {
     for e in Engine::all() {
@@ -490,7 +490,7 @@ fn tables_are_created_on_demand() {
     }
 }
 
-// @lat: [[tests#JSON-LD documents#Large documents stay atomic]]
+// @tg: verifies:: [[tests#JSON-LD documents#Large documents stay atomic]] {since: "2026-09-22", level: integration}
 #[test]
 fn large_documents_stay_atomic() {
     // A document far above the (shrunken) SQL-length limit is appended in chunks.

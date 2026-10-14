@@ -174,7 +174,7 @@ fn ex_opts() -> CypherOptions {
 
 // ----- property-graph mapping -----
 
-// @lat: [[tests#Cypher#Cypher nodes are visible to SPARQL]]
+// @tg: verifies:: [[tests#Cypher#Cypher nodes are visible to SPARQL]] {since: "2026-09-22", level: integration}
 #[test]
 fn cypher_node_visible_to_sparql() {
     for e in Engine::all() {
@@ -188,7 +188,7 @@ fn cypher_node_visible_to_sparql() {
     }
 }
 
-// @lat: [[tests#Cypher#RDF data is visible to Cypher]]
+// @tg: verifies:: [[tests#Cypher#RDF data is visible to Cypher]] {since: "2026-09-22", level: integration}
 #[test]
 fn rdf_visible_to_cypher() {
     for e in Engine::all() {
@@ -204,7 +204,7 @@ fn rdf_visible_to_cypher() {
     }
 }
 
-// @lat: [[tests#Cypher#A plain relationship is one triple]]
+// @tg: verifies:: [[tests#Cypher#A plain relationship is one triple]] {since: "2026-09-22", level: integration}
 #[test]
 fn plain_relationship_one_quad() {
     for e in Engine::all() {
@@ -216,7 +216,7 @@ fn plain_relationship_one_quad() {
     }
 }
 
-// @lat: [[tests#Cypher#Relationship properties live on a reifier]]
+// @tg: verifies:: [[tests#Cypher#Relationship properties live on a reifier]] {since: "2026-09-22", level: integration}
 #[test]
 fn relationship_property_round_trip() {
     for e in Engine::all() {
@@ -241,7 +241,7 @@ fn relationship_property_round_trip() {
     }
 }
 
-// @lat: [[tests#Cypher#Parallel relationships stay distinct]]
+// @tg: verifies:: [[tests#Cypher#Parallel relationships stay distinct]] {since: "2026-09-22", level: integration}
 #[test]
 fn parallel_relationships() {
     for e in Engine::all() {
@@ -265,7 +265,7 @@ fn parallel_relationships() {
     }
 }
 
-// @lat: [[tests#Cypher#Plain relationship becomes parallel]]
+// @tg: verifies:: [[tests#Cypher#Plain relationship becomes parallel]] {since: "2026-09-22", level: integration}
 #[test]
 fn plain_then_parallel() {
     for e in Engine::all() {
@@ -279,7 +279,7 @@ fn plain_then_parallel() {
     }
 }
 
-// @lat: [[tests#Cypher#Multi-valued properties read as lists]]
+// @tg: verifies:: [[tests#Cypher#Multi-valued properties read as lists]] {since: "2026-09-22", level: integration}
 #[test]
 fn multi_valued_list() {
     for e in Engine::all() {
@@ -304,7 +304,7 @@ fn multi_valued_list() {
     }
 }
 
-// @lat: [[tests#Cypher#List properties round-trip as rdf:JSON]]
+// @tg: verifies:: [[tests#Cypher#List properties round-trip as rdf:JSON]] {since: "2026-09-22", level: integration}
 #[test]
 fn list_property() {
     for e in Engine::all() {
@@ -330,7 +330,7 @@ fn social(e: &Engine) {
     );
 }
 
-// @lat: [[tests#Cypher#WITH pipelines aggregation]]
+// @tg: verifies:: [[tests#Cypher#WITH pipelines aggregation]] {since: "2026-09-22", level: integration}
 #[test]
 fn with_pipelines_aggregation() {
     for e in Engine::all() {
@@ -357,7 +357,7 @@ fn with_pipelines_aggregation() {
     }
 }
 
-// @lat: [[tests#Cypher#OPTIONAL MATCH yields null]]
+// @tg: verifies:: [[tests#Cypher#OPTIONAL MATCH yields null]] {since: "2026-09-22", level: integration}
 #[test]
 fn optional_match_null() {
     for e in Engine::all() {
@@ -404,7 +404,7 @@ impl SyncBackend for Counting {
     }
 }
 
-// @lat: [[tests#Cypher#Reads are one SQL statement]]
+// @tg: verifies:: [[tests#Cypher#Reads are one SQL statement]] {since: "2026-09-22", level: integration}
 #[test]
 fn single_statement() {
     let store = Store::with_backend(Counting(
@@ -433,7 +433,7 @@ fn single_statement() {
     assert!(x.contains("fully compiled to SQL"), "{x}");
 }
 
-// @lat: [[tests#Cypher#Relationships are not reused in one MATCH]]
+// @tg: verifies:: [[tests#Cypher#Relationships are not reused in one MATCH]] {since: "2026-09-22", level: integration}
 #[test]
 fn relationship_uniqueness() {
     for e in Engine::all() {
@@ -445,7 +445,7 @@ fn relationship_uniqueness() {
     }
 }
 
-// @lat: [[tests#Cypher#Variable-length paths follow trails]]
+// @tg: verifies:: [[tests#Cypher#Variable-length paths follow trails]] {since: "2026-09-22", level: integration}
 #[test]
 fn var_length_cycle() {
     for e in Engine::all() {
@@ -468,7 +468,7 @@ fn var_length_cycle() {
     }
 }
 
-// @lat: [[tests#Cypher#Shortest paths run on D1]]
+// @tg: verifies:: [[tests#Cypher#Shortest paths run on D1]] {since: "2026-09-22", level: integration}
 #[test]
 fn shortest_path() {
     for e in Engine::all() {
@@ -485,7 +485,7 @@ fn shortest_path() {
     }
 }
 
-// @lat: [[tests#Cypher#Nodes, relationships and paths are values]]
+// @tg: verifies:: [[tests#Cypher#Nodes, relationships and paths are values]] {since: "2026-09-22", level: integration}
 #[test]
 fn entity_values() {
     for e in Engine::all() {
@@ -510,7 +510,7 @@ fn entity_values() {
     }
 }
 
-// @lat: [[tests#Cypher#Explain shows the SQL]]
+// @tg: verifies:: [[tests#Cypher#Explain shows the SQL]] {since: "2026-09-22", level: integration}
 #[test]
 fn explain_join_order() {
     let store = Store::new().unwrap();
@@ -525,7 +525,7 @@ fn explain_join_order() {
     assert!(x.contains("SPARQL"), "{x}");
 }
 
-// @lat: [[tests#Cypher#Read clauses and functions]]
+// @tg: verifies:: [[tests#Cypher#Read clauses and functions]] {since: "2026-09-22", level: integration}
 #[test]
 fn read_features() {
     for e in Engine::all() {
@@ -567,7 +567,7 @@ fn read_features() {
     }
 }
 
-// @lat: [[tests#Cypher#Parameters]]
+// @tg: verifies:: [[tests#Cypher#Parameters]] {since: "2026-09-22", level: integration}
 #[test]
 fn parameters() {
     for e in Engine::all() {
@@ -617,7 +617,7 @@ fn parameters() {
 
 // ----- writes -----
 
-// @lat: [[tests#Cypher#MERGE is idempotent]]
+// @tg: verifies:: [[tests#Cypher#MERGE is idempotent]] {since: "2026-09-22", level: integration}
 #[test]
 fn merge_idempotent() {
     for e in Engine::all() {
@@ -642,7 +642,7 @@ fn merge_idempotent() {
     }
 }
 
-// @lat: [[tests#Cypher#SET and REMOVE]]
+// @tg: verifies:: [[tests#Cypher#SET and REMOVE]] {since: "2026-09-22", level: integration}
 #[test]
 fn set_remove() {
     for e in Engine::all() {
@@ -677,7 +677,7 @@ fn set_remove() {
     }
 }
 
-// @lat: [[tests#Cypher#DETACH DELETE removes relationships]]
+// @tg: verifies:: [[tests#Cypher#DETACH DELETE removes relationships]] {since: "2026-09-22", level: integration}
 #[test]
 fn detach_delete() {
     for e in Engine::all() {
@@ -694,7 +694,7 @@ fn detach_delete() {
     }
 }
 
-// @lat: [[tests#Cypher#Deleting a connected node fails atomically]]
+// @tg: verifies:: [[tests#Cypher#Deleting a connected node fails atomically]] {since: "2026-09-22", level: integration}
 #[test]
 fn delete_connected_fails() {
     for e in Engine::all() {
@@ -712,7 +712,7 @@ fn delete_connected_fails() {
     }
 }
 
-// @lat: [[tests#Cypher#Per-row creation on D1]]
+// @tg: verifies:: [[tests#Cypher#Per-row creation on D1]] {since: "2026-09-22", level: integration}
 #[test]
 fn per_row_creation() {
     for e in Engine::all() {
@@ -725,7 +725,7 @@ fn per_row_creation() {
 
 // ----- ontology and shapes -----
 
-// @lat: [[tests#Cypher#Labels follow the class hierarchy]]
+// @tg: verifies:: [[tests#Cypher#Labels follow the class hierarchy]] {since: "2026-09-22", level: integration}
 #[test]
 fn label_hierarchy() {
     for e in Engine::all() {
@@ -740,7 +740,7 @@ fn label_hierarchy() {
     }
 }
 
-// @lat: [[tests#Cypher#Inverse relationship types]]
+// @tg: verifies:: [[tests#Cypher#Inverse relationship types]] {since: "2026-09-22", level: integration}
 #[test]
 fn inverse_types() {
     for e in Engine::all() {
@@ -764,7 +764,7 @@ ex:PersonShape a sh:NodeShape ; sh:targetClass ex:Person ;
   sh:property [ sh:path ex:age ; sh:datatype xsd:integer ; sh:maxCount 1 ] ;
   sh:property [ sh:path ex:status ; sh:in ( \"active\" \"retired\" ) ] .";
 
-// @lat: [[tests#Cypher#Required properties join without OPTIONAL]]
+// @tg: verifies:: [[tests#Cypher#Required properties join without OPTIONAL]] {since: "2026-09-22", level: integration}
 #[test]
 fn required_property_inner_join() {
     let store = Store::new().unwrap();
@@ -791,7 +791,7 @@ fn required_property_inner_join() {
     assert!(x.contains("LEFT JOIN"), "{x}");
 }
 
-// @lat: [[tests#Cypher#SHACL guards abort invalid writes]]
+// @tg: verifies:: [[tests#Cypher#SHACL guards abort invalid writes]] {since: "2026-09-22", level: integration}
 #[test]
 fn shacl_guards() {
     for e in Engine::all() {
@@ -827,7 +827,7 @@ fn shacl_guards() {
     }
 }
 
-// @lat: [[tests#Cypher#Schema procedures]]
+// @tg: verifies:: [[tests#Cypher#Schema procedures]] {since: "2026-09-22", level: integration}
 #[test]
 fn procedures() {
     for e in Engine::all() {
@@ -861,7 +861,7 @@ fn procedures() {
     }
 }
 
-// @lat: [[tests#Cypher#Temporal values are stored as XSD literals]]
+// @tg: verifies:: [[tests#Cypher#Temporal values are stored as XSD literals]] {since: "2026-09-22", level: integration}
 #[test]
 fn temporal_values() {
     for e in Engine::all() {
@@ -903,7 +903,7 @@ fn temporal_values() {
     }
 }
 
-// @lat: [[tests#Cypher#Schema datatypes type comparisons]]
+// @tg: verifies:: [[tests#Cypher#Schema datatypes type comparisons]] {since: "2026-09-22", level: integration}
 #[test]
 fn schema_datatypes_type_comparisons() {
     let store = Store::new().unwrap();
@@ -933,7 +933,7 @@ fn schema_datatypes_type_comparisons() {
     }
 }
 
-// @lat: [[tests#Cypher#Pattern comprehensions]]
+// @tg: verifies:: [[tests#Cypher#Pattern comprehensions]] {since: "2026-09-22", level: integration}
 #[test]
 fn pattern_comprehensions() {
     for e in Engine::all() {
@@ -975,7 +975,7 @@ fn pattern_comprehensions() {
     }
 }
 
-// @lat: [[tests#Cypher#Union default graph reads every graph]]
+// @tg: verifies:: [[tests#Cypher#Union default graph reads every graph]] {since: "2026-09-22", level: integration}
 #[test]
 fn union_default_graph() {
     for e in Engine::all() {
@@ -1015,7 +1015,7 @@ fn union_default_graph() {
     }
 }
 
-// @lat: [[tests#Cypher#Ordering by an aggregate]]
+// @tg: verifies:: [[tests#Cypher#Ordering by an aggregate]] {since: "2026-09-22", level: integration}
 #[test]
 fn order_by_aggregate() {
     for e in Engine::all() {
@@ -1055,7 +1055,7 @@ ex:PersonAgeShape a sh:NodeShape ; sh:targetClass ex:Person ;
 ex:CompanyShape a sh:NodeShape ; sh:targetClass ex:Company ;
   sh:property [ sh:path ex:name ; sh:minCount 1 ] .";
 
-// @lat: [[tests#Cypher#Shape index agrees with the shapes query]]
+// @tg: verifies:: [[tests#Cypher#Shape index agrees with the shapes query]] {since: "2026-09-24", level: integration}
 #[test]
 fn shape_index_agrees_with_shapes_query() {
     let store = Store::new().unwrap();

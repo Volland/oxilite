@@ -389,7 +389,7 @@ pub fn find_system_library() -> Option<&'static str> {
 mod tests {
     use super::*;
 
-    // @lat: [[tests#Backends#Dylib loads a system SQLite]]
+    // @tg: verifies:: [[tests#Backends#Dylib loads a system SQLite]] {since: "2026-09-22", level: unit}
     #[test]
     fn dylib_loads_a_system_sqlite() {
         let Some(lib) = find_system_library() else {
@@ -425,7 +425,7 @@ mod tests {
         assert_eq!(r[0].rows[0][0], SqlValue::Integer(0));
     }
 
-    // @lat: [[tests#Backends#Invalid library is reported]]
+    // @tg: verifies:: [[tests#Backends#Invalid library is reported]] {since: "2026-09-22", level: unit}
     #[test]
     fn invalid_library_is_reported() {
         let e = DylibBackend::open("/nonexistent/libsqlite3.so", ":memory:")

@@ -15,7 +15,7 @@ beforeEach(async () => {
 });
 
 describe("D1Store Cypher", () => {
-  // @lat: [[tests#D1#Cypher runs on D1]]
+  // @tg: verifies:: [[tests#D1#Cypher runs on D1]] {since: "2026-09-22", level: integration}
   it("creates, matches, finds shortest paths and deletes in D1 batches", async () => {
     await store.cypher("UNWIND range(1, 5) AS i CREATE (:N {i: i})");
     await store.cypher("MATCH (a:N), (b:N) WHERE b.i = a.i + 1 CREATE (a)-[:NEXT]->(b)");

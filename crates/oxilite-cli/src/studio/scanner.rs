@@ -560,7 +560,7 @@ mod tests {
             .collect()
     }
 
-    // @lat: [[tests#Studio server#Scanner roles and prefixes]]
+    // @tg: verifies:: [[tests#Studio server#Scanner roles and prefixes]] {since: "2026-09-24", level: unit}
     #[test]
     fn turtle_roles_and_prefixes() {
         let src = "@prefix ex: <http://ex.org/> .\nex:a a ex:C ; ex:p ex:b , [ ex:q <rel> ] .\n";

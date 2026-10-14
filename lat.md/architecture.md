@@ -1,3 +1,6 @@
+---
+type: Concept
+---
 # Architecture
 
 oxilite is an Oxigraph-compatible RDF/SPARQL database that uses SQLite as its only storage engine, so it runs anywhere SQLite runs — including Cloudflare D1.

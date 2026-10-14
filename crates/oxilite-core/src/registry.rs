@@ -1032,7 +1032,7 @@ mod tests {
         NamedNode::new_unchecked(c).into()
     }
 
-    // @lat: [[tests#Schema registry#Readers agree on edge cases]]
+    // @tg: verifies:: [[tests#Schema registry#Readers agree on edge cases]] {since: "2026-09-26", level: unit}
     #[test]
     fn readers_agree_on_booleans_and_roles() {
         let g = "http://ex.org/g";
@@ -1062,7 +1062,7 @@ mod tests {
         assert!(sql.contains(&ids().falses[1].to_string()));
     }
 
-    // @lat: [[tests#Schema registry#Registry writes are detected narrowly]]
+    // @tg: verifies:: [[tests#Schema registry#Registry writes are detected narrowly]] {since: "2026-09-26", level: unit}
     #[test]
     fn registry_writes_are_detected_narrowly() {
         let touches = |u: &str| {
@@ -1091,7 +1091,7 @@ mod tests {
         ));
     }
 
-    // @lat: [[tests#Schema registry#The vocabulary is consistent with the system graphs]]
+    // @tg: verifies:: [[tests#Schema registry#The vocabulary is consistent with the system graphs]] {since: "2026-09-26", level: unit}
     #[test]
     fn vocabulary_is_consistent_with_the_system_graphs() {
         use std::collections::BTreeSet;
@@ -1165,7 +1165,7 @@ mod tests {
         }
     }
 
-    // @lat: [[tests#Schema registry#Registry problems]]
+    // @tg: verifies:: [[tests#Schema registry#Registry problems]] {since: "2026-09-26", level: unit}
     #[test]
     fn problems_mirror_the_registry_shapes() {
         let g = "http://ex.org/g";

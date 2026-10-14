@@ -5,3 +5,4 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[milestones]] — delivery plan and done-criteria (mirrors `openspec/changes/`).
 - [[tests]] — implemented test specifications, each referenced from test code.
 - [[test-plan]] — planned test specifications per milestone.
+- [[code-ontology]] — shared vocabulary of intent types and typed edges between intent and code

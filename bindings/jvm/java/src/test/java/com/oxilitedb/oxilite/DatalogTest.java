@@ -7,7 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-// @lat: [[tests#JVM bindings#Datalog evaluates recursive rules]]
+// @tg: verifies:: [[tests#JVM bindings#Datalog evaluates recursive rules]] {since: "2026-09-30", level: integration}
 class DatalogTest {
     private static final String PREFIX = "@prefix ex: <http://example.org/> .\n";
 

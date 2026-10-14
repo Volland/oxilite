@@ -26,7 +26,7 @@ anc(?x, ?y) :- ex:parent(?x, ?y).
 anc(?x, ?z) :- ex:parent(?x, ?y), anc(?y, ?z).
 ?- anc(ex:ada, ?y).";
 
-// @lat: [[tests#Versioning#Datalog reads a past version]]
+// @tg: verifies:: [[tests#Versioning#Datalog reads a past version]] {since: "2026-09-25", level: integration}
 #[test]
 fn datalog_reads_a_past_version() {
     let s = store();
@@ -99,7 +99,7 @@ fn strings(r: &oxilite_datalog::DatalogResult) -> Vec<String> {
     v
 }
 
-// @lat: [[tests#Versioning#Datalog compares versions per atom]]
+// @tg: verifies:: [[tests#Versioning#Datalog compares versions per atom]] {since: "2026-09-25", level: integration}
 #[test]
 fn datalog_compares_versions_per_atom() {
     let s = tickets();
@@ -134,7 +134,7 @@ fn datalog_compares_versions_per_atom() {
     assert!(matches!(err, DatalogError::Unsafe { .. }), "{err}");
 }
 
-// @lat: [[tests#Versioning#Datalog reads the history relations]]
+// @tg: verifies:: [[tests#Versioning#Datalog reads the history relations]] {since: "2026-09-25", level: integration}
 #[test]
 fn datalog_reads_the_history_relations() {
     let s = tickets();

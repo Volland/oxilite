@@ -88,7 +88,7 @@ impl SyncBackend for Recording {
     }
 }
 
-// @lat: [[tests#Versioning#Off store is unchanged]]
+// @tg: verifies:: [[tests#Versioning#Off store is unchanged]] {since: "2026-09-25", level: integration}
 #[test]
 fn off_store_is_unchanged() {
     let backend = Recording {
@@ -114,7 +114,7 @@ fn off_store_is_unchanged() {
     assert!(err.contains("keeps no history"), "{err}");
 }
 
-// @lat: [[tests#Versioning#Stamps record the adding tick]]
+// @tg: verifies:: [[tests#Versioning#Stamps record the adding tick]] {since: "2026-09-25", level: integration}
 #[test]
 fn stamps_record_the_adding_tick() {
     let store = store(Versioning::Stamped);
@@ -147,7 +147,7 @@ fn stamps_record_the_adding_tick() {
     assert!(err.contains("keeps no history"), "{err}");
 }
 
-// @lat: [[tests#Versioning#As-of equals snapshots]]
+// @tg: verifies:: [[tests#Versioning#As-of equals snapshots]] {since: "2026-09-25", level: integration}
 #[test]
 fn as_of_equals_snapshots() {
     let store = store(Versioning::Log);
@@ -190,7 +190,7 @@ fn as_of_equals_snapshots() {
     );
 }
 
-// @lat: [[tests#Versioning#Only effective changes are logged]]
+// @tg: verifies:: [[tests#Versioning#Only effective changes are logged]] {since: "2026-09-25", level: integration}
 #[test]
 fn only_effective_changes_are_logged() {
     let store = store(Versioning::Log);
@@ -207,7 +207,7 @@ fn only_effective_changes_are_logged() {
     assert!(store.changes(head - 1, None).unwrap().is_empty());
 }
 
-// @lat: [[tests#Versioning#History is immutable]]
+// @tg: verifies:: [[tests#Versioning#History is immutable]] {since: "2026-09-25", level: integration}
 #[test]
 fn history_is_immutable() {
     let store = store(Versioning::Log);
@@ -228,7 +228,7 @@ fn history_is_immutable() {
     }
 }
 
-// @lat: [[tests#Versioning#Commits carry author and message]]
+// @tg: verifies:: [[tests#Versioning#Commits carry author and message]] {since: "2026-09-25", level: integration}
 #[test]
 fn commits_carry_author_and_message() {
     let store = store(Versioning::Log);
@@ -253,7 +253,7 @@ fn commits_carry_author_and_message() {
     assert!(log.iter().any(|c| c.kind == "genesis"));
 }
 
-// @lat: [[tests#Versioning#Versions compare within one query]]
+// @tg: verifies:: [[tests#Versioning#Versions compare within one query]] {since: "2026-09-25", level: integration}
 #[test]
 fn versions_compare_within_one_query() {
     let store = store(Versioning::Log);
@@ -309,7 +309,7 @@ fn versions_compare_within_one_query() {
     assert_eq!(reach(Some("HEAD~1")), 1);
 }
 
-// @lat: [[tests#Versioning#Opening never changes the level]]
+// @tg: verifies:: [[tests#Versioning#Opening never changes the level]] {since: "2026-09-25", level: integration}
 #[test]
 fn opening_never_changes_the_level() {
     let dir = tempfile_dir();
@@ -342,7 +342,7 @@ fn opening_never_changes_the_level() {
     std::fs::remove_dir_all(dir).ok();
 }
 
-// @lat: [[tests#Versioning#Upgrade records the store as genesis]]
+// @tg: verifies:: [[tests#Versioning#Upgrade records the store as genesis]] {since: "2026-09-25", level: integration}
 #[test]
 fn upgrade_records_the_store_as_genesis() {
     let store = store(Versioning::Off);
@@ -370,7 +370,7 @@ fn upgrade_records_the_store_as_genesis() {
     assert!(err.contains("before the recorded history"), "{err}");
 }
 
-// @lat: [[tests#Versioning#Downgrades freeze and resume]]
+// @tg: verifies:: [[tests#Versioning#Downgrades freeze and resume]] {since: "2026-09-25", level: integration}
 #[test]
 fn downgrades_freeze_and_resume() {
     let store = store(Versioning::Log);
@@ -425,7 +425,7 @@ fn downgrades_freeze_and_resume() {
     assert_eq!(triples(&store, None).unwrap().len(), 3);
 }
 
-// @lat: [[tests#Versioning#Purge removes from history]]
+// @tg: verifies:: [[tests#Versioning#Purge removes from history]] {since: "2026-09-25", level: integration}
 #[test]
 fn purge_removes_from_history() {
     let store = store(Versioning::Log);
@@ -454,7 +454,7 @@ fn purge_removes_from_history() {
     assert_eq!(log[0].message.as_deref(), Some("erasure request"));
 }
 
-// @lat: [[tests#Versioning#D1 batches keep a statement for the tick]]
+// @tg: verifies:: [[tests#Versioning#D1 batches keep a statement for the tick]] {since: "2026-09-25", level: integration}
 #[test]
 fn d1_batches_keep_a_statement_for_the_tick() {
     use oxilite::core::version::{effective_caps, prepare};
@@ -648,7 +648,7 @@ impl Engine {
     }
 }
 
-// @lat: [[tests#Versioning#Every engine keeps the same history]]
+// @tg: verifies:: [[tests#Versioning#Every engine keeps the same history]] {since: "2026-09-25", level: integration}
 #[test]
 fn every_engine_keeps_the_same_history() {
     let options = StoreOptions {
@@ -705,7 +705,7 @@ fn every_engine_keeps_the_same_history() {
     }
 }
 
-// @lat: [[tests#Versioning#Updates do not read the past]]
+// @tg: verifies:: [[tests#Versioning#Updates do not read the past]] {since: "2026-09-25", level: integration}
 #[test]
 fn updates_do_not_read_the_past() {
     let store = store(Versioning::Log);
@@ -719,7 +719,7 @@ fn updates_do_not_read_the_past() {
     assert!(triples(&store, None).unwrap().is_empty());
 }
 
-// @lat: [[tests#Versioning#History graph answers who changed what]]
+// @tg: verifies:: [[tests#Versioning#History graph answers who changed what]] {since: "2026-09-25", level: integration}
 #[test]
 fn history_graph_answers_who_changed_what() {
     let store = store(Versioning::Log);
