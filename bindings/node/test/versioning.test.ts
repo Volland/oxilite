@@ -9,7 +9,7 @@ const statuses = (store: Store, asOf?: string) =>
   );
 
 describe("versioning (native)", () => {
-  // @lat: [[tests#Versioning#Node binding keeps history]]
+  // @tg: verifies:: [[tests#Versioning#Node binding keeps history]] {since: "2026-09-25", level: integration}
   it("records commits, time travels, and freezes", () => {
     const store = new Store({ versioning: "log" });
     store.withCommit({ author: "ada", message: "seed" }, (s) =>
@@ -26,7 +26,7 @@ describe("versioning (native)", () => {
     assert.strictEqual(store.versioning().level, "stamped");
   });
 
-  // @lat: [[tests#Versioning#Node binding queries the history]]
+  // @tg: verifies:: [[tests#Versioning#Node binding queries the history]] {since: "2026-09-25", level: integration}
   it("queries the history graph, Cypher and Datalog history", () => {
     const store = new Store({ versioning: "log" });
     store.withCommit({ author: "ada" }, (s) => s.cypher("CREATE (:Ticket {name: 't1', status: 'open'})"));

@@ -73,7 +73,7 @@ fn with_text() -> StoreOptions {
     }
 }
 
-// @lat: [[tests#Text search#Word match]]
+// @tg: verifies:: [[tests#Text search#Word match]] {since: "2026-09-22", level: integration}
 #[test]
 fn word_match_with_the_index() {
     check(
@@ -87,13 +87,13 @@ fn word_match_with_the_index() {
     check(dylib(&with_text()), true);
 }
 
-// @lat: [[tests#Text search#Same answers without the index]]
+// @tg: verifies:: [[tests#Text search#Same answers without the index]] {since: "2026-09-22", level: integration}
 #[test]
 fn same_answers_without_the_index() {
     check(Store::new().unwrap(), false);
 }
 
-// @lat: [[tests#Text search#Disabled by default]]
+// @tg: verifies:: [[tests#Text search#Disabled by default]] {since: "2026-09-22", level: integration}
 #[test]
 fn disabled_by_default() {
     let s = Store::new().unwrap();

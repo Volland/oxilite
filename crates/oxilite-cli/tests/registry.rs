@@ -20,7 +20,7 @@ fn ok(args: &[&str]) -> String {
     String::from_utf8_lossy(&out.stdout).into_owned()
 }
 
-// @lat: [[tests#Command line#Registry and reasoning flags]]
+// @tg: verifies:: [[tests#Command line#Registry and reasoning flags]] {since: "2026-09-26", level: e2e}
 #[test]
 fn registry_and_reasoning_flags() {
     let dir = std::env::temp_dir().join(format!("oxilite-registry-{}", std::process::id()));

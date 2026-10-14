@@ -20,7 +20,7 @@ beforeEach(async () => {
 });
 
 describe("D1Store (Oxigraph JS API, async)", () => {
-  // @lat: [[tests#D1#Store API on Miniflare D1]]
+  // @tg: verifies:: [[tests#D1#Store API on Miniflare D1]] {since: "2026-09-22", level: integration}
   it("add / has / delete / size / match", async () => {
     await store.add(quad(ex, ex, literal("o"), ex2));
     assert(await store.has(quad(ex, ex, literal("o"), ex2)));
@@ -73,7 +73,7 @@ describe("D1Store (Oxigraph JS API, async)", () => {
     assert(await store.has(quad(ex, ex, ex, ex)));
   });
 
-  // @lat: [[tests#D1#Ids above 2^53 survive D1]]
+  // @tg: verifies:: [[tests#D1#Ids above 2^53 survive D1]] {since: "2026-09-22", level: integration}
   it("ids above 2^53 survive the JavaScript round-trip", async () => {
     // Every hashed id is a 60-bit integer: a lossy transport would corrupt them all.
     const terms = Array.from({ length: 50 }, (_, i) => namedNode(`http://example.com/n${i}`));
@@ -83,7 +83,7 @@ describe("D1Store (Oxigraph JS API, async)", () => {
     for (const row of r) assert.strictEqual(row.get("o")?.value, `v${row.get("s")?.value}`);
   });
 
-  // @lat: [[tests#D1#Failed update leaves D1 unchanged]]
+  // @tg: verifies:: [[tests#D1#Failed update leaves D1 unchanged]] {since: "2026-09-22", level: integration}
   it("a failing update is rolled back as one batch", async () => {
     await store.update("CREATE GRAPH <http://example.com/g>");
     await assert.rejects(
@@ -93,7 +93,7 @@ describe("D1Store (Oxigraph JS API, async)", () => {
     assert.strictEqual(await store.size(), 0);
   });
 
-  // @lat: [[tests#D1#Large loads respect D1 limits]]
+  // @tg: verifies:: [[tests#D1#Large loads respect D1 limits]] {since: "2026-09-22", level: integration}
   it("bulk loads split into batches under D1's statement limit", async () => {
     const lines = Array.from(
       { length: 6000 },
@@ -105,7 +105,7 @@ describe("D1Store (Oxigraph JS API, async)", () => {
     assert(plan.includes("statistics"), plan);
   });
 
-  // @lat: [[tests#D1#Reasoning on D1]]
+  // @tg: verifies:: [[tests#D1#Reasoning on D1]] {since: "2026-09-22", level: integration}
   it("reasons per query and materializes OWL 2 RL on D1", async () => {
     await store.load(
       `@prefix ex: <http://example.com/> . @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> . @prefix owl: <http://www.w3.org/2002/07/owl#> .
@@ -124,7 +124,7 @@ describe("D1Store (Oxigraph JS API, async)", () => {
     await store.clearInferences();
   });
 
-  // @lat: [[tests#D1#Schema registry on D1]]
+  // @tg: verifies:: [[tests#D1#Schema registry on D1]] {since: "2026-09-26", level: integration}
   it("registers schema graphs on D1", async () => {
     const onto = namedNode("http://example.com/onto");
     await store.load(
@@ -170,7 +170,7 @@ describe("D1Store (Oxigraph JS API, async)", () => {
     assert.deepStrictEqual(await store.schemaGraphs(), []);
   });
 
-  // @lat: [[tests#D1#System graphs on D1]]
+  // @tg: verifies:: [[tests#D1#System graphs on D1]] {since: "2026-09-26", level: integration}
   it("installs the system graphs on D1", async () => {
     assert.strictEqual(await store.installSystemGraphs(), true);
     assert.strictEqual(await store.installSystemGraphs(), false);
@@ -180,7 +180,7 @@ describe("D1Store (Oxigraph JS API, async)", () => {
     assert(S.schemaSql({ systemGraphs: true }).includes("INSERT"));
   });
 
-  // @lat: [[tests#Text search#Text search on D1]]
+  // @tg: verifies:: [[tests#Text search#Text search on D1]] {since: "2026-09-22", level: integration}
   it("full-text search with FTS5 on D1", async () => {
     const db = await mf.getD1Database("DB");
     const text = await D1Store.open(db, { textIndex: true });

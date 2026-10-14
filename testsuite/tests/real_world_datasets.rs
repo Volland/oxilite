@@ -128,7 +128,7 @@ fn generic_queries(name: &str) -> Vec<CorpusQuery> {
     ]
 }
 
-// @lat: [[tests#Oxigraph compatibility#Real-world datasets round-trip through oxilite]]
+// @tg: verifies:: [[tests#Oxigraph compatibility#Real-world datasets round-trip through oxilite]] {since: "2026-09-30", level: integration}
 #[test]
 fn real_world_datasets_round_trip_through_oxilite() -> Result<()> {
     let mut failures = Vec::new();
@@ -165,7 +165,7 @@ fn real_world_datasets_round_trip_through_oxilite() -> Result<()> {
     Ok(())
 }
 
-// @lat: [[tests#Oxigraph compatibility#Real-world datasets answer generic queries like Oxigraph]]
+// @tg: verifies:: [[tests#Oxigraph compatibility#Real-world datasets answer generic queries like Oxigraph]] {since: "2026-09-30", level: integration}
 #[test]
 fn real_world_datasets_answer_generic_queries_like_oxigraph() -> Result<()> {
     let mut failures = Vec::new();

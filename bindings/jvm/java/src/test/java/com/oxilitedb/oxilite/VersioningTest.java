@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
 
-// @lat: [[tests#JVM bindings#Versioning records commits and time travels]]
+// @tg: verifies:: [[tests#JVM bindings#Versioning records commits and time travels]] {since: "2026-09-30", level: integration}
 class VersioningTest {
     @Test
     void recordsCommitsAndTimeTravels() {

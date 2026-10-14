@@ -41,7 +41,7 @@ const CLOSE: &str = "MATCH (t:Ticket {name: 't1'}) SET t.status = 'done'";
 const READ: &str = "MATCH (t:Ticket) RETURN t.status ORDER BY t.status";
 const NEIGHBOURS: &str = "MATCH (t:Ticket {name: 't1'}) RETURN t";
 
-// @lat: [[tests#Versioning#Cypher reads a past version]]
+// @tg: verifies:: [[tests#Versioning#Cypher reads a past version]] {since: "2026-09-25", level: integration}
 #[test]
 fn cypher_reads_a_past_version() {
     let options = StoreOptions {

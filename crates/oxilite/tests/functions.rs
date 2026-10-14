@@ -69,7 +69,7 @@ fn column<B: oxilite::SyncBackend + Send + Sync + 'static>(
     out
 }
 
-// @lat: [[tests#Host functions#Registry]]
+// @tg: verifies:: [[tests#Host functions#Registry]] {since: "2026-09-28", level: integration}
 #[test]
 fn registry() {
     let store = Store::new().unwrap();
@@ -92,7 +92,7 @@ fn registry() {
     assert_eq!(store.functions().len(), 1);
 }
 
-// @lat: [[tests#Host functions#SPARQL calls host functions]]
+// @tg: verifies:: [[tests#Host functions#SPARQL calls host functions]] {since: "2026-09-28", level: integration}
 #[test]
 fn sparql_calls_host_functions() {
     let store = Store::new().unwrap();
@@ -140,7 +140,7 @@ fn sparql_calls_host_functions() {
     );
 }
 
-// @lat: [[tests#Host functions#Host functions on Turso with vector search]]
+// @tg: verifies:: [[tests#Host functions#Host functions on Turso with vector search]] {since: "2026-09-28", level: integration}
 #[cfg(feature = "turso")]
 #[test]
 fn host_functions_with_vector_search() {
@@ -171,7 +171,7 @@ fn host_functions_with_vector_search() {
     );
 }
 
-// @lat: [[tests#Host functions#Cypher calls host functions]]
+// @tg: verifies:: [[tests#Host functions#Cypher calls host functions]] {since: "2026-09-28", level: integration}
 #[test]
 fn cypher_calls_host_functions() {
     use oxilite::cypher::{CypherOptions, Value, Vocabulary};
@@ -240,7 +240,7 @@ fn datalog_column<B: oxilite::SyncBackend + Send + Sync + 'static>(
     out
 }
 
-// @lat: [[tests#Host functions#Datalog calls host functions]]
+// @tg: verifies:: [[tests#Host functions#Datalog calls host functions]] {since: "2026-09-28", level: integration}
 #[test]
 fn datalog_calls_host_functions() {
     let store = Store::new().unwrap();
@@ -288,7 +288,7 @@ fn datalog_calls_host_functions() {
     .is_empty());
 }
 
-// @lat: [[tests#Host functions#Datalog rejects recursive host rules]]
+// @tg: verifies:: [[tests#Host functions#Datalog rejects recursive host rules]] {since: "2026-09-28", level: integration}
 #[test]
 fn datalog_rejects_recursive_host_rules() {
     let store = Store::new().unwrap();

@@ -132,7 +132,7 @@ fn check(
     );
 }
 
-// @lat: [[tests#Cypher#SPARQL and Cypher agree]]
+// @tg: verifies:: [[tests#Cypher#SPARQL and Cypher agree]] {since: "2026-09-22", level: integration}
 #[test]
 fn sparql_and_cypher_agree() {
     let prefixes = "PREFIX ex: <http://example.com/> PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> ";

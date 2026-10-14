@@ -22,7 +22,7 @@ beforeEach(async () => {
 });
 
 describe("@oxilite/d1 JSON-LD", () => {
-  // @lat: [[tests#D1#JSON-LD documents on D1]]
+  // @tg: verifies:: [[tests#D1#JSON-LD documents on D1]] {since: "2026-09-22", level: integration}
   it("stores, queries, replaces and removes documents", async () => {
     const docs = store.jsonld();
     const v1 = '{"@context": {"p": "http://example.org/p"}, "@id": "urn:d", "p": "1"}';
@@ -49,7 +49,7 @@ describe("@oxilite/d1 JSON-LD", () => {
 });
 
 describe("@oxilite/d1 Verifiable Credentials", () => {
-  // @lat: [[tests#D1#Credentials on D1]]
+  // @tg: verifies:: [[tests#D1#Credentials on D1]] {since: "2026-09-22", level: integration}
   it("stores credentials with bundled contexts and finds them", async () => {
     const vcs = store.credentials();
     const degree = fixture("degree-v2.json");

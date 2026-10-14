@@ -291,7 +291,7 @@ fn words(sql: &str) -> impl Iterator<Item = &str> + '_ {
 mod tests {
     use super::*;
 
-    // @lat: [[tests#Synalog#Scanner ignores literals]]
+    // @tg: verifies:: [[tests#Synalog#Scanner ignores literals]] {since: "2026-09-29", level: unit}
     #[test]
     fn scanner_ignores_literals() {
         let sql = "SELECT 'MagicalEntangle(1, 2)' AS s, \"ArgMax(x)\" FROM t -- ArgMax(y)\n";
@@ -302,7 +302,7 @@ mod tests {
         assert_eq!(ids, ["select", "t_0_triples", "x", "from", "as", "t"]);
     }
 
-    // @lat: [[tests#Synalog#Runtime helpers are rewritten]]
+    // @tg: verifies:: [[tests#Synalog#Runtime helpers are rewritten]] {since: "2026-09-29", level: unit}
     #[test]
     fn runtime_helpers_are_rewritten() {
         let sql = "SELECT MIN(MagicalEntangle(1, x_6.value)) AS v, \

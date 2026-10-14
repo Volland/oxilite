@@ -46,7 +46,7 @@ fn feed(s: &mut Session, text: &str) {
     }
 }
 
-// @lat: [[tests#Shell#Statements run when complete]]
+// @tg: verifies:: [[tests#Shell#Statements run when complete]] {since: "2026-09-25", level: unit}
 #[test]
 fn statements_run_when_complete() {
     assert!(balanced("SELECT * { ?s ?p \"}\" } # {"));
@@ -79,7 +79,7 @@ fn statements_run_when_complete() {
     assert!(!s.is_pending());
 }
 
-// @lat: [[tests#Shell#Exit stops at once]]
+// @tg: verifies:: [[tests#Shell#Exit stops at once]] {since: "2026-09-25", level: unit}
 #[test]
 fn exit_stops_at_once() {
     let (mut s, _, _) = session();
@@ -88,7 +88,7 @@ fn exit_stops_at_once() {
     assert!(matches!(s.feed_line("  .exit 4"), Flow::Exit(4)));
 }
 
-// @lat: [[tests#Shell#Session prefixes]]
+// @tg: verifies:: [[tests#Shell#Session prefixes]] {since: "2026-09-25", level: unit}
 #[test]
 fn session_prefixes() {
     let mut p = Prefixes::default();
@@ -112,7 +112,7 @@ fn session_prefixes() {
     assert!(err.take().is_empty());
 }
 
-// @lat: [[tests#Shell#Tables fit the terminal]]
+// @tg: verifies:: [[tests#Shell#Tables fit the terminal]] {since: "2026-09-25", level: unit}
 #[test]
 fn tables_fit_the_terminal() {
     assert_eq!(fit_widths(&[5, 10], Some(80)), vec![5, 10]);
@@ -130,7 +130,7 @@ fn tables_fit_the_terminal() {
     assert!(t.contains('…'));
 }
 
-// @lat: [[tests#Shell#Completion knows the store]]
+// @tg: verifies:: [[tests#Shell#Completion knows the store]] {since: "2026-09-25", level: unit}
 #[test]
 fn completion_knows_the_store() {
     let (mut s, _, _) = session();
@@ -170,7 +170,7 @@ fn completion_knows_the_store() {
     assert!(complete_command(&s, ".load da", 8).is_none());
 }
 
-// @lat: [[tests#Shell#Save copies the store]]
+// @tg: verifies:: [[tests#Shell#Save copies the store]] {since: "2026-09-25", level: unit}
 #[test]
 fn save_copies_the_store() {
     let dir = std::env::temp_dir().join(format!("oxilite-shell-save-{}", std::process::id()));
@@ -206,7 +206,7 @@ fn save_copies_the_store() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-// @lat: [[tests#Shell#Schema registry commands]]
+// @tg: verifies:: [[tests#Shell#Schema registry commands]] {since: "2026-09-26", level: unit}
 #[test]
 fn schema_registry_commands() {
     let dir = std::env::temp_dir().join(format!("oxilite-shell-registry-{}", std::process::id()));
@@ -280,7 +280,7 @@ fn schema_registry_commands() {
     std::fs::remove_dir_all(dir).ok();
 }
 
-// @lat: [[tests#Shell#Session query options]]
+// @tg: verifies:: [[tests#Shell#Session query options]] {since: "2026-09-26", level: unit}
 #[test]
 fn session_query_options() {
     let (mut s, out, err) = session();
@@ -342,7 +342,7 @@ fn session_query_options() {
     assert!(err.take().is_empty());
 }
 
-// @lat: [[tests#Shell#Vector commands]]
+// @tg: verifies:: [[tests#Shell#Vector commands]] {since: "2026-09-28", level: unit}
 #[test]
 fn vector_commands() {
     let turso = Location {

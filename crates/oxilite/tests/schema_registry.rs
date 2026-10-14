@@ -60,7 +60,7 @@ fn rdfs() -> QueryOptions {
     }
 }
 
-// @lat: [[tests#Schema registry#Registration round-trip]]
+// @tg: verifies:: [[tests#Schema registry#Registration round-trip]] {since: "2026-09-24", level: integration}
 #[test]
 fn registers_lists_and_unregisters() {
     let store = store();
@@ -101,7 +101,7 @@ fn registers_lists_and_unregisters() {
     assert_eq!(store.len().unwrap(), 1);
 }
 
-// @lat: [[tests#Schema registry#Reasoning scoped to registered ontologies]]
+// @tg: verifies:: [[tests#Schema registry#Reasoning scoped to registered ontologies]] {since: "2026-09-24", level: integration}
 #[test]
 fn reasoning_is_scoped_to_active_ontologies() {
     let store = store();
@@ -144,7 +144,7 @@ fn reasoning_is_scoped_to_active_ontologies() {
     );
 }
 
-// @lat: [[tests#Schema registry#Axioms outside registered ontologies]]
+// @tg: verifies:: [[tests#Schema registry#Axioms outside registered ontologies]] {since: "2026-09-24", level: integration}
 #[test]
 fn axioms_outside_registered_ontologies_are_ignored() {
     let store = store();
@@ -167,7 +167,7 @@ fn axioms_outside_registered_ontologies_are_ignored() {
     );
 }
 
-// @lat: [[tests#Schema registry#Hiding schema graphs]]
+// @tg: verifies:: [[tests#Schema registry#Hiding schema graphs]] {since: "2026-09-24", level: integration}
 #[test]
 fn schema_graphs_can_be_hidden() {
     let store = store();
@@ -216,7 +216,7 @@ fn schema_graphs_can_be_hidden() {
     );
 }
 
-// @lat: [[tests#Schema registry#Dropping a schema graph]]
+// @tg: verifies:: [[tests#Schema registry#Dropping a schema graph]] {since: "2026-09-24", level: integration}
 #[test]
 fn drop_removes_registration_and_quads() {
     let store = store();
@@ -241,7 +241,7 @@ const SHAPES: &str = "GRAPH ex:shapes { \
        sh:property [ sh:path ex:name ; sh:pattern \"^[A-Z]\" ] ; \
        sh:property [ sh:path ex:employer ; sh:class ex:Company ] . }";
 
-// @lat: [[tests#Schema registry#Compiled shape index]]
+// @tg: verifies:: [[tests#Schema registry#Compiled shape index]] {since: "2026-09-24", level: integration}
 #[test]
 fn shape_index_is_compiled_on_write() {
     let store = store();
@@ -285,7 +285,7 @@ fn shape_index_is_compiled_on_write() {
     assert!(employer.relationship);
 }
 
-// @lat: [[tests#Schema registry#Shape index follows deletions]]
+// @tg: verifies:: [[tests#Schema registry#Shape index follows deletions]] {since: "2026-09-24", level: integration}
 #[test]
 fn shape_index_follows_deletions_and_scope() {
     let store = store();
@@ -319,7 +319,7 @@ fn shape_index_follows_deletions_and_scope() {
     assert!(store.shape_index().unwrap().is_empty());
 }
 
-// @lat: [[tests#Schema registry#Shapes merged across shapes]]
+// @tg: verifies:: [[tests#Schema registry#Shapes merged across shapes]] {since: "2026-09-24", level: integration}
 #[test]
 fn shapes_targeting_the_same_path_merge() {
     let store = store();
@@ -344,7 +344,7 @@ fn shapes_targeting_the_same_path_merge() {
     );
 }
 
-// @lat: [[tests#Schema registry#Registry survives reopening]]
+// @tg: verifies:: [[tests#Schema registry#Registry survives reopening]] {since: "2026-09-24", level: integration}
 #[test]
 fn registry_survives_reopening() {
     let path = std::env::temp_dir().join(format!("oxilite-registry-{}", std::process::id()));
@@ -388,7 +388,7 @@ fn with_graphs(store: &Store) {
     );
 }
 
-// @lat: [[tests#Schema registry#Ontologies apply to the graphs they are mapped to]]
+// @tg: verifies:: [[tests#Schema registry#Ontologies apply to the graphs they are mapped to]] {since: "2026-09-26", level: integration}
 #[test]
 fn ontologies_apply_to_mapped_graphs() {
     let store = store();
@@ -457,7 +457,7 @@ fn ontologies_apply_to_mapped_graphs() {
     );
 }
 
-// @lat: [[tests#Schema registry#The registry is RDF in the schema graph]]
+// @tg: verifies:: [[tests#Schema registry#The registry is RDF in the schema graph]] {since: "2026-09-26", level: integration}
 #[test]
 fn registry_is_rdf_in_the_schema_graph() {
     let store = store();
@@ -523,7 +523,7 @@ fn registry_is_rdf_in_the_schema_graph() {
     assert!(oxilite::schema::VOCABULARY.contains("oxl:appliesTo"));
 }
 
-// @lat: [[tests#Schema registry#A version 1 registry is migrated]]
+// @tg: verifies:: [[tests#Schema registry#A version 1 registry is migrated]] {since: "2026-09-26", level: integration}
 #[test]
 fn version_one_registry_is_migrated() {
     use oxilite_core::sql::Request;
@@ -581,7 +581,7 @@ fn version_one_registry_is_migrated() {
     let _ = std::fs::remove_file(&path);
 }
 
-// @lat: [[tests#Schema registry#A blank store starts with the system graphs]]
+// @tg: verifies:: [[tests#Schema registry#A blank store starts with the system graphs]] {since: "2026-09-26", level: integration}
 #[test]
 fn blank_store_starts_with_system_graphs() {
     let options = oxilite::StoreOptions {
@@ -647,7 +647,7 @@ fn blank_store_starts_with_system_graphs() {
     assert!(plain.schema_graphs().unwrap().is_empty());
 }
 
-// @lat: [[tests#Schema registry#Imports bring registered ontologies into scope]]
+// @tg: verifies:: [[tests#Schema registry#Imports bring registered ontologies into scope]] {since: "2026-09-26", level: integration}
 #[test]
 fn imports_bring_registered_ontologies_into_scope() {
     let store = store();
@@ -756,7 +756,7 @@ fn imports_bring_registered_ontologies_into_scope() {
     );
 }
 
-// @lat: [[tests#Schema registry#The active flag reads alike everywhere]]
+// @tg: verifies:: [[tests#Schema registry#The active flag reads alike everywhere]] {since: "2026-09-26", level: integration}
 #[test]
 fn active_flag_reads_alike_everywhere() {
     let store = store();
@@ -809,7 +809,7 @@ fn active_flag_reads_alike_everywhere() {
     assert!(store.registry_problems().unwrap().is_empty());
 }
 
-// @lat: [[tests#Schema registry#Remapping keeps the description]]
+// @tg: verifies:: [[tests#Schema registry#Remapping keeps the description]] {since: "2026-09-26", level: integration}
 #[test]
 fn remapping_keeps_roles_and_description() {
     let store = store();

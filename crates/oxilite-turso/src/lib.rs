@@ -246,7 +246,7 @@ mod tests {
             .is_unsupported());
     }
 
-    // @lat: [[tests#Turso#Failed atomic request changes nothing]]
+    // @tg: verifies:: [[tests#Turso#Failed atomic request changes nothing]] {since: "2026-09-28", level: unit}
     #[test]
     fn atomic_requests_roll_back() {
         let b = TursoBackend::memory().unwrap();

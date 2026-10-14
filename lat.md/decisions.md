@@ -1,3 +1,6 @@
+---
+type: Decision
+---
 # Decisions
 
 Architecture decisions agreed during the design interview (2026-09-22), each with its rationale and the alternatives rejected.
@@ -132,6 +135,8 @@ A graph that holds an ontology or SHACL shapes is registered by role; its triple
 
 Moving schema into its own tables would force a `UNION` into every pattern scan and would stop SPARQL reading shapes, which are RDF people query; `GRAPH ?g` already separates them. Registering instead makes drop and replace one `DELETE FROM quads WHERE g = ?` with no read, as `jsonld_graphs` does for documents ([[decisions#D18 The raw document is the source of truth]]). An empty registry means "every graph", so the feature is purely additive. See [[architecture#Schema registry]].
 
+- motivated_by:: [[decisions#D18 The raw document is the source of truth]] {weight: secondary, since: "2026-09-24", note: "same drop-and-replace by graph as jsonld_graphs"}
+
 ## D23 Datalog as a third frontend, sharing the store
 
 A Datalog program is parsed, checked and compiled to SQL over the same quads and the same term encoding as SPARQL and Cypher, rather than evaluated by an engine of its own.
@@ -209,6 +214,8 @@ Term ids are xxh3 hashes computed in Rust, so SQL cannot mint an id for a new IR
 Registrations are triples of `<oxilite:schema>` in the `oxl:` vocabulary, not rows of a table, and each may name the graphs it applies to with `oxl:appliesTo`.
 
 A table is invisible to SPARQL, lost in an N-Quads dump, and only oxilite's SQL can maintain it. As RDF, a registry travels with the dataset, is registered and read by plain SPARQL that runs unchanged on Oxigraph, and can express which data each schema describes. Only the derived caches (`tbox_closure`, the shape index) stay SQL: they read the registry triples in place, so scoping costs no extra round trip. Supersedes the `schema_graphs` table of [[decisions#D22 Schema graphs registered, not separated]]; see [[architecture#Schema registry]].
+
+- supersedes:: [[decisions#D22 Schema graphs registered, not separated]] {since: "2026-09-26", reason: "the schema_graphs table becomes RDF in <oxilite:schema>"}
 
 ## D35 Registry vocabulary 2: canonical, self-validating, import-aware
 

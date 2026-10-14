@@ -62,7 +62,7 @@ fn longest_compound(sql: &str) -> usize {
     max
 }
 
-// @lat: [[tests#Datalog#D1 statement length]]
+// @tg: verifies:: [[tests#Datalog#D1 statement length]] {since: "2026-09-24", level: integration}
 #[test]
 fn no_statement_exceeds_the_d1_length_limit() {
     let caps = d1();
@@ -92,7 +92,7 @@ fn no_statement_exceeds_the_d1_length_limit() {
     }
 }
 
-// @lat: [[tests#Datalog#D1 compound limit]]
+// @tg: verifies:: [[tests#Datalog#D1 compound limit]] {since: "2026-09-24", level: integration}
 #[test]
 fn no_compound_exceeds_the_d1_term_limit() {
     let caps = d1();
@@ -111,7 +111,7 @@ fn no_compound_exceeds_the_d1_term_limit() {
     }
 }
 
-// @lat: [[tests#Datalog#D1 never gets a compound recursive term]]
+// @tg: verifies:: [[tests#Datalog#D1 never gets a compound recursive term]] {since: "2026-09-24", level: integration}
 #[test]
 fn d1_never_gets_a_compound_recursive_term() {
     // D1's SQLite version is not ours to assume, so mutual recursion must not compile to a
@@ -126,7 +126,7 @@ fn d1_never_gets_a_compound_recursive_term() {
     assert!(err.to_string().contains("3.34.0"), "got: {err}");
 }
 
-// @lat: [[tests#Datalog#D1 never needs user-defined functions]]
+// @tg: verifies:: [[tests#Datalog#D1 never needs user-defined functions]] {since: "2026-09-24", level: integration}
 #[test]
 fn a_function_needing_udfs_is_refused_on_d1() {
     // D1 provides no user-defined functions, so REGEX must be refused rather than emitted.
@@ -139,7 +139,7 @@ fn a_function_needing_udfs_is_refused_on_d1() {
     );
 }
 
-// @lat: [[tests#Datalog#D1 materialization stays within the statement budget]]
+// @tg: verifies:: [[tests#Datalog#D1 materialization stays within the statement budget]] {since: "2026-09-24", level: integration}
 #[test]
 fn materialization_fits_d1s_statement_budget() {
     let caps = d1();
@@ -164,7 +164,7 @@ fn materialization_fits_d1s_statement_budget() {
     }
 }
 
-// @lat: [[tests#Datalog#Bound parameters are never needed]]
+// @tg: verifies:: [[tests#Datalog#Bound parameters are never needed]] {since: "2026-09-24", level: integration}
 #[test]
 fn statements_are_self_contained() {
     // The backend contract is that statements carry their own constants; a `?` placeholder

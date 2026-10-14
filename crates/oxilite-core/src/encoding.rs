@@ -722,7 +722,7 @@ pub fn rdf_type_id() -> i64 {
 mod tests {
     use super::*;
 
-    // @lat: [[tests#Encoding#Inline integers sort by value]]
+    // @tg: verifies:: [[tests#Encoding#Inline integers sort by value]] {since: "2026-09-22", level: unit}
     #[test]
     fn inline_integers_sort_by_value() {
         let ids: Vec<i64> = [-5_i64, -1, 0, 1, 42, 1_000_000]
@@ -740,7 +740,7 @@ mod tests {
         assert!(integer_id(INT_MAX + 1).is_none());
     }
 
-    // @lat: [[tests#Encoding#Non-canonical literals are hashed]]
+    // @tg: verifies:: [[tests#Encoding#Non-canonical literals are hashed]] {since: "2026-09-22", level: unit}
     #[test]
     fn non_canonical_literals_are_hashed() {
         let canonical = Literal::new_typed_literal("12", xsd::INTEGER);
@@ -756,7 +756,7 @@ mod tests {
         assert_ne!(a, b);
     }
 
-    // @lat: [[tests#Encoding#Simple literal equals xsd string]]
+    // @tg: verifies:: [[tests#Encoding#Simple literal equals xsd string]] {since: "2026-09-22", level: unit}
     #[test]
     fn simple_literal_equals_xsd_string() {
         let a = Literal::new_simple_literal("abc");
@@ -766,7 +766,7 @@ mod tests {
         assert_ne!(encode_literal(a.as_ref()).0, encode_literal(c.as_ref()).0);
     }
 
-    // @lat: [[tests#Encoding#Tags partition the id space]]
+    // @tg: verifies:: [[tests#Encoding#Tags partition the id space]] {since: "2026-09-22", level: unit}
     #[test]
     fn tags_partition_the_id_space() {
         let iri = named_node_id("http://example.com/a");

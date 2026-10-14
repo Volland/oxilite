@@ -33,7 +33,7 @@ def _test_id(item: pytest.Item) -> str:
     return "::".join([Path(file).name, *rest])
 
 
-# @lat: [[tests#Python#Ported pyoxigraph tests]]
+# @tg: verifies:: [[tests#Python#Ported pyoxigraph tests]] {since: "2026-09-28", level: integration}
 def pytest_collection_modifyitems(config: pytest.Config, items: List[pytest.Item]) -> None:
     divergences = _divergences()
     for item in items:

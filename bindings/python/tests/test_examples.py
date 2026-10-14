@@ -21,7 +21,7 @@ EXAMPLES: List[Path] = sorted((REPO / "examples" / "python").glob("*.py")) + [
 ]
 
 
-# @lat: [[tests#Python#Examples and README run as written]]
+# @tg: verifies:: [[tests#Python#Examples and README run as written]] {since: "2026-09-28", level: integration}
 @pytest.mark.parametrize("script", EXAMPLES, ids=lambda p: p.name)
 def test_example_runs(script: Path, tmp_path: Path) -> None:
     if not script.exists():

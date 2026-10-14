@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
 
-// @lat: [[tests#JVM bindings#JSON-LD documents round-trip through the native layer]]
+// @tg: verifies:: [[tests#JVM bindings#JSON-LD documents round-trip through the native layer]] {since: "2026-09-30", level: integration}
 class JsonLdTest {
     private static final String PERSON =
             "{\"@context\": {\"name\": \"http://schema.org/name\"}, \"@id\": \"urn:uuid:1234\", \"name\": \"Ada\"}";

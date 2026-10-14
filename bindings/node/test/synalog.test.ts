@@ -16,7 +16,7 @@ function store(): Store {
 }
 
 describe("synalog", () => {
-  // @lat: [[tests#Node#Synalog runs over the store]]
+  // @tg: verifies:: [[tests#Node#Synalog runs over the store]] {since: "2026-09-29", level: integration}
   it("runs recursion over a declared table and decodes numbers", () => {
     const s = store();
     const r = s.synalog(

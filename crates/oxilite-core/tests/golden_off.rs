@@ -8,7 +8,7 @@ mod golden {
     pub mod dump;
 }
 
-// @lat: [[tests#Versioning#Off store SQL matches the pre-versioning snapshot]]
+// @tg: verifies:: [[tests#Versioning#Off store SQL matches the pre-versioning snapshot]] {since: "2026-09-25", level: integration}
 #[test]
 fn off_store_sql_matches_the_pre_versioning_snapshot() {
     let root =

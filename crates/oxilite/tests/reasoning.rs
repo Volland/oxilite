@@ -79,7 +79,7 @@ fn ex(names: &[&str]) -> Vec<String> {
     v
 }
 
-// @lat: [[tests#Reasoning#Default has no inference]]
+// @tg: verifies:: [[tests#Reasoning#Default has no inference]] {since: "2026-09-22", level: integration}
 #[test]
 fn default_has_no_inference() {
     default_has_no_inference_on(native);
@@ -104,7 +104,7 @@ fn default_has_no_inference_on<B: SyncBackend + Send + Sync + 'static>(mk: Mk<B>
     );
 }
 
-// @lat: [[tests#Reasoning#Transitive subclass chain]]
+// @tg: verifies:: [[tests#Reasoning#Transitive subclass chain]] {since: "2026-09-22", level: integration}
 #[test]
 fn transitive_subclass_chain_and_schema_updates() {
     transitive_subclass_chain_and_schema_updates_on(native);
@@ -235,7 +235,7 @@ fn owl_ql_inverse_symmetric_transitive_equivalent_on<B: SyncBackend + Send + Syn
     );
 }
 
-// @lat: [[tests#Reasoning#Reasoning keeps single statements]]
+// @tg: verifies:: [[tests#Reasoning#Reasoning keeps single statements]] {since: "2026-09-22", level: integration}
 #[test]
 fn reasoning_keeps_single_statements() {
     reasoning_keeps_single_statements_on(native);
@@ -293,7 +293,7 @@ fn union_default_graph_merges_entailments_on<B: SyncBackend + Send + Sync + 'sta
     );
 }
 
-// @lat: [[tests#Reasoning#Materialize then query]]
+// @tg: verifies:: [[tests#Reasoning#Materialize then query]] {since: "2026-09-22", level: integration}
 #[test]
 fn materialize_then_query() {
     materialize_then_query_on(native);

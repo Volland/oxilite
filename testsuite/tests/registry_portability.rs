@@ -47,7 +47,7 @@ fn schema_quads<I: IntoIterator<Item = Quad>>(quads: I) -> Vec<String> {
     v
 }
 
-// @lat: [[tests#Schema registry#Registry SPARQL runs on Oxigraph]]
+// @tg: verifies:: [[tests#Schema registry#Registry SPARQL runs on Oxigraph]] {since: "2026-09-26", level: integration}
 #[test]
 fn registry_sparql_runs_on_oxigraph() {
     let e = entry();
