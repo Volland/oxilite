@@ -33,6 +33,12 @@ datalog-json = ["datalog", "oxilite-datalog/json"]
 synalog = ["dep:oxilite-synalog"]
 # JSON forms of Synalog options and results (JavaScript and Python bindings).
 synalog-json = ["synalog", "oxilite-synalog/json"]
+# Notation3 rules run by the eyeron reasoner: read-only reasoning and materialization.
+n3 = ["dep:oxilite-n3"]
+# λProlog (ELPI) programs run by lean-elpi: queries, constraint checks, materialization.
+# Builds without the native engine; `elpi-native` links libleanelpi (set LEANELPI_DIST).
+elpi = ["dep:oxilite-elpi"]
+elpi-native = ["elpi", "oxilite-elpi/native"]
 # JSON-LD documents: verbatim storage, one named graph per document.
 jsonld = ["dep:oxilite-jsonld"]
 # Verifiable Credentials on top of `jsonld` (pulls in the `ssi` crates).
@@ -54,6 +60,8 @@ oxilite-datalog = { workspace = true, optional = true }
 oxilite-synalog = { workspace = true, optional = true }
 oxilite-jsonld = { workspace = true, optional = true }
 oxilite-vc = { workspace = true, optional = true }
+oxilite-n3 = { workspace = true, optional = true }
+oxilite-elpi = { workspace = true, optional = true }
 oxrdf.workspace = true
 oxrdfio.workspace = true
 spargebra.workspace = true
@@ -62,7 +70,7 @@ sparesults.workspace = true
 oxiri.workspace = true
 
 [dev-dependencies]
-oxilite = { path = ".", features = ["rusqlite", "dylib", "turso", "cypher", "datalog", "synalog"] }
+oxilite = { path = ".", features = ["rusqlite", "dylib", "turso", "cypher", "datalog", "synalog", "n3", "elpi"] }
 oxilite-core = { workspace = true, features = ["serde"] }
 futures = { version = "0.3", default-features = false, features = ["executor"] }
 ureq = { version = "2", features = ["json"] }

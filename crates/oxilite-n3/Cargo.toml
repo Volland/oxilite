@@ -1,0 +1,25 @@
+[package]
+name = "oxilite-n3"
+description = "Notation3 rules over oxilite with the eyeron reasoner: read-only reasoning and materialization (native and Cloudflare D1)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/oxilite-n3"
+readme = "README.md"
+authors.workspace = true
+keywords = ["n3", "notation3", "rules", "reasoning", "rdf"]
+categories = ["database-implementations"]
+rust-version.workspace = true
+
+[dependencies]
+oxilite-core.workspace = true
+oxrdf.workspace = true
+thiserror.workspace = true
+# The N3 reasoner. Without default features its HTTP client is left out, so nothing is
+# fetched and the crate stays publishable and wasm-friendly.
+eyeron = { version = "0.8.25", default-features = false }
+
+[dev-dependencies]
+oxilite = { path = "../oxilite", features = ["rusqlite", "n3"] }

@@ -1,5 +1,6 @@
 ---
 type: Concept
+openspec: [n3-rules, elpi-programs]
 ---
 # Architecture
 
@@ -29,6 +30,8 @@ The workspace splits a pure, I/O-free core from thin backends and bindings, so t
 | `oxilite-cypher` (M7) | openCypher parser, validation, planning and lowering to SPARQL algebra, the Rust tail (writes, lists, temporal values), see [[architecture#Property graph frontend]] |
 | `oxilite-datalog` (M8) | Datalog parser, stratification and SQL generation, see [[architecture#Datalog frontend]] |
 | `oxilite-synalog` | Synalog, the Datalog-family language for agents, over the store as relational tables, see [[architecture#Synalog frontend]] |
+| `oxilite-n3` | Notation3 rules run by eyeron: read-only reasoning and materialization, see [[architecture#N3 reasoning]] |
+| `oxilite-elpi` | λProlog (ELPI) programs run by lean-elpi over host builtins, see [[architecture#ELPI reasoning]] |
 
 Upstream reuse: `oxrdf`, `oxrdfio`/`oxttl`, `spargebra`, `spareval`, `sparesults`, `oxsdatatypes` (Oxigraph 0.5 family, `rdf-12`/`sparql-12` on), rudof's `srdf`/`shacl_*`/`shex_*` (same Oxigraph family), and `reasonable` for OWL 2 RL.
 
@@ -479,6 +482,8 @@ Reasoning is chosen per query (`QueryOptions::reasoning`: `None | Rdfs | OwlQl`,
 
 `materialize()` runs OWL 2 RL rules as `INSERT OR IGNORE INTO quads_inf … SELECT` statements over asserted plus inferred triples (all graphs merged, conclusions in graph 0, triples already asserted there skipped), one atomic request per round until a round adds nothing: the same code on SQLite, dlopen and D1 (where a round is one batch, and the whole run is not atomic). The rules are the ones `reasonable` implements (equality, property axioms, class expressions including lists and property chains, `scm-sco`, `scm-eqc1`, and `owl:Thing` typing); `materialize_with_reasonable()` (feature `reasonable`, crate `oxilite-reason`) computes the same closure in memory, and an agreement test checks both on sample ontologies. `include_inferred` makes queries read `quads ∪ quads_inf`. Every inference is attributed to its producer in `quads_inf_src`, so `clear_inferences_of(producer)` and a re-run of one producer leave the others' conclusions in place, and `inference_producers(quad)` names who derived a quad ([[decisions#D28 Inferences are attributed to producers]]).
 
+Two rule engines also write `quads_inf` as producers of their own: Notation3 rules ([[architecture#N3 reasoning]]) and λProlog programs ([[architecture#ELPI reasoning]]), next to `owl2rl` and Datalog producers.
+
 ## Validation
 
 SHACL and ShEx validation by running rudof's engines unchanged over oxilite through rudof's RDF traits (`rudof_rdf`, formerly `srdf`). Delivered in M5 as the crate `oxilite-validate`, see [[crates/oxilite-validate/src/lib.rs]].
@@ -596,6 +601,31 @@ A scanner that skips string literals, quoted identifiers and comments finds the 
 A compiled predicate runs as a sans-IO job of one read request; its rows are already SQL values, returned with the predicate's head columns. See [[crates/oxilite-synalog/src/exec.rs#SynalogJob]].
 
 There is no term resolution step, unlike SPARQL, Cypher and Datalog, because decoding happened in SQL. The store resolves `as_of` to a tick before compiling, as for Datalog, and Synalog's compiler runs under `catch_unwind` so a panic on an agent's program becomes an error rather than an abort.
+
+## N3 reasoning
+
+Notation3 rules run by eyeron over one scope of the store: `n3_reason` returns what follows, `n3_materialize` stores it in `quads_inf` under a producer. Crate `oxilite-n3`, behind the `n3` feature.
+
+[eyeron](https://crates.io/crates/eyeron) (0.8.25, default features off, so nothing is fetched) parses the rules and reasons in memory; oxilite only chooses the input and maps terms ([[crates/oxilite-n3/src/term.rs]]). A run is a sans-IO job of at most two requests ([[crates/oxilite-n3/src/run.rs#ReasonJob]], [[crates/oxilite-n3/src/run.rs#MaterializeJob]]), so `Store` and `AsyncStore` (D1 included) run it alike:
+
+1. **Read** one scope with [[crates/oxilite-core/src/ops.rs#reasoning_input_job]]: every graph but the system graphs (or the `graphs` given), merged, and only the predicates the rule bodies read, which [[crates/oxilite-n3/src/rules.rs#RuleSet]] collects (builtins are never loaded; a variable predicate loads the whole scope). With `include_inferred` it adds inferences that some other producer claims, never those only the running producer derived, so a stale conclusion cannot feed itself.
+2. **Reason** with eyeron's limits, `now` pinned for `time:localTime`, and a proof on request. Conclusions with a literal, list or formula subject, or a non-IRI predicate, are reported as N3 text under `unstorable`.
+3. **Write** (materialization only): [[crates/oxilite-core/src/reason.rs#inference_replace]] resets the producer (`n3` by default), writes the conclusions into graph 0 of `quads_inf` and attributes what nobody else derived, in one atomic request ([[decisions#D28 Inferences are attributed to producers]]).
+
+A run a limit cut short is `complete: false`; `require_complete` makes it an error, and materialization always requires it. A fired fuse (`{ … } => false`) is reported by `n3_reason` and aborts `n3_materialize`. Since each materialization recomputes its producer from the store as it is, rules with `log:notIncludes` or aggregates are safe to store; [[crates/oxilite-n3/src/rules.rs#Monotonicity]] still reports them. The CLI is `oxilite n3` ([[crates/oxilite-cli/src/main.rs]]). Rule sets are passed per call; storing them in the registry, the shell and the bindings are follow-ups. The design follows tiramemsu's `tm-n3`, without its valid-time sweeps and support cascade. See [[decisions#D44 N3 rules run by eyeron, materialized per producer]].
+
+## ELPI reasoning
+
+λProlog programs run by lean-elpi over the store: goal queries, constraint checks (`ox.violation`) and materialization (`ox.conclude`). Crate `oxilite-elpi`, behind the `elpi` feature; the engine is linked by `elpi-native`.
+
+[lean-elpi](https://github.com/Volland/lean-elpi) implements ELPI in Lean 4 and ships `libleanelpi`; its Rust binding `leanelpi` (0.4.1) answers declared host predicates with a closure during a run. The [[crates/oxilite-elpi/src/run.rs#PRELUDE]] declares the term types and four predicates: the host builtins `ox.triple S P O` and `ox.quad S P O G`, and `ox.conclude` and `ox.violation`, which the program defines and the host enumerates.
+
+- **Host builtins.** Each call is one pattern scan: [[crates/oxilite-elpi/src/host.rs#Host]] turns the call's ground arguments into a [[crates/oxilite-core/src/ops.rs#ReasoningInput]] (the same input relation N3 reads), so a goal about one subject reads one subject. `ox.triple` merges graphs and answers each triple once; `ox.quad` gives the graph, `default-graph` for the default one. A row budget (`max_rows`) bounds what a run may read.
+- **Terms.** [[crates/oxilite-elpi/src/term.rs]] maps RDF terms to typed ELPI values: `(iri S)`, `(str S)`, `(num N)` and `(dbl F)` with native ELPI numbers (so `A >= 18` works on stored ages), `(lang S T)`, `(lit S Datatype)`, `(bnode S)`.
+- **Uses.** `Store::elpi_query` solves any goal, hypothetical `=>` and `pi` included, and returns bindings as RDF terms; `elpi_check` collects `ox.violation Severity Name Message Focus`; `elpi_materialize` stores the triples of `ox.conclude (triple S P O)` with `inference_replace` under the producer `elpi`.
+- **Build.** The crate's `native` feature links `libleanelpi` (found through `LEANELPI_DIST`); without it the API builds and every run is `Unsupported`, so CI needs no library. Host calls are synchronous, so there is no `AsyncStore` variant and D1 is unsupported. `oxilite elpi` is behind the CLI's `elpi` feature, whose build script adds the library's directory as a run path ([[crates/oxilite-cli/build.rs]]).
+
+This is tiramemsu's `tm-elpi` design (prelude, host builtins, `conclude` and `violation`) without its eids, valid time, stored programs and commit-time enforcement. See [[decisions#D45 ELPI programs run by lean-elpi over host builtins]].
 
 ## JSON-LD documents
 
@@ -787,5 +817,7 @@ The site is plain HTML and one stylesheet in a white, black and orange palette. 
 The landing page's `#python` section and its Get started tab present [[architecture#Bindings#Python]]. `site/articles/oxilite-python.html`, "How to use oxilite with Python", is its tutorial: install, SPARQL and result classes, `explain`, pyoxigraph migration and its allow-listed divergences, Cypher, Datalog, reasoning, JSON-LD and credentials, time travel, threads and asyncio, and the limits. Every snippet comes from `examples/python-tour/tour.py`, which asserts the outputs the article shows and runs in the CI job `python`, so a change there should be reflected in the article.
 
 The landing page's `#java` section and its Get started tab present [[architecture#Bindings#JVM (Java/Kotlin/Scala/Clojure)]], linking out to `bindings/jvm/README.md` and the Maven Central listing rather than to a dedicated article — unlike the Python and Node tours, its snippet has no asserting example file yet, so a Store API change here needs a manual check that the landing page's Java snippet still compiles.
+
+The landing page's `#datalog` section ends with N3 and λProlog: [[architecture#N3 reasoning]] and [[architecture#ELPI reasoning]]. `site/articles/n3-rules.html` is the N3 guide (pruned reads, proofs, materialization per producer, rules on other producers' output, negation and the pinned clock, fuses, D1), and `site/articles/elpi-lambda-prolog.html` the λProlog guide (host builtins and typed terms, goals, hypothetical `=>` and `pi`, `ox.violation` checks, `ox.conclude` materialization, bounds); their examples are the tests in `crates/oxilite/tests/n3.rs` and `elpi.rs` and the `oxilite` CLI.
 
 The Cypher article walks through the M7 frontend; its steps are asserted by `examples/cypher-property-graph` on `@oxilite/node` and on Miniflare D1. The JSON-LD query tour (`site/articles/querying-jsonld-credentials.html`) queries credentials and a JSON-LD issuer registry with SPARQL (provenance through `GRAPH`, joins, aggregates, typed validity dates, RDFS reasoning, FTS5), metadata lookups and Cypher over the union default graph; every query is asserted by `examples/jsonld-queries` on both packages. It explains that proofs are verified outside oxilite, on the stored JSON.

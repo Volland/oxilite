@@ -173,6 +173,88 @@ enum Command {
         #[arg(long, value_name = "VERSION", conflicts_with = "materialize")]
         as_of: Option<String>,
     },
+    /// Runs Notation3 rules with the eyeron reasoner and prints what follows as N-Triples.
+    ///
+    /// The rules are read from `--program`, or from the file named by `--file`, or from standard
+    /// input. A run reads every graph but the system graphs (or the `--graph`s), and only the
+    /// predicates the rule bodies use. `--materialize` stores the conclusions as inferences
+    /// instead, replacing the producer's earlier ones; query them with `--inferred`.
+    N3 {
+        #[command(flatten)]
+        location: Location,
+        /// The N3 rule text.
+        #[arg(long, short, conflicts_with = "file")]
+        program: Option<String>,
+        /// A file holding the rules.
+        #[arg(long, short)]
+        file: Option<String>,
+        /// Store the conclusions as inferences instead of printing them.
+        #[arg(long)]
+        materialize: bool,
+        /// The producer the conclusions are stored under.
+        #[arg(long, default_value = "n3")]
+        producer: String,
+        /// Read only this graph (`DEFAULT` or an IRI); repeatable.
+        #[arg(long = "graph", value_name = "GRAPH")]
+        graphs: Vec<String>,
+        /// Also read other producers' materialized inferences.
+        #[arg(long)]
+        inferred: bool,
+        /// Load the whole scope instead of only the predicates the rules read.
+        #[arg(long)]
+        no_prune: bool,
+        /// Print eyeron's proof after the conclusions.
+        #[arg(long, conflicts_with = "materialize")]
+        proof: bool,
+        /// The instant `time:localTime` reports, in milliseconds since the Unix epoch.
+        #[arg(long, value_name = "MILLIS")]
+        now: Option<i64>,
+        /// eyeron's fixpoint step limit.
+        #[arg(long)]
+        max_iterations: Option<usize>,
+    },
+    /// Runs a λProlog (ELPI) program with lean-elpi over the store.
+    ///
+    /// Programs read the store with `ox.triple S P O` and `ox.quad S P O G`, where terms are
+    /// `(iri "…")`, `(str "…")`, `(num N)`, `(dbl F)`, `(lang "…" "tag")`, `(lit "…" "datatype")`
+    /// and `(bnode "…")`. Give a `--goal` to print its solutions, `--check` to list what
+    /// `ox.violation Severity Name Message Focus` reports (exit code 1 on any `error`), or
+    /// `--materialize` to store what `ox.conclude (triple S P O)` concludes. Needs a build with
+    /// the `elpi` feature and the native libleanelpi.
+    Elpi {
+        #[command(flatten)]
+        location: Location,
+        /// The program text.
+        #[arg(long, short, conflicts_with = "file")]
+        program: Option<String>,
+        /// A file holding the program.
+        #[arg(long, short)]
+        file: Option<String>,
+        /// The goal to solve, e.g. `anc (iri "http://example.org/ada") Y`.
+        #[arg(long, short, required_unless_present_any = ["check", "materialize"])]
+        goal: Option<String>,
+        /// List the violations the program reports.
+        #[arg(long, conflicts_with_all = ["goal", "materialize"])]
+        check: bool,
+        /// Store the program's conclusions as inferences.
+        #[arg(long, conflicts_with = "goal")]
+        materialize: bool,
+        /// The producer the conclusions are stored under.
+        #[arg(long, default_value = "elpi")]
+        producer: String,
+        /// Read only this graph (`DEFAULT` or an IRI); repeatable.
+        #[arg(long = "graph", value_name = "GRAPH")]
+        graphs: Vec<String>,
+        /// Also read other producers' materialized inferences.
+        #[arg(long)]
+        inferred: bool,
+        /// At most this many solutions.
+        #[arg(long)]
+        limit: Option<usize>,
+        /// Resolution steps the run may take.
+        #[arg(long)]
+        fuel: Option<u64>,
+    },
     /// Runs a Synalog program (the Datalog-family language for AI agents) and prints the rows
     /// of one predicate.
     ///
@@ -416,6 +498,104 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
             }
             Ok(())
         }
+        Command::N3 {
+            location,
+            program,
+            file,
+            materialize,
+            producer,
+            graphs,
+            inferred,
+            no_prune,
+            proof,
+            now,
+            max_iterations,
+        } => {
+            let rules = read_program(program, file)?;
+            let db = Db::open(&location)?;
+            let options = oxilite::n3::Options {
+                graphs: if graphs.is_empty() {
+                    None
+                } else {
+                    Some(
+                        graphs
+                            .iter()
+                            .map(|g| db::parse_graph(g))
+                            .collect::<Result<_, _>>()?,
+                    )
+                },
+                include_inferred: inferred,
+                prune: !no_prune,
+                producer,
+                now,
+                proof,
+                limits: oxilite::n3::Limits {
+                    max_iterations,
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            if materialize {
+                let stats = db.n3_materialize(&rules, &options)?;
+                println!(
+                    "{} inferred triple(s) from {} statement(s) (producer {})",
+                    stats.inferred, stats.loaded, stats.producer
+                );
+                if stats.unstorable > 0 {
+                    eprintln!("{} conclusion(s) could not be stored", stats.unstorable);
+                }
+                return Ok(());
+            }
+            let r = db.n3_reason(&rules, &options)?;
+            for t in &r.derived {
+                println!("{t} .");
+            }
+            for u in &r.unstorable {
+                eprintln!("not storable: {}", u.trim());
+            }
+            if let Some(f) = &r.fuse {
+                eprintln!("{}", f.trim());
+            }
+            if !r.complete {
+                let mut why = r.limits.clone();
+                why.extend(r.errors.iter().cloned());
+                eprintln!("incomplete: {}", why.join("; "));
+            }
+            if let Some(p) = &r.proof {
+                println!("\n# proof\n{p}");
+            }
+            eprintln!(
+                "{} conclusion(s) from {} statement(s)",
+                r.derived.len(),
+                r.loaded
+            );
+            Ok(())
+        }
+        Command::Elpi {
+            location,
+            program,
+            file,
+            goal,
+            check,
+            materialize,
+            producer,
+            graphs,
+            inferred,
+            limit,
+            fuel,
+        } => run_elpi(ElpiArgs {
+            location,
+            program,
+            file,
+            goal,
+            check,
+            materialize,
+            producer,
+            graphs,
+            inferred,
+            limit,
+            fuel,
+        }),
         Command::Synalog {
             location,
             predicate,
@@ -522,6 +702,121 @@ fn run(command: Command) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
 }
 
 /// A program given inline, in a file, or on standard input.
+#[cfg_attr(not(feature = "elpi"), allow(dead_code))]
+struct ElpiArgs {
+    location: Location,
+    program: Option<String>,
+    file: Option<String>,
+    goal: Option<String>,
+    check: bool,
+    materialize: bool,
+    producer: String,
+    graphs: Vec<String>,
+    inferred: bool,
+    limit: Option<usize>,
+    fuel: Option<u64>,
+}
+
+#[cfg(not(feature = "elpi"))]
+fn run_elpi(_: ElpiArgs) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    Err(
+        "this oxilite was built without ELPI: install it with `--features elpi`, \
+         with LEANELPI_DIST pointing at a libleanelpi build"
+            .into(),
+    )
+}
+
+// @tg: implements:: [[openspec:elpi-programs#Command line]] {since: "2026-11-03"}
+#[cfg(feature = "elpi")]
+fn run_elpi(a: ElpiArgs) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let program = read_program(a.program, a.file)?;
+    let db = Db::open(&a.location)?;
+    let mut options = oxilite::elpi::Options {
+        graphs: if a.graphs.is_empty() {
+            None
+        } else {
+            Some(
+                a.graphs
+                    .iter()
+                    .map(|g| db::parse_graph(g))
+                    .collect::<Result<_, _>>()?,
+            )
+        },
+        include_inferred: a.inferred,
+        producer: a.producer,
+        ..Default::default()
+    };
+    if let Some(l) = a.limit {
+        options.limit = l;
+    }
+    if let Some(f) = a.fuel {
+        options.fuel = f;
+    }
+    if a.check {
+        let violations = db.elpi_check(&program, &options)?;
+        for v in &violations {
+            let focus: Vec<String> = v.focus.iter().map(ToString::to_string).collect();
+            println!(
+                "{}\t{}\t{}\t{}",
+                v.severity,
+                v.name,
+                v.message,
+                focus.join(" ")
+            );
+        }
+        eprintln!("{} violation(s)", violations.len());
+        if violations.iter().any(|v| v.severity == "error") {
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
+    if a.materialize {
+        let stats = db.elpi_materialize(&program, &options)?;
+        println!(
+            "{} inferred triple(s) (producer {}, {} row(s) read)",
+            stats.inferred, stats.producer, stats.rows_read
+        );
+        if stats.unstorable > 0 {
+            eprintln!("{} conclusion(s) could not be stored", stats.unstorable);
+        }
+        return Ok(());
+    }
+    let goal = a.goal.ok_or("give --goal, --check or --materialize")?;
+    let r = db.elpi_query(&program, &goal, &options)?;
+    let vars: Vec<String> = r
+        .solutions
+        .first()
+        .map(|s| s.bindings.keys().cloned().collect())
+        .unwrap_or_default();
+    if vars.is_empty() {
+        // a closed goal: it holds or it does not
+        println!("{}", !r.solutions.is_empty());
+        return Ok(());
+    }
+    println!("{}", vars.join("\t"));
+    for s in &r.solutions {
+        let cells: Vec<String> = vars
+            .iter()
+            .map(|v| match s.bindings.get(v) {
+                Some(oxilite::elpi::Binding::Term(t)) => t.to_string(),
+                // ELPI prints long values over several lines: keep one row per solution
+                Some(oxilite::elpi::Binding::Value(x)) => {
+                    x.split_whitespace().collect::<Vec<_>>().join(" ")
+                }
+                None => String::new(),
+            })
+            .collect();
+        println!("{}", cells.join("\t"));
+    }
+    eprintln!(
+        "{} solution(s){}, {} row(s) read",
+        r.solutions.len(),
+        if r.exhausted { "" } else { " (limit reached)" },
+        r.rows_read
+    );
+    Ok(())
+}
+
 fn read_program(
     program: Option<String>,
     file: Option<String>,

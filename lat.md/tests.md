@@ -1051,6 +1051,14 @@ A new CLI store starts with the system graphs, `registry` manages registrations,
 
 The system graphs can be skipped (`--no-system-graphs`) and installed later (`registry init`); `registry register --file` loads and records a digest, `list --json`, `map`, `activate`, `drop` and `shapes` work on a file store, and `query` / `explain` honour `--reasoning`, `--inferred` and `--no-schema-graphs`.
 
+### N3 rules from the command line
+
+`oxilite n3 --file` prints a rule set's conclusion as N-Triples; `--materialize` stores it so `query --inferred` sees it and a plain query does not.
+
+### ELPI programs from the command line
+
+With the CLI's `elpi` feature, `oxilite elpi --goal` prints the variable and two answers and `--check` prints the error and exits with status 1; without the feature the command names the feature to enable.
+
 ## Studio server
 
 The language server behind oxilite studio, driven over an in-memory LSP connection against a temporary workspace, see [[architecture#Studio server]].
@@ -1550,3 +1558,112 @@ Nested `MagicalEntangle`, `IN_LIST`, `DistinctListAgg` and `SortList` calls are 
 ### Run from the command line
 
 `oxilite synalog PREDICATE` prints the head columns then tab-separated rows, `--sql` prints the store SQL, `--engine` compiles without a store, and an undefined predicate fails.
+
+## N3 reasoning
+
+Notation3 rules run by eyeron over the store: what a run reads, what it returns and what it stores, see [[architecture#N3 reasoning]].
+
+### Read-only reasoning writes nothing
+
+`n3_reason` of a grandparent rule returns exactly the two grandparent triples, and neither the store nor the inferences change.
+
+
+### Materialized conclusions are attributed inferences
+
+`n3_materialize` stores two conclusions that SPARQL matches only with `include_inferred`, and `inference_producers` names `n3`.
+
+
+### A rerun replaces the producer's conclusions
+
+Deleting a premise and materializing again removes the conclusion; another producer's inferences survive an N3 run.
+
+
+### Input is pruned to the predicates rules read
+
+A rule set reading `ex:parent` loads only the three parent statements; a variable predicate, or `prune: false`, loads the whole scope.
+
+
+### Graph scope
+
+Two graphs are merged by default; naming one graph keeps the other's statements out of the run.
+
+
+### A producer never feeds on its own conclusions
+
+With `include_inferred`, a conclusion whose premise was deleted does not keep itself alive, while another producer's conclusions are read as input.
+
+
+### An inference fuse aborts materialization
+
+A fired fuse is reported by `n3_reason`, fails `n3_materialize` with `N3Error::Fuse`, and nothing is stored.
+
+
+### Limits make a run incomplete
+
+A one-step fixpoint limit makes the run incomplete with the limit named, and materialization refuses it; without the limit all six ancestors follow.
+
+
+### The clock can be pinned
+
+Two runs with the same `now` conclude the same `time:localTime` value, and the rule set is reported clock-dependent.
+
+
+### Unstorable conclusions are reported, not stored
+
+Conclusions with a literal subject or a list object are returned as N3 text and counted by materialization, never written.
+
+
+### Proofs on request
+
+`proof: true` returns eyeron's proof of the conclusions; by default no proof is built.
+
+
+### The async store runs the same jobs
+
+On an `AsyncStore` over the bundled SQLite, reasoning and materialization give the same results as the blocking store.
+
+
+## ELPI reasoning
+
+λProlog programs run by lean-elpi over host builtins; the engine tests run with `elpi-native`, see [[architecture#ELPI reasoning]].
+
+### Without the engine every run is unsupported
+
+A build with `elpi` but without `elpi-native` compiles and fails a query with `ElpiError::Unsupported`.
+
+
+### Host calls are pattern scans
+
+Without the engine, a host call with a ground subject and predicate asks for that pattern, `ox.triple` answers a triple in two graphs once, `ox.quad` gives `default-graph`, and the row budget fails the call.
+
+
+### Goals read the store through host builtins
+
+An ancestor goal over `ox.triple` returns Ada's two descendants as IRIs, each bound call answered by a scan.
+
+
+### RDF terms are typed ELPI values
+
+`(num A), A >= 18` selects the adult on stored integer ages, `(lang L "fr")` binds the lexical form, and `default-graph` names the default graph.
+
+
+### Hypothetical reasoning
+
+A reachability goal fails, the same goal under an assumed edge (`=>`) succeeds, and the store keeps its size.
+
+
+### Checks report violations
+
+`ox.violation` rules report a person without a name as `error` and a minor as `warning`, each with its focus node.
+
+
+### Conclusions materialize as inferences
+
+Three ancestor conclusions are stored under `elpi` and queryable with `include_inferred`, a literal-subject conclusion is counted unstorable, and a rerun replaces them.
+
+
+### Runs are bounded
+
+A looping goal runs out of fuel, a row budget of two fails the ancestor goal, and a call of an undefined predicate is a program or run error.
+
+

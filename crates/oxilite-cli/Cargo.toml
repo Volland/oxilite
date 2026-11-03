@@ -18,8 +18,14 @@ rust-version.workspace = true
 name = "oxilite"
 path = "src/main.rs"
 
+[features]
+default = []
+# λProlog (ELPI) programs with lean-elpi: links the native libleanelpi (set LEANELPI_DIST), so
+# it is off by default and `cargo install oxilite-cli` needs no library.
+elpi = ["oxilite/elpi-native"]
+
 [dependencies]
-oxilite = { workspace = true, features = ["rusqlite", "dylib", "datalog", "synalog", "cypher", "turso"] }
+oxilite = { workspace = true, features = ["rusqlite", "dylib", "datalog", "synalog", "cypher", "turso", "n3"] }
 oxilite-core = { workspace = true, features = ["serde"] }
 oxilite-validate = { path = "../oxilite-validate", version = "0.9.1" }
 oxrdf.workspace = true

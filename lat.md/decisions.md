@@ -284,3 +284,23 @@ Forking the compiler to emit term-id SQL would have made Synalog a third dialect
 The JVM binding wraps `blocking::Store` with JNI, not Java's Foreign Function & Memory API, and reuses D37's JSON wire format, matching the `@oxilite/node`/pyoxigraph pattern with no per-language wrapper for Kotlin, Scala or Clojure.
 
 Why JNI over the FFM API (Panama): FFM is stable only from JDK 22, which would exclude most current JDK 8/11/17/21 users; JNI runs on any JDK back to 8 and mirrors the napi-rs/PyO3 shape this codebase already has conventions for (a native class of JSON-in/JSON-out methods, a language-idiomatic wrapper on top). Why one artifact rather than a module per language: Java, Kotlin, Scala and Clojure all compile to JVM bytecode and call an ordinary Java class through native interop, so a second wrapper would duplicate the first for no behavioural difference; Kotlin gets correct nullability from `@Nullable`/`@NotNull` annotations alone. Why JSON across the JNI boundary rather than building `Term`/`Quad` objects in Rust and returning JNI object references: one conversion module (`oxilite_core::json`) stays the single source of truth for every binding's wire format, and building JNI objects directly would mean hand-writing field/method id lookups for every result shape Cypher, Datalog, Synalog, JSON-LD and versioning return. The Java-side `Store` class still exposes typed `Term`/`Quad` classes for RDF data (converted from that JSON in `com.oxilitedb.oxilite.model.Rdf`), so callers do not see raw JSON for quads; JSON-shaped results (query solutions, Cypher/Datalog rows, JSON-LD documents) are returned as Jackson `JsonNode`s rather than one POJO per result shape, the same pragmatic trade-off Python's `_types.py` dataclasses avoid making for every nested shape. See [[architecture#Bindings#JVM (Java/Kotlin/Scala/Clojure)]].
+
+## D44 N3 rules run by eyeron, materialized per producer
+
+Notation3 rules are run by the published eyeron reasoner over one pruned scope of the store, in one read; conclusions are either returned or stored as one producer's inferences, recomputed in full on every run.
+
+- motivated_by:: [[decisions#D28 Inferences are attributed to producers]] {weight: primary, since: "2026-11-03"}
+- motivated_by:: [[decisions#D42 Synalog is a guest language, run over the store as tables]] {weight: secondary, since: "2026-11-03", note: "a guest engine used as published"}
+- motivated_by:: [[decisions#D1 SQL executor trait instead of the SQLite C API]] {weight: secondary, since: "2026-11-03", note: "a sans-IO job of two requests runs on D1"}
+
+eyeron 0.8.25 is EYE-compatible, maintained, on crates.io, and already tiramemsu's N3 engine; with default features off it fetches nothing. Writing an engine, or lowering N3 to the Datalog frontend, was rejected: N3's quoted formulas, builtins, backward rules and fuses have no Datalog counterpart. Pruning to the predicates rule bodies read keeps the in-memory input small; lazy loading through callbacks was rejected because eyeron has none and each callback would be a D1 round trip. A full recompute per producer replaces tiramemsu's incremental support cascade, which is why oxilite can store conclusions of non-monotonic rules that tiramemsu refuses (its N11). See [[architecture#N3 reasoning]].
+
+## D45 ELPI programs run by lean-elpi over host builtins
+
+λProlog programs read the store through host builtins answered by pattern scans, and report through predicates they define (`ox.conclude`, `ox.violation`); the native engine is an opt-in feature.
+
+- motivated_by:: [[decisions#D44 N3 rules run by eyeron, materialized per producer]] {weight: primary, since: "2026-11-03", note: "same input relation, same producer write"}
+- motivated_by:: [[decisions#D28 Inferences are attributed to producers]] {weight: secondary, since: "2026-11-03"}
+
+Loading the scope as facts was rejected: a goal about one node would read the whole scope, where a scan per call reads what the program asks for. The builtins and the `conclude`/`violation` convention are tiramemsu's `tm-elpi` design, minus eids and valid time. `libleanelpi` carries the Lean runtime and exists for darwin and linux only, so the engine is behind `elpi-native` and runs on blocking stores only: host calls happen synchronously inside a run, which an async backend such as D1 cannot answer. See [[architecture#ELPI reasoning]].
+
