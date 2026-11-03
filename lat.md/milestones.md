@@ -140,3 +140,12 @@ Change: `synalog-dialect`; the resulting spec is `synalog-query`.
 Scope: [[architecture#Synalog frontend]] and [[decisions#D42 Synalog is a guest language, run over the store as tables]]. Done when unmodified Synalog programs run over the store with the same graph, inference and version options as Datalog, recursion agrees with the SPARQL property path, and constructs the store cannot run are rejected before any request.
 
 Status: done. `oxilite-synalog` on `synalog` 1.2 (crates.io, default features off), `Store::synalog`/`synalog_with`/`synalog_sql` and the async equivalents behind the `synalog` feature, and `oxilite synalog` on the command line, verified on bundled SQLite and Turso, with D1 limits checked against `Capabilities::d1()` ([[tests#Synalog]]). `@oxilite/node`, `@oxilite/d1` (opt-in WebAssembly feature, checked against Miniflare) and the Python package expose it too; released in 0.9.0. Not in scope: materializing results.
+
+## N3 and ELPI reasoning
+
+Two more reasoning engines over the same store: Notation3 rules by eyeron and λProlog programs by lean-elpi, both materializing into `quads_inf` as producers.
+
+Changes: `n3-reasoning` and `elpi-reasoning`; the resulting specs are `n3-rules` and `elpi-programs`.
+
+Scope: [[architecture#N3 reasoning]], [[architecture#ELPI reasoning]], [[decisions#D44 N3 rules run by eyeron, materialized per producer]] and [[decisions#D45 ELPI programs run by lean-elpi over host builtins]]. Done when both engines answer, check and materialize over the store from Rust and the CLI, N3 also on the async store, and every scenario of [[tests#N3 reasoning]] and [[tests#ELPI reasoning]] passes (the ELPI engine tests with `elpi-native`).
+

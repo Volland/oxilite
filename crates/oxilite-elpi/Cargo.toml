@@ -1,0 +1,30 @@
+[package]
+name = "oxilite-elpi"
+description = "λProlog (ELPI) programs over oxilite with lean-elpi: goal queries, constraint checks and materialization"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/oxilite-elpi"
+readme = "README.md"
+authors.workspace = true
+keywords = ["elpi", "lambda-prolog", "rules", "reasoning", "rdf"]
+categories = ["database-implementations"]
+rust-version.workspace = true
+
+[dependencies]
+oxilite-core.workspace = true
+oxrdf.workspace = true
+thiserror.workspace = true
+# The ELPI engine: lean-elpi's Rust binding, which links the native `libleanelpi` found through
+# `LEANELPI_DIST`. Off by default, so the workspace builds and tests without the library; every
+# run then fails with `ElpiError::Unsupported`.
+leanelpi = { version = "0.4.1", optional = true }
+
+[features]
+default = []
+native = ["dep:leanelpi"]
+
+[dev-dependencies]
+oxilite = { path = "../oxilite", features = ["rusqlite", "elpi"] }

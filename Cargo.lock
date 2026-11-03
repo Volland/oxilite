@@ -378,7 +378,7 @@ checksum = "8fa3f3d8cbf4dffcfe4991de61d012bef509a409ecbe9dd41049bfe32b4d4653"
 dependencies = [
  "autocfg",
  "libm",
- "num-bigint",
+ "num-bigint 0.4.8",
  "num-integer",
  "num-traits",
 ]
@@ -1361,7 +1361,7 @@ version = "3.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1bf1fa3f06bbff1ea5b1a9c7b14aa992a39657db60a2759457328d7e058f49ee"
 dependencies = [
- "num-bigint",
+ "num-bigint 0.4.8",
  "num-traits",
  "proc-macro2",
  "quote",
@@ -1429,6 +1429,19 @@ name = "error-code"
 version = "3.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b5343afd4a8365a643ac588dab4cf234a190c7f6c88c9f6dd6ffe00837661b7"
+
+[[package]]
+name = "eyeron"
+version = "0.8.37"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb2075fbd3735b8e061556a608b7188b0fc00d569d114f562624fb37b56ea896"
+dependencies = [
+ "num-bigint 0.5.1",
+ "num-traits",
+ "regex",
+ "serde_json",
+ "wasm-bindgen",
+]
 
 [[package]]
 name = "fallible-iterator"
@@ -2802,6 +2815,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
+name = "leanelpi"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9966bdadf324328ef59b47a42ae1a8d60af27da5b6932306c0a4e901e588ca4"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "lexical"
 version = "7.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3400,6 +3423,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "num-bigint"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93e7820bc0a80a0238e650327316f929ba18d5be054b647490a3a6a339f3e7c0"
+dependencies = [
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
 name = "num-conv"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3431,7 +3464,7 @@ version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f83d14da390562dca69fc84082e73e548e1ad308d24accdedd2720017cb37824"
 dependencies = [
- "num-bigint",
+ "num-bigint 0.4.8",
  "num-integer",
  "num-traits",
 ]
@@ -3605,7 +3638,9 @@ dependencies = [
  "oxilite-d1",
  "oxilite-datalog",
  "oxilite-dylib",
+ "oxilite-elpi",
  "oxilite-jsonld",
+ "oxilite-n3",
  "oxilite-reason",
  "oxilite-rusqlite",
  "oxilite-synalog",
@@ -3757,6 +3792,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "oxilite-elpi"
+version = "0.9.1"
+dependencies = [
+ "leanelpi",
+ "oxilite",
+ "oxilite-core",
+ "oxrdf",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "oxilite-jsonld"
 version = "0.9.1"
 dependencies = [
@@ -3789,6 +3835,17 @@ dependencies = [
  "serde",
  "serde_json",
  "spargebra",
+]
+
+[[package]]
+name = "oxilite-n3"
+version = "0.9.1"
+dependencies = [
+ "eyeron",
+ "oxilite",
+ "oxilite-core",
+ "oxrdf",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -5726,7 +5783,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8eb4ea60fb301dc81dfc113df680571045d375ab7345d171c5dc7d7e13107a80"
 dependencies = [
  "chrono",
- "num-bigint",
+ "num-bigint 0.4.8",
  "num-traits",
  "thiserror 1.0.69",
 ]
@@ -6179,7 +6236,7 @@ dependencies = [
  "lazy_static",
  "linked-data",
  "multibase",
- "num-bigint",
+ "num-bigint 0.4.8",
  "num-derive",
  "num-traits",
  "serde",
@@ -7067,7 +7124,7 @@ dependencies = [
  "libm",
  "loom",
  "miette",
- "num-bigint",
+ "num-bigint 0.4.8",
  "num-traits",
  "pack1",
  "parking_lot",
@@ -7921,7 +7978,7 @@ dependencies = [
  "chrono",
  "iref",
  "lazy_static",
- "num-bigint",
+ "num-bigint 0.4.8",
  "num-rational",
  "num-traits",
  "once_cell",

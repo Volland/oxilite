@@ -25,8 +25,12 @@ mod common;
 mod cypher_store;
 #[cfg(feature = "datalog")]
 mod datalog_store;
+#[cfg(feature = "elpi")]
+mod elpi_store;
 #[cfg(feature = "jsonld")]
 mod jsonld_store;
+#[cfg(feature = "n3")]
+mod n3_store;
 mod partial;
 mod schema_store;
 pub mod store;
@@ -103,6 +107,21 @@ pub mod sparql {
 #[cfg(feature = "datalog")]
 pub mod datalog {
     pub use oxilite_datalog::*;
+}
+
+/// Notation3 rules run by eyeron over the dataset (`Store::n3_reason`, `Store::n3_materialize`).
+#[cfg(feature = "n3")]
+// @tg: implements:: [[openspec:n3-rules#Optional N3 engine]] {since: "2026-11-03"}
+pub mod n3 {
+    pub use oxilite_n3::*;
+}
+
+/// λProlog (ELPI) programs run by lean-elpi over the dataset (`Store::elpi_query`,
+/// `Store::elpi_check`, `Store::elpi_materialize`).
+#[cfg(feature = "elpi")]
+// @tg: implements:: [[openspec:elpi-programs#Optional ELPI engine]] {since: "2026-11-03"}
+pub mod elpi {
+    pub use oxilite_elpi::*;
 }
 
 /// Synalog over the dataset: the agent-oriented Datalog-family language, reading the store as

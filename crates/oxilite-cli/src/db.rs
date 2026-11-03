@@ -415,6 +415,29 @@ impl Db {
     }
 
     /// Stores what a Datalog program derives, as inferences.
+    /// Runs N3 rules without writing (every backend, D1 included).
+    // @tg: implements:: [[openspec:n3-rules#Command line]] {since: "2026-11-03"}
+    pub fn n3_reason(
+        &self,
+        rules: &str,
+        options: &oxilite::n3::Options,
+    ) -> Result<oxilite::n3::N3Result> {
+        Ok(
+            sync_store!(self, s => s.n3_reason_with(rules, options), d1 => d1.n3_reason_with(rules, options))?,
+        )
+    }
+
+    /// Stores what N3 rules conclude as inferences of `options.producer`.
+    pub fn n3_materialize(
+        &self,
+        rules: &str,
+        options: &oxilite::n3::Options,
+    ) -> Result<oxilite::n3::MaterializeStats> {
+        Ok(
+            sync_store!(self, s => s.n3_materialize_with(rules, options), d1 => d1.n3_materialize_with(rules, options))?,
+        )
+    }
+
     pub fn datalog_materialize(&self, program: &str) -> Result<oxilite::datalog::MaterializeStats> {
         Ok(match self {
             Db::Native(s) => s.datalog_materialize(program)?,
@@ -576,5 +599,48 @@ impl Db {
 
     pub fn clear_inferences(&self) -> Result<()> {
         Ok(sync_store!(self, s => s.clear_inferences(), s => s.clear_inferences())?)
+    }
+}
+
+/// ELPI runs: blocking stores only, since host calls are synchronous.
+#[cfg(feature = "elpi")]
+macro_rules! elpi_store {
+    ($self:expr, $s:ident => $e:expr) => {
+        match $self {
+            Db::Native($s) => $e,
+            Db::Library($s) => $e,
+            Db::Turso($s) => $e,
+            Db::D1(_) => Err(oxilite::elpi::ElpiError::Unsupported(
+                "ELPI programs need a blocking store; they do not run on D1".into(),
+            )),
+        }
+    };
+}
+
+#[cfg(feature = "elpi")]
+impl Db {
+    pub fn elpi_query(
+        &self,
+        program: &str,
+        goal: &str,
+        options: &oxilite::elpi::Options,
+    ) -> Result<oxilite::elpi::QueryResult> {
+        Ok(elpi_store!(self, s => s.elpi_query_with(program, goal, options))?)
+    }
+
+    pub fn elpi_check(
+        &self,
+        program: &str,
+        options: &oxilite::elpi::Options,
+    ) -> Result<Vec<oxilite::elpi::Violation>> {
+        Ok(elpi_store!(self, s => s.elpi_check_with(program, options))?)
+    }
+
+    pub fn elpi_materialize(
+        &self,
+        program: &str,
+        options: &oxilite::elpi::Options,
+    ) -> Result<oxilite::elpi::MaterializeStats> {
+        Ok(elpi_store!(self, s => s.elpi_materialize_with(program, options))?)
     }
 }

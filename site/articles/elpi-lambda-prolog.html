@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>λProlog on oxilite – oxilite</title>
+  <meta name="description" content="oxilite runs λProlog (ELPI) programs with lean-elpi over its RDF store: goal queries, hypothetical reasoning, constraint checks and materialized conclusions, reading triples through host builtins.">
+  <meta property="og:title" content="λProlog over your knowledge graph: hypothetical questions, checks and rules">
+  <meta property="og:description" content="ELPI programs read the store through ox.triple, answer goals with RDF terms, report violations and materialize conclusions.">
+  <meta property="og:image" content="../assets/logo.png">
+  <meta name="theme-color" content="#0a0a0a">
+  <link rel="canonical" href="https://oxilitedb.com/articles/elpi-lambda-prolog">
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg">
+  <link rel="icon" type="image/png" href="../assets/logo.png">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt=""><span>oxi<b>lite</b></span></a>
+      <nav class="nav" aria-label="Main">
+        <a href="../">Home</a>
+        <a href="./">Articles</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="article">
+    <article class="wrap">
+      <span class="kicker">λProlog · ELPI · Rules · Guide</span>
+      <h1>λProlog over your knowledge graph: hypothetical questions, checks and rules</h1>
+      <p class="standfirst">Datalog and N3 are first-order: rules over facts. λProlog is a logic programming language with higher-order rules, local assumptions (<code>=&gt;</code>), fresh names (<code>pi</code>), cut and negation. oxilite runs λProlog programs with <a href="https://github.com/Volland/lean-elpi">lean-elpi</a>, the ELPI dialect implemented in Lean&nbsp;4. Programs read the store through two host builtins and can answer goals, report violations, or add conclusions to the graph.</p>
+      <p class="meta">A guide · Every program and result on this page comes from the test suite (<a href="https://github.com/Volland/oxilite/blob/main/crates/oxilite/tests/elpi.rs"><code>elpi.rs</code></a>) or from the <code>oxilite</code> command line</p>
+
+      <h2>Setup</h2>
+      <p>The engine is a native library, <code>libleanelpi</code>, which carries the Lean runtime. It is built for macOS and Linux. Build it from lean-elpi, point <code>LEANELPI_DIST</code> at it, and turn the feature on:</p>
+<pre><code>git clone https://github.com/Volland/lean-elpi &amp;&amp; cd lean-elpi &amp;&amp; scripts/build-ffi.sh
+export LEANELPI_DIST=$PWD/dist
+
+cargo add oxilite --features elpi-native                  <span class="c"># Rust</span>
+cargo install oxilite-cli --features elpi                 <span class="c"># the command line</span></code></pre>
+      <p>Without the library oxilite still builds: the <code>elpi</code> feature on its own gives you the API, and every run returns <code>ElpiError::Unsupported</code>.</p>
+
+      <h2>1. The store, as λProlog sees it</h2>
+      <p>A program reads the store through two builtins. Each call is answered by one pattern scan whose pattern is made of the call's bound arguments, so a goal about Ada reads Ada's triples, not the whole graph.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Builtin</th><th>Answers</th></tr></thead>
+          <tbody>
+            <tr><td><code>ox.triple S P O</code></td><td>The triples of the scope, graphs merged, each one once</td></tr>
+            <tr><td><code>ox.quad S P O G</code></td><td>The quads, with <code>default-graph</code> for the default graph</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>ELPI is typed, so RDF terms are values of a type <code>term</code>:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>RDF</th><th>λProlog</th></tr></thead>
+          <tbody>
+            <tr><td>IRI</td><td><code>(iri "http://example.org/ada")</code></td></tr>
+            <tr><td>string</td><td><code>(str "Ada")</code></td></tr>
+            <tr><td><code>xsd:integer</code>, <code>xsd:double</code></td><td><code>(num 36)</code>, <code>(dbl 1.5)</code>, as native ELPI numbers, so arithmetic works</td></tr>
+            <tr><td>language-tagged string</td><td><code>(lang "chat" "fr")</code></td></tr>
+            <tr><td>any other literal</td><td><code>(lit "2026-11-03" "http://www.w3.org/2001/XMLSchema#date")</code></td></tr>
+            <tr><td>blank node</td><td><code>(bnode "b0")</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>2. Goals</h2>
+<pre><code><span class="c">% family.elpi</span>
+pred parent o:term, o:term.
+parent X Y :- ox.triple X (iri "http://example.org/parent") Y.
+
+pred anc o:term, o:term.
+anc X Y :- parent X Y.
+anc X Z :- parent X Y, anc Y Z.</code></pre>
+<pre><code>$ oxilite elpi -l family.db -f family.elpi --goal 'anc (iri "http://example.org/ada") Y'
+Y
+&lt;http://example.org/bob&gt;
+&lt;http://example.org/cy&gt;
+&lt;http://example.org/dan&gt;
+3 solution(s), 6 row(s) read</code></pre>
+      <p>Bindings that are RDF terms come back as RDF terms, IRIs here. Anything else ELPI can build, such as lists, numbers or λ-terms, comes back as ELPI prints it. Higher-order library predicates work as usual:</p>
+<pre><code>$ oxilite elpi -l family.db -f family.elpi \
+    --goal 'std.findall (anc (iri "http://example.org/ada") Y) L, std.length L N'
+L                                                       N
+[anc (iri ".../ada") (iri ".../bob"), anc ... ]        3</code></pre>
+      <p>Numbers are numbers. A stored <code>xsd:integer</code> binds an ELPI <code>int</code>:</p>
+<pre><code>pred adult o:term.
+adult P :- ox.triple P (iri "http://example.org/age") (num A), A &gt;= 18.</code></pre>
+
+      <h2>3. Hypothetical questions</h2>
+      <p>This is what λProlog adds over Datalog and N3. <code>H =&gt; G</code> proves <code>G</code> with <code>H</code> assumed, and only while proving it. "If Dan had a child Eve, would Eve be Ada's descendant?"</p>
+<pre><code>$ oxilite elpi -l family.db -f family.elpi --goal \
+  '(parent (iri "http://example.org/dan") (iri "http://example.org/eve") =&gt; anc (iri "http://example.org/ada") (iri "http://example.org/eve"))'
+true
+
+$ oxilite elpi -l family.db -f family.elpi --goal \
+  'anc (iri "http://example.org/ada") (iri "http://example.org/eve")'
+false</code></pre>
+      <p>The assumption is never written; the test checks the store has the same size before and after. <code>pi x\ …</code> introduces a fresh name, so you can ask about "some new child of Dan" without making one up:</p>
+<pre><code>$ oxilite elpi -l family.db -f family.elpi --goal \
+  'pi x\ (parent (iri "http://example.org/dan") x =&gt; anc (iri "http://example.org/ada") x)'
+true</code></pre>
+      <p>That is how you ask "what if" of a knowledge graph: try a change before you make it, or check that a policy holds for any new member of a class.</p>
+
+      <h2>4. Checks</h2>
+      <p>A program reports violations by defining <code>ox.violation Severity Name Message Focus</code>, with <code>error</code> or <code>warning</code> and a list of the terms it is about:</p>
+<pre><code>ox.violation error "missing-name" "a person needs a name" [P] :-
+  ox.triple P (iri "http://www.w3.org/1999/02/22-rdf-syntax-ns#type") (iri "http://example.org/Person"),
+  not (ox.triple P (iri "http://example.org/name") _).
+
+ox.violation warning "minor" "a person under 18" [P] :-
+  ox.triple P (iri "http://example.org/age") (num A), A &lt; 18.</code></pre>
+<pre><code>$ oxilite elpi -l family.db -f family.elpi --check
+warning   minor          a person under 18       &lt;http://example.org/bob&gt;
+error     missing-name   a person needs a name   &lt;http://example.org/bob&gt;
+2 violation(s)
+$ echo $?
+1</code></pre>
+      <p>The exit status is 1 when any violation is an <code>error</code>, so <code>--check</code> works as a gate in CI. From Rust, <code>store.elpi_check(program)?</code> returns the same list. SHACL is still the standard way to describe shapes. Checks are for rules SHACL can't easily express: recursive ones, ones that use hypotheticals, or ones that compute.</p>
+
+      <h2>5. Conclusions into the graph</h2>
+      <p>A program says what to store by defining <code>ox.conclude (triple S P O)</code>:</p>
+<pre><code>ox.conclude (triple X (iri "http://example.org/ancestorOf") Y) :- anc Y X.</code></pre>
+<pre><code>$ oxilite elpi -l family.db -f family.elpi --materialize
+6 inferred triple(s) (producer elpi, 12 row(s) read)
+
+$ oxilite query -l family.db --inferred -q \
+  'PREFIX ex: &lt;http://example.org/&gt; SELECT ?x WHERE { ?x ex:ancestorOf ex:ada }'</code></pre>
+      <p>Conclusions go into the same inference table that OWL&nbsp;2&nbsp;RL, Datalog and N3 write to, attributed to the producer <code>elpi</code> (or the one you name). SPARQL, Cypher and Datalog see them with <code>include_inferred</code>. Each run replaces its producer's earlier conclusions. A conclusion that is not a storable triple, such as one with a literal subject, is counted and skipped.</p>
+
+      <h2>6. Keeping runs bounded</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Option</th><th>CLI</th><th>Bounds</th></tr></thead>
+          <tbody>
+            <tr><td><code>fuel</code></td><td><code>--fuel</code></td><td>Resolution steps. <code>loop :- loop.</code> fails with <code>out of fuel: the budget of 5000 steps ran out</code></td></tr>
+            <tr><td><code>limit</code></td><td><code>--limit</code></td><td>Solutions to collect</td></tr>
+            <tr><td><code>max_rows</code></td><td>(default one million)</td><td>Rows the builtins may return over the whole run</td></tr>
+            <tr><td><code>graphs</code>, <code>include_inferred</code></td><td><code>--graph</code>, <code>--inferred</code></td><td>The scope the builtins read</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Which rule language when</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th></th><th>Datalog</th><th>N3</th><th>λProlog</th></tr></thead>
+          <tbody>
+            <tr><td>Runs</td><td>As SQL, inside SQLite</td><td>In memory, eyeron</td><td>In memory, lean-elpi, reading on demand</td></tr>
+            <tr><td>Best for</td><td>Recursion over large graphs</td><td>Semantic Web rules, builtins, proofs, fuses</td><td>Hypotheticals, higher-order rules, checks that compute</td></tr>
+            <tr><td>Materializes</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+            <tr><td>Cloudflare D1</td><td>Yes</td><td>Yes</td><td>No (host calls are synchronous)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout">
+        <p><strong>The takeaway.</strong> λProlog brings a full logic programming language to the graph. It can ask what would follow from a change before you make it, check rules that need recursion or computation, and add conclusions that every other query language reads. It only reads the triples it asks for.</p>
+      </div>
+      <p>See also: <a href="n3-rules.html">Notation3 rules over the same store</a>, <a href="datalog-rules.html">Datalog rules</a>, and <a href="reasoning-overview.html">how all of oxilite&rsquo;s reasoners compare</a>.</p>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt="" width="28" height="28"><span>oxilite</span></a>
+      <span>MIT or Apache-2.0</span>
+      <nav aria-label="Rechtliches">
+        <a href="../impressum.html">Impressum</a>
+        <a href="../datenschutz.html">Datenschutz</a>
+        <a href="../agb.html">AGB</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>

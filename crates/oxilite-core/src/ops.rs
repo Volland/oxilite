@@ -370,8 +370,13 @@ pub struct ScanJob {
 
 impl ScanJob {
     fn new(where_clause: String, caps: &Capabilities) -> Self {
+        Self::from_source("quads", where_clause, caps)
+    }
+
+    /// A scan of any relation with the columns `s`, `p`, `o`, `g` (a table or a subquery).
+    fn from_source(source: &str, where_clause: String, caps: &Capabilities) -> Self {
         let sql = format!(
-            "SELECT {}, {}, {}, {} FROM quads{}",
+            "SELECT {}, {}, {}, {} FROM {source}{}",
             id_col(caps, "s"),
             id_col(caps, "p"),
             id_col(caps, "o"),
@@ -442,6 +447,79 @@ impl Job for ScanJob {
             None => self.finish().map(Step::Done),
         }
     }
+}
+
+/// What a rule engine reads before it reasons in memory (N3, ELPI): see [`reasoning_input_job`].
+#[derive(Debug, Clone, Default)]
+pub struct ReasoningInput<'a> {
+    /// Only quads with this subject.
+    pub subject: Option<NamedOrBlankNodeRef<'a>>,
+    /// Only quads with this object.
+    pub object: Option<TermRef<'a>>,
+    /// Only these predicates (pruning by the predicates the rules read); `None` reads every one.
+    pub predicates: Option<Vec<NamedNodeRef<'a>>>,
+    /// Only these graphs; `None` reads every graph but the system graphs.
+    pub graphs: Option<Vec<GraphNameRef<'a>>>,
+    /// Also read materialized inferences, except those only `exclude_producer` derived, so a
+    /// producer never feeds on its own earlier conclusions.
+    pub include_inferred: bool,
+    pub exclude_producer: Option<&'a str>,
+}
+
+/// The quads a rule engine reasons over, in one read request: asserted quads, optionally with
+/// other producers' inferences, restricted by predicate and graph.
+// @tg: implements:: [[openspec:n3-rules#Own conclusions are never input]] {since: "2026-11-03"}
+pub fn reasoning_input_job(input: &ReasoningInput<'_>, caps: &Capabilities) -> ScanJob {
+    let source = if input.include_inferred {
+        let own = match input.exclude_producer {
+            Some(p) => format!(
+                " WHERE EXISTS (SELECT 1 FROM quads_inf_src q WHERE q.s = i.s AND q.p = i.p \
+                 AND q.o = i.o AND q.g = i.g AND q.src != {})",
+                crate::reason::producer_id(p)
+            ),
+            None => String::new(),
+        };
+        format!(
+            "(SELECT s, p, o, g FROM quads UNION SELECT i.s, i.p, i.o, i.g FROM quads_inf i{own})"
+        )
+    } else {
+        "quads".to_owned()
+    };
+    let list = |ids: Vec<String>| {
+        if ids.is_empty() {
+            "NULL".to_owned()
+        } else {
+            ids.join(",")
+        }
+    };
+    let mut w = Vec::new();
+    if let Some(s) = input.subject {
+        w.push(format!("s = {}", subject_id(s)));
+    }
+    if let Some(o) = input.object {
+        w.push(format!("o = {}", term_id(o)));
+    }
+    if let Some(ps) = &input.predicates {
+        let ids = ps
+            .iter()
+            .map(|p| named_node_id(p.as_str()).to_string())
+            .collect();
+        w.push(format!("p IN ({})", list(ids)));
+    }
+    match &input.graphs {
+        Some(gs) => {
+            let ids = gs.iter().map(|g| graph_id(*g).to_string()).collect();
+            w.push(format!("g IN ({})", list(ids)));
+        }
+        None => {
+            let ids = crate::registry::SYSTEM_GRAPHS
+                .iter()
+                .map(|g| named_node_id(g).to_string())
+                .collect();
+            w.push(format!("g NOT IN ({})", list(ids)));
+        }
+    }
+    ScanJob::from_source(&source, w.join(" AND "), caps)
 }
 
 /// Quads whose subject (or, with `incoming`, object) is one of `nodes`, optionally restricted

@@ -875,6 +875,30 @@ pub fn inference_attribute(name: &str) -> Statement {
     ))
 }
 
+/// The atomic request replacing one producer's inferences with `quads`: its earlier
+/// attributions are reset, the terms and quads are written into `quads_inf`, and what nobody
+/// else derived is attributed to it. Returns the request and the number of distinct quads.
+pub fn inference_replace(
+    producer: &str,
+    quads: &[oxrdf::Quad],
+    caps: &crate::sql::Capabilities,
+) -> (crate::sql::Request, u64) {
+    let mut rows = crate::encoding::EncodedRows::default();
+    let mut ids: Vec<[i64; 4]> = quads.iter().map(|q| rows.quad(q.as_ref())).collect();
+    ids.sort_unstable();
+    ids.dedup();
+    rows.dedup();
+    let mut stmts = inference_reset(producer);
+    stmts.extend(crate::writer::term_statements(&rows, caps));
+    stmts.extend(crate::writer::insert_statements_into(
+        "quads_inf",
+        &ids,
+        caps,
+    ));
+    stmts.push(inference_attribute(producer));
+    (crate::sql::Request::atomic(stmts), ids.len() as u64)
+}
+
 /// Statements run before OWL 2 RL materialization (see [`materialize_reset_for`]).
 pub fn materialize_reset(caps: &crate::sql::Capabilities) -> Vec<Statement> {
     materialize_reset_for(caps, OWL_PRODUCER)

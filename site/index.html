@@ -319,7 +319,7 @@ SELECT ?t ?old ?new WHERE {                                     <span class="c">
     <section>
       <div class="wrap">
         <h2>Reasoning and validation included<span class="dot">.</span></h2>
-        <p class="sub">The pieces a knowledge graph needs, reused from the Rust RDF ecosystem.</p>
+        <p class="sub">The pieces a knowledge graph needs, reused from the Rust RDF ecosystem. Seven engines, one store: <a href="articles/reasoning-overview.html">which one to use, when, and why there are several &rarr;</a></p>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Capability</th><th>How</th></tr></thead>
@@ -328,6 +328,8 @@ SELECT ?t ?old ?new WHERE {                                     <span class="c">
               <tr><td>OWL 2 RL</td><td><code>materialize()</code> with SQL fixpoint rules on every backend, or natively with <em>reasonable</em>.</td></tr>
               <tr><td>SHACL / ShEx</td><td>rudof validators, unchanged, in <code>oxilite-validate</code>. Results match rudof's in-memory graph.</td></tr>
               <tr><td>Your own rules</td><td>Datalog with stratified negation, compiled to one SQL statement. <code>datalog_materialize()</code> stores what it derives beside the OWL inferences. <a href="#datalog">See below</a>.</td></tr>
+              <tr><td>Notation3 rules</td><td><code>n3_reason()</code> and <code>n3_materialize()</code> with <em>eyeron</em>: builtins, scoped negation, proofs and fuses, reading only the predicates the rules use. On D1 too. <a href="articles/n3-rules.html">Guide</a>.</td></tr>
+              <tr><td>λProlog</td><td>ELPI programs with <em>lean-elpi</em>: goals, hypothetical <code>=&gt;</code> and <code>pi</code>, checks and conclusions, reading the store through <code>ox.triple</code>. <a href="articles/elpi-lambda-prolog.html">Guide</a>.</td></tr>
               <tr><td>Full-text search</td><td>FTS5 behind <code>oxl:textMatch</code>, on D1 too.</td></tr>
               <tr><td>Vector search</td><td>On Turso: k-nearest-neighbour search from SPARQL, Cypher and Datalog, inside the query's single statement. <a href="#vectors">See above</a>.</td></tr>
               <tr><td>JSON-LD / Verifiable Credentials</td><td>Documents kept byte for byte, RDF in a named graph each, via <em>json-ld</em> and <em>ssi-vc</em> in <code>oxilite-jsonld</code> and <code>oxilite-vc</code>.</td></tr>
@@ -374,6 +376,11 @@ store.datalog(<span class="s">r#"
 Ancestor(x:, y:) distinct :- parent(subject: x, object: y);
 Ancestor(x:, y:) distinct :- Ancestor(x:, y: m), parent(subject: m, object: y);</code></pre>
         <p><code>store.synalog(program, "Ancestor")</code> from Rust, Python, Node.js and D1, or <code>oxilite synalog Ancestor -f rules.l</code>. <a href="articles/synalog-agents.html">Read how it differs from Datalog &rarr;</a></p>
+        <h3 style="margin-top:32px">Notation3 and λProlog</h3>
+        <p>Two more reasoners run over the same quads and store their conclusions as inferences of their own. <strong>N3 rules</strong> run with <a href="https://crates.io/crates/eyeron">eyeron</a>: builtins, scoped negation, backward rules, proofs and fuses, reading only the predicates the rules use, on every backend including D1. <strong>λProlog programs</strong> run with <a href="https://github.com/Volland/lean-elpi">lean-elpi</a> and read the store through <code>ox.triple</code>: hypothetical questions (<code>=&gt;</code>, <code>pi</code>), checks with <code>ox.violation</code>, conclusions with <code>ox.conclude</code>.</p>
+<pre><code>{ ?x ex:parent ?y . ?y ex:parent ?z } =&gt; { ?x ex:grandparent ?z } .        <span class="c"># N3</span>
+anc X Z :- ox.triple X (iri "http://example.org/parent") Y, anc Y Z.          <span class="c">% λProlog</span></code></pre>
+        <p><code>oxilite n3 -f rules.n3 --materialize</code> and <code>oxilite elpi -f rules.elpi --goal '…'</code>. <a href="articles/n3-rules.html">Read the N3 guide &rarr;</a> · <a href="articles/elpi-lambda-prolog.html">Read the λProlog guide &rarr;</a></p>
       </div>
     </section>
     <section id="credentials" class="band-black">
@@ -432,6 +439,18 @@ code --install-extension pavlyshyn.oxilite-studio
         <h2>Articles<span class="dot">.</span></h2>
         <p class="sub">Guides and design notes: what you can build with oxilite and how it works inside. <a href="articles/">All articles →</a></p>
         <div class="articles">
+          <a class="article-card" href="articles/reasoning-overview.html">
+            <span class="kicker">Reasoning · Overview · New</span>
+            <h3>One graph, seven reasoners: which one, when, and why</h3>
+            <p>RDFS/OWL QL, OWL 2 RL, Datalog, Synalog, N3, λProlog and SHACL over the same quads: a comparison matrix and a decision guide.</p>
+            <span class="more">Read the overview →</span>
+          </a>
+          <a class="article-card" href="articles/n3-rules.html">
+            <span class="kicker">N3 · λProlog · Rules · New</span>
+            <h3>Notation3 rules over a SQLite knowledge graph</h3>
+            <p>Ask what follows, keep the proof, store conclusions as inferences, with eyeron. And λProlog for hypothetical questions.</p>
+            <span class="more">Read the guide →</span>
+          </a>
           <a class="article-card" href="articles/agent-memory-turso.html">
             <span class="kicker">Turso · Vector search · Agents · Guide · New</span>
             <h3>Agent memory on Turso: vector search inside your knowledge graph</h3>

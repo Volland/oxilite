@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reasoning in oxilite: which engine, when – oxilite</title>
+  <meta name="description" content="oxilite has seven ways to reason over and check one RDF graph: query-time RDFS/OWL QL, OWL 2 RL materialization, Datalog, Synalog, N3, λProlog and SHACL/ShEx. A comparison matrix, where to use each, and why there is more than one.">
+  <meta property="og:title" content="One graph, seven reasoners: which one, when, and why">
+  <meta property="og:description" content="RDFS/OWL QL, OWL 2 RL, Datalog, Synalog, N3, λProlog and SHACL over the same quads: a comparison matrix and a decision guide.">
+  <meta property="og:image" content="../assets/logo.png">
+  <meta name="theme-color" content="#0a0a0a">
+  <link rel="canonical" href="https://oxilitedb.com/articles/reasoning-overview">
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg">
+  <link rel="icon" type="image/png" href="../assets/logo.png">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt=""><span>oxi<b>lite</b></span></a>
+      <nav class="nav" aria-label="Main">
+        <a href="../">Home</a>
+        <a href="./">Articles</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="article">
+    <article class="wrap">
+      <span class="kicker">Reasoning · Rules · Validation · Overview</span>
+      <h1>One graph, seven reasoners: which one, when, and why</h1>
+      <p class="standfirst">oxilite can reason over the same quads in six ways and check them in a seventh: RDFS and OWL&nbsp;QL at query time, OWL&nbsp;2&nbsp;RL materialization, Datalog, Synalog, Notation3, λProlog, and SHACL/ShEx. That can look like too many. This article explains why each one exists, how they share one store, and which to reach for, with a comparison matrix at the end.</p>
+      <p class="meta">An overview · The capabilities below are the ones the test suites check; each engine has its own guide, linked from its section</p>
+
+      <h2>Why more than one</h2>
+      <p>"Reasoning" covers several jobs, and no single engine is good at all of them:</p>
+      <ul>
+        <li><strong>Entailment from an ontology.</strong> "Every <code>ex:Dog</code> is an <code>ex:Animal</code>." The rules are fixed by the W3C specs; you write axioms, not rules.</li>
+        <li><strong>Rules you write.</strong> "An ancestor is a parent, or a parent's ancestor." The logic is yours, and it often needs recursion, negation or aggregates.</li>
+        <li><strong>Questions about something that isn't there.</strong> "If Dan had a child, would she be Ada's descendant?" That needs hypothetical reasoning.</li>
+        <li><strong>Checks.</strong> "Every person has a name." That is a closed-world question about the data as it is, not a conclusion to add.</li>
+      </ul>
+      <p>The engines also differ in <em>where</em> they run. Some compile to SQL and run inside SQLite, close to the data: those scale and work on Cloudflare D1, where every request is a network hop. Others run in memory: they are more expressive but have to load what they reason over. So oxilite doesn't pick one. It gives every engine the same store and the same place to put its conclusions, so they can be combined.</p>
+
+      <h2>What they share</h2>
+      <p>Every engine reads the same quad table. The ones that conclude something can write it into one inference table, <code>quads_inf</code>, beside the asserted data rather than into it. Each conclusion is attributed to the <em>producer</em> that derived it: <code>owl2rl</code>, a Datalog producer, <code>n3</code>, <code>elpi</code>, or a name you choose. This gives you three things:</p>
+      <ul>
+        <li><strong>Queries opt in.</strong> SPARQL, Cypher and Datalog read inferences only with <code>include_inferred</code>, so a query can always ask "what was asserted?"</li>
+        <li><strong>Producers are independent.</strong> Re-running one producer replaces its own conclusions and leaves the others' in place. A quad two producers derive stays until neither does. <code>inference_producers(quad)</code> names who derived it.</li>
+        <li><strong>Engines compose.</strong> An engine run with <code>include_inferred</code> reads the other producers' conclusions as input, but never its own. OWL&nbsp;2&nbsp;RL can feed Datalog, Datalog can feed N3, and so on.</li>
+      </ul>
+      <p>The <a href="schema-registry.html">schema registry</a> adds one more shared piece: it says which graphs hold ontologies and shapes, and which data graphs each applies to. That is how query-time reasoning and validation pick the right schema for each graph.</p>
+
+      <h2>The seven, one by one</h2>
+
+      <h3>1. RDFS and OWL&nbsp;QL at query time</h3>
+      <p>Turn it on per query (<code>reasoning: Rdfs</code> or <code>OwlQl</code>) and each triple pattern also matches what the ontology entails: subclasses, sub-properties, inverses, domains and ranges, transitive properties. Nothing is stored. A small closure of the ontology (<code>tbox_closure</code>) is kept up to date as the schema changes, and the compiler rewrites each query so it is still one SQL statement. Ontologies can be scoped per data graph through the registry.</p>
+      <p><strong>Use it</strong> when you have an ontology and want queries to "just see" its consequences, on any backend, with no materialization to keep in sync.</p>
+
+      <h3>2. OWL&nbsp;2&nbsp;RL materialization</h3>
+      <p><code>materialize()</code> computes the OWL&nbsp;2&nbsp;RL closure (equality, property axioms, class expressions, property chains) and stores it as the <code>owl2rl</code> producer. It runs as SQL rounds on every backend, D1 included, or in memory with the <code>reasonable</code> reasoner, which is much faster on large native stores.</p>
+      <p><strong>Use it</strong> when you need more of OWL than query rewriting covers (<code>owl:sameAs</code>, property chains, <code>owl:hasValue</code>…), and when the conclusions should be stored and fast to read.</p>
+
+      <h3>3. Datalog</h3>
+      <p>RDF-native rules, <code>ancestor(?x, ?z) :- ex:parent(?x, ?y), ancestor(?y, ?z).</code>, with stratified negation and aggregates. A program compiles to <em>one SQL statement</em> where SQLite allows it, and is iterated in a work table where it doesn't. Results can be returned or materialized as a producer. It runs on every backend and from Rust, the CLI, Node, Python and D1. <a href="datalog-rules.html">Datalog guide →</a></p>
+      <p><strong>Use it</strong> for your own recursive rules over large data, especially on D1, where running inside SQLite saves round trips.</p>
+
+      <h3>4. Synalog</h3>
+      <p>The Datalog-family language for AI agents: named arguments, expressions, head aggregation, ordered and pageable results, and a verifier whose messages are written for a model. It reads triples as relational tables and returns SQL values, not RDF terms, so it doesn't materialize. <a href="synalog-agents.html">Synalog guide →</a></p>
+      <p><strong>Use it</strong> when an agent builds a semantic layer of named concepts <em>over</em> the graph and wants tabular, pageable answers.</p>
+
+      <h3>5. Notation3</h3>
+      <p>W3C-community rules over triples, <code>{ … } =&gt; { … }</code>, run in memory by eyeron. N3 has builtins for math, strings, lists and time, scoped negation, backward rules, queries, <em>proofs</em>, and <em>fuses</em> (<code>=&gt; false</code>) that stop a run on forbidden data. A run reads only the predicates its rule bodies use. Ask what follows, or materialize as a producer, on every backend including D1. <a href="n3-rules.html">N3 guide →</a></p>
+      <p><strong>Use it</strong> when the rules come from the Semantic Web world or must be exchanged as standard N3, when you need builtins or proofs, or when a forbidden pattern must stop materialization.</p>
+
+      <h3>6. λProlog (ELPI)</h3>
+      <p>A full logic programming language run by lean-elpi: higher-order predicates, local assumptions (<code>=&gt;</code>), fresh names (<code>pi</code>), cut and negation as failure, arithmetic on stored numbers. It reads the store on demand through <code>ox.triple</code>, one scan per call. It answers goals, reports violations (<code>ox.violation</code>) and materializes (<code>ox.conclude</code>). Native library; blocking stores only. <a href="elpi-lambda-prolog.html">λProlog guide →</a></p>
+      <p><strong>Use it</strong> for "what if" questions, for checks that need recursion or computation, and for logic too rich for first-order rules.</p>
+
+      <h3>7. SHACL and ShEx</h3>
+      <p>Not inference but validation: rudof's engines check the data against shapes, which can be registered per graph. Reports are standard SHACL validation reports. D1 is validated from native code with a bounded prefetch.</p>
+      <p><strong>Use it</strong> to state and enforce what the data must look like, in a standard others can read. Reach for λProlog checks or N3 fuses only when a rule is beyond SHACL.</p>
+
+      <h2>The comparison matrix</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th></th><th>RDFS / OWL&nbsp;QL</th><th>OWL&nbsp;2&nbsp;RL</th><th>Datalog</th><th>Synalog</th><th>N3</th><th>λProlog</th><th>SHACL / ShEx</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>You write</td><td>An ontology</td><td>An ontology</td><td>Rules</td><td>Rules</td><td>Rules</td><td>Programs</td><td>Shapes</td></tr>
+            <tr><td>Runs as</td><td>Query rewrite, one SQL statement</td><td>SQL rounds, or <code>reasonable</code> in memory</td><td>One SQL statement, or iterated in a work table</td><td>One SQL statement</td><td>eyeron, in memory</td><td>lean-elpi, scans on demand</td><td>rudof over the store</td></tr>
+            <tr><td>Stores conclusions</td><td>No: computed per query</td><td>Yes (<code>owl2rl</code>)</td><td>Optional</td><td>No (SQL values)</td><td>Optional (<code>n3</code>)</td><td>Optional (<code>elpi</code>)</td><td>No: a report</td></tr>
+            <tr><td>Recursion</td><td>Transitive properties</td><td>Fixpoint</td><td>Least fixpoint</td><td>Bounded unrolling</td><td>Fixpoint</td><td>Full</td><td>Recursive shapes</td></tr>
+            <tr><td>Negation</td><td>—</td><td>—</td><td>Stratified</td><td>Yes</td><td>Scoped (<code>log:notIncludes</code>)</td><td>As failure, cut</td><td><code>sh:not</code></td></tr>
+            <tr><td>Aggregates</td><td>—</td><td>—</td><td>In the head</td><td>In the head</td><td><code>log:collectAllIn</code></td><td><code>std.findall</code> and more</td><td>Counts</td></tr>
+            <tr><td>Hypothetical questions</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><code>=&gt;</code>, <code>pi</code></td><td>—</td></tr>
+            <tr><td>Explains itself</td><td>—</td><td>Producer attribution</td><td><code>explain</code> (plan), attribution</td><td>Verifier messages</td><td>Proofs</td><td>Bindings</td><td>Validation report</td></tr>
+            <tr><td>Stops on bad data</td><td>—</td><td>— (keeps going)</td><td>—</td><td>—</td><td>Fuses</td><td><code>ox.violation</code></td><td>Violations</td></tr>
+            <tr><td>Per-graph scope</td><td>Registry</td><td>Merged dataset</td><td>Graph options</td><td>Graph options</td><td>Graph options</td><td>Graph options</td><td>Registry</td></tr>
+            <tr><td>Cloudflare D1</td><td>Yes</td><td>Yes (SQL rounds)</td><td>Yes</td><td>Yes (opt-in)</td><td>Yes</td><td>No</td><td>From native code</td></tr>
+            <tr><td>Surfaces</td><td>All</td><td>All</td><td>All</td><td>Rust, CLI, Node, Python, D1</td><td>Rust, CLI</td><td>Rust, CLI</td><td>Rust, CLI, studio</td></tr>
+            <tr><td>Scales with</td><td>SQLite</td><td>SQLite, or memory</td><td>SQLite</td><td>SQLite</td><td>The pruned scope in memory</td><td>The rows a program reads</td><td>Targets and their neighbourhood</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Where to use what</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>If you want to…</th><th>Use</th></tr></thead>
+          <tbody>
+            <tr><td>Have queries see subclasses, sub-properties, inverses, domains and ranges</td><td>RDFS / OWL&nbsp;QL at query time</td></tr>
+            <tr><td>Store the full OWL&nbsp;2&nbsp;RL closure (sameAs, chains, class expressions)</td><td>OWL&nbsp;2&nbsp;RL materialization</td></tr>
+            <tr><td>Write recursive rules over a big graph, or on D1</td><td>Datalog</td></tr>
+            <tr><td>Give an agent named concepts and pageable tabular answers</td><td>Synalog</td></tr>
+            <tr><td>Use or exchange standard Semantic Web rules, with builtins and proofs</td><td>N3</td></tr>
+            <tr><td>Stop materialization when forbidden data appears</td><td>N3 fuses</td></tr>
+            <tr><td>Ask "what if" before changing the graph</td><td>λProlog</td></tr>
+            <tr><td>Check rules that need recursion, arithmetic or hypotheticals</td><td>λProlog checks</td></tr>
+            <tr><td>Declare what valid data looks like, in a standard</td><td>SHACL or ShEx</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Combining them</h2>
+      <p>Because every producer writes to the same table and reads the others' output, a realistic pipeline uses several:</p>
+<pre><code>store.materialize()?;                                  <span class="c">// 1. OWL 2 RL closure      (producer owl2rl)</span>
+store.datalog_materialize(reachability)?;              <span class="c">// 2. recursive rules        (a Datalog producer)</span>
+store.n3_materialize_with(policies,                    <span class="c">// 3. N3 policies on top, with a fuse</span>
+    &amp;Options { include_inferred: true, ..Default::default() })?;
+let violations = store.elpi_check(checks)?;            <span class="c">// 4. checks that compute</span>
+<span class="c">// 5. queries opt in to everything above with include_inferred</span></code></pre>
+      <p>When the ontology changes, re-run step 1. When a policy changes, re-run step 3; the closure and the Datalog conclusions are untouched. Queries can always ask for asserted data only.</p>
+
+      <div class="callout">
+        <p><strong>The takeaway.</strong> There are several reasoners because reasoning is several jobs: entailment from an ontology, rules you write, "what if" questions and checks. Each engine is best at one of them, and some can run where the data is while others need memory. They share one store and one inference table, and conclusions are attributed per producer. So you can pick the right engine for each rule, combine several, and still ask what was asserted.</p>
+      </div>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt="" width="28" height="28"><span>oxilite</span></a>
+      <span>MIT or Apache-2.0</span>
+      <nav aria-label="Rechtliches">
+        <a href="../impressum.html">Impressum</a>
+        <a href="../datenschutz.html">Datenschutz</a>
+        <a href="../agb.html">AGB</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>
