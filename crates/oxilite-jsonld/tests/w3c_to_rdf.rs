@@ -129,7 +129,7 @@ fn run(test: &serde_json::Value) -> Outcome {
     }
 }
 
-// @lat: [[tests#JSON-LD documents#W3C toRdf suite]]
+// @tg: verifies:: [[tests#JSON-LD documents#W3C toRdf suite]] {since: "2026-09-22", level: integration}
 #[test]
 fn w3c_to_rdf_suite() {
     let manifest_path = root().join("toRdf-manifest.jsonld");

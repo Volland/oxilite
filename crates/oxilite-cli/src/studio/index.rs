@@ -173,7 +173,7 @@ impl SourceIndex {
 mod tests {
     use super::*;
 
-    // @lat: [[tests#Studio server#Index finds definitions]]
+    // @tg: verifies:: [[tests#Studio server#Index finds definitions]] {since: "2026-09-24", level: unit}
     #[test]
     fn definitions_prefer_subjects() {
         let mut ix = SourceIndex::default();

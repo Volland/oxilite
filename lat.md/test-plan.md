@@ -1,3 +1,6 @@
+---
+type: Scenario
+---
 # Test plan
 
 Planned tests, built around one principle: oxilite is correct when it behaves like Oxigraph. When a test is implemented, its section moves to [[tests]] and gains an `@lat:` reference in code.

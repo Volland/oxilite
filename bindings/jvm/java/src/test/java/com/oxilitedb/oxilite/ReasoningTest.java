@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
 
-// @lat: [[tests#JVM bindings#Reasons per query and materializes OWL 2 RL]]
+// @tg: verifies:: [[tests#JVM bindings#Reasons per query and materializes OWL 2 RL]] {since: "2026-09-30", level: integration}
 class ReasoningTest {
     private static final String QUERY = "SELECT ?x WHERE { ?x a <http://example.com/Animal> }";
 

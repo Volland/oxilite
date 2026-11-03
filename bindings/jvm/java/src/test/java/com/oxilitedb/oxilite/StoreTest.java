@@ -14,7 +14,7 @@ import com.oxilitedb.oxilite.model.Quad;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-// @lat: [[tests#JVM bindings#Core store round-trips through the native layer]]
+// @tg: verifies:: [[tests#JVM bindings#Core store round-trips through the native layer]] {since: "2026-09-30", level: integration}
 class StoreTest {
     @Test
     void insertsAndQueries() {

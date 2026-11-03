@@ -6,7 +6,7 @@ import { type CypherNode, type CypherRelationship, Store } from "../dist/index.j
 const ex = { base: "http://example.com/" };
 
 describe("@oxilite/node Cypher", () => {
-  // @lat: [[tests#Node#Cypher reads and writes the same dataset]]
+  // @tg: verifies:: [[tests#Node#Cypher reads and writes the same dataset]] {since: "2026-09-22", level: integration}
   it("writes with Cypher and reads with SPARQL, and the other way round", () => {
     const store = new Store();
     const created = store.cypher("CREATE (a:Person {name: $name})-[:KNOWS {since: 2020}]->(b:Person {name: 'Alan'}) RETURN a", { name: "Ada" }, ex);

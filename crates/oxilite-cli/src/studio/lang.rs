@@ -772,7 +772,7 @@ mod tests {
         items.iter().map(|i| i.label.clone()).collect()
     }
 
-    // @lat: [[tests#Studio server#Completion follows the triple role]]
+    // @tg: verifies:: [[tests#Studio server#Completion follows the triple role]] {since: "2026-09-24", level: unit}
     #[test]
     fn completion_follows_role() {
         let ix = SourceIndex::default();
@@ -805,7 +805,7 @@ mod tests {
         assert_eq!(labels(&items), ["?name", "?x"]);
     }
 
-    // @lat: [[tests#Studio server#Completion declares missing prefixes]]
+    // @tg: verifies:: [[tests#Studio server#Completion declares missing prefixes]] {since: "2026-09-24", level: unit}
     #[test]
     fn completion_declares_prefix() {
         let mut ix = SourceIndex::default();
@@ -826,7 +826,7 @@ mod tests {
         assert_eq!(edit.new_text, "PREFIX ex: <http://ex.org/>\n");
     }
 
-    // @lat: [[tests#Studio server#Syntax diagnostics as you type]]
+    // @tg: verifies:: [[tests#Studio server#Syntax diagnostics as you type]] {since: "2026-09-24", level: unit}
     #[test]
     fn syntax_positions() {
         let d = syntax_diagnostics(

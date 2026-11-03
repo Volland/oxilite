@@ -43,7 +43,7 @@ def rows(result: object) -> list:
     return list(result)
 
 
-# @lat: [[tests#Python#File store persists across processes]]
+# @tg: verifies:: [[tests#Python#File store persists across processes]] {since: "2026-09-28", level: integration}
 def test_file_store_persists_across_processes(tmp_path: Path) -> None:
     db = tmp_path / "data.sqlite"
     code = (
@@ -57,7 +57,7 @@ def test_file_store_persists_across_processes(tmp_path: Path) -> None:
     assert Quad(n, n, n) in Store(db)
 
 
-# @lat: [[tests#Python#Directory and read-only stores]]
+# @tg: verifies:: [[tests#Python#Directory and read-only stores]] {since: "2026-09-28", level: integration}
 def test_directory_and_read_only_stores(tmp_path: Path) -> None:
     store = Store(tmp_path)
     store.add(Quad(ex("s"), ex("p"), Literal("o")))
@@ -73,7 +73,7 @@ def test_directory_and_read_only_stores(tmp_path: Path) -> None:
     assert len(Store(copy)) == 1
 
 
-# @lat: [[tests#Python#Terms validate their input]]
+# @tg: verifies:: [[tests#Python#Terms validate their input]] {since: "2026-09-28", level: integration}
 def test_terms_validate_their_input() -> None:
     with pytest.raises(ValueError):
         NamedNode("not an iri")
@@ -87,7 +87,7 @@ def test_terms_validate_their_input() -> None:
     assert {ex("a"), ex("a"), Literal(1)} == {ex("a"), Literal("1", datatype=NamedNode("http://www.w3.org/2001/XMLSchema#integer"))}
 
 
-# @lat: [[tests#Python#Query-time reasoning and materialization]]
+# @tg: verifies:: [[tests#Python#Query-time reasoning and materialization]] {since: "2026-09-28", level: integration}
 def test_reasoning() -> None:
     store = Store()
     store.extend([Quad(ex("rex"), RDF_TYPE, ex("Dog")), Quad(ex("Dog"), SUBCLASS, ex("Animal"))])
@@ -109,14 +109,14 @@ def test_reasoning() -> None:
         store.materialize("magic")
 
 
-# @lat: [[tests#Python#Explain returns SQL]]
+# @tg: verifies:: [[tests#Python#Explain returns SQL]] {since: "2026-09-28", level: integration}
 def test_explain_returns_sql() -> None:
     store = Store()
     assert "SELECT" in store.explain("SELECT ?s WHERE { ?s ?p ?o }")
     assert store.explain_update("INSERT DATA { <http://a> <http://b> <http://c> }")
 
 
-# @lat: [[tests#Python#Files round-trip through load and dump]]
+# @tg: verifies:: [[tests#Python#Files round-trip through load and dump]] {since: "2026-09-28", level: integration}
 def test_files_round_trip(tmp_path: Path) -> None:
     store = Store()
     store.load(
@@ -147,7 +147,7 @@ def test_files_round_trip(tmp_path: Path) -> None:
     assert not store.contains_named_graph(ex("g"))
 
 
-# @lat: [[tests#Python#Store.load accepts lenient parsing]]
+# @tg: verifies:: [[tests#Python#Store.load accepts lenient parsing]] {since: "2026-09-30", level: integration}
 def test_load_lenient() -> None:
     data = '<http://a> <http://b> "classical Chinese"@zh-classical .'
     store = Store()
@@ -160,7 +160,7 @@ def test_load_lenient() -> None:
     assert len(bulk) == 1
 
 
-# @lat: [[tests#Python#Cypher reads and writes the same dataset]]
+# @tg: verifies:: [[tests#Python#Cypher reads and writes the same dataset]] {since: "2026-09-28", level: integration}
 def test_cypher() -> None:
     store = Store()
     r = store.cypher(
@@ -202,7 +202,7 @@ def family() -> Store:
     return s
 
 
-# @lat: [[tests#Python#Synalog runs over the store]]
+# @tg: verifies:: [[tests#Python#Synalog runs over the store]] {since: "2026-09-29", level: integration}
 def test_synalog() -> None:
     store = family()
     program = (
@@ -232,7 +232,7 @@ def test_synalog() -> None:
         store.synalog("O(p? ArgMax= p -> a) distinct :- triples(subject: p, object: a);", "O")
 
 
-# @lat: [[tests#Python#Datalog recursion and materialization]]
+# @tg: verifies:: [[tests#Python#Datalog recursion and materialization]] {since: "2026-09-28", level: integration}
 def test_datalog() -> None:
     store = family()
     r = store.datalog(
@@ -259,7 +259,7 @@ def test_datalog() -> None:
         store.datalog(PREFIX + "p(?x) :- ex:parent(?x, ?y), not p(?y).\n?- p(?x).")
 
 
-# @lat: [[tests#Python#Schema registry and system graphs]]
+# @tg: verifies:: [[tests#Python#Schema registry and system graphs]] {since: "2026-09-28", level: integration}
 def test_schema_registry_and_system_graphs() -> None:
     store = Store()
     onto = ex("onto")
@@ -305,7 +305,7 @@ def fixture(name: str) -> str:
     return (REPO / "crates" / "oxilite-vc" / "tests" / "fixtures" / name).read_text(encoding="utf-8")
 
 
-# @lat: [[tests#Python#JSON-LD documents round-trip and query]]
+# @tg: verifies:: [[tests#Python#JSON-LD documents round-trip and query]] {since: "2026-09-28", level: integration}
 def test_jsonld_documents() -> None:
     store = Store()
     docs = store.jsonld()
@@ -330,7 +330,7 @@ def test_jsonld_documents() -> None:
     assert e.value.code == "loading remote context failed"  # type: ignore[attr-defined]
 
 
-# @lat: [[tests#Python#Credentials are stored and found]]
+# @tg: verifies:: [[tests#Python#Credentials are stored and found]] {since: "2026-09-28", level: integration}
 def test_credentials() -> None:
     store = Store()
     vcs = store.credentials()
@@ -352,7 +352,7 @@ def test_credentials() -> None:
 STATUS = f"SELECT ?s WHERE {{ <{EX}t1> <{EX}status> ?s }}"
 
 
-# @lat: [[tests#Python#Versioning and time travel]]
+# @tg: verifies:: [[tests#Python#Versioning and time travel]] {since: "2026-09-28", level: integration}
 def test_versioning() -> None:
     store = Store(versioning="log")
     with store.commit(author="ada", message="seed"):
@@ -381,7 +381,7 @@ def test_versioning() -> None:
         Store().query(STATUS, as_of="HEAD~1")
 
 
-# @lat: [[tests#Python#Threads share a store]]
+# @tg: verifies:: [[tests#Python#Threads share a store]] {since: "2026-09-28", level: integration}
 def test_threads_share_a_store() -> None:
     store = Store()
 
@@ -397,7 +397,7 @@ def test_threads_share_a_store() -> None:
     assert len(store) == 400
 
 
-# @lat: [[tests#Python#Text search]]
+# @tg: verifies:: [[tests#Python#Text search]] {since: "2026-09-28", level: integration}
 def test_text_search() -> None:
     store = Store(text_index=True)
     store.load(
@@ -421,7 +421,7 @@ LIBRARY = os.environ.get("OXILITE_SQLITE_LIBRARY") or next(
 )
 
 
-# @lat: [[tests#Python#A SQLite library loaded at runtime]]
+# @tg: verifies:: [[tests#Python#A SQLite library loaded at runtime]] {since: "2026-09-28", level: integration}
 @pytest.mark.skipif(LIBRARY is None, reason="no system libsqlite3 found; set OXILITE_SQLITE_LIBRARY")
 def test_sqlite_library_loaded_at_runtime(tmp_path: Path) -> None:
     db = tmp_path / "lib.sqlite"

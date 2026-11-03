@@ -32,7 +32,7 @@ fn scratch(name: &str) -> std::path::PathBuf {
     dir
 }
 
-// @lat: [[tests#Shell#A new file gets the schema]]
+// @tg: verifies:: [[tests#Shell#A new file gets the schema]] {since: "2026-09-25", level: e2e}
 #[test]
 fn a_new_file_gets_the_schema() {
     let dir = scratch("file");
@@ -52,7 +52,7 @@ fn a_new_file_gets_the_schema() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-// @lat: [[tests#Shell#In memory by default]]
+// @tg: verifies:: [[tests#Shell#In memory by default]] {since: "2026-09-25", level: e2e}
 #[test]
 fn in_memory_by_default() {
     let dir = scratch("memory");
@@ -78,7 +78,7 @@ fn in_memory_by_default() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-// @lat: [[tests#Shell#Scripts report failures]]
+// @tg: verifies:: [[tests#Shell#Scripts report failures]] {since: "2026-09-25", level: e2e}
 #[test]
 fn scripts_report_failures() {
     let out = oxilite(

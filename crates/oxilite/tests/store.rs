@@ -37,7 +37,7 @@ fn solutions(r: QueryResults<'_>) -> Vec<oxilite::sparql::QuerySolution> {
     s.collect::<Result<Vec<_>, _>>().unwrap()
 }
 
-// @lat: [[tests#Store#Queries are single statements]]
+// @tg: verifies:: [[tests#Store#Queries are single statements]] {since: "2026-09-22", level: integration}
 #[test]
 fn queries_are_single_statements() -> Result<()> {
     let backend = Counting {
@@ -78,7 +78,7 @@ fn queries_are_single_statements() -> Result<()> {
     Ok(())
 }
 
-// @lat: [[tests#Store#Collision aborts the batch]]
+// @tg: verifies:: [[tests#Store#Collision aborts the batch]] {since: "2026-09-22", level: integration}
 #[test]
 fn collision_aborts_the_batch() -> Result<()> {
     let store = Store::new()?;
@@ -100,7 +100,7 @@ fn collision_aborts_the_batch() -> Result<()> {
     Ok(())
 }
 
-// @lat: [[tests#Store#Reopen keeps data]]
+// @tg: verifies:: [[tests#Store#Reopen keeps data]] {since: "2026-09-22", level: integration}
 #[test]
 fn reopen_keeps_data() -> Result<()> {
     let dir = std::env::temp_dir().join(format!("oxilite-reopen-{}", std::process::id()));
@@ -123,7 +123,7 @@ fn reopen_keeps_data() -> Result<()> {
     Ok(())
 }
 
-// @lat: [[tests#Store#Graph index is optional]]
+// @tg: verifies:: [[tests#Store#Graph index is optional]] {since: "2026-09-22", level: integration}
 #[test]
 fn graph_index_is_optional() -> Result<()> {
     let store = Store::with_backend_and_options(
@@ -147,7 +147,7 @@ fn graph_index_is_optional() -> Result<()> {
     Ok(())
 }
 
-// @lat: [[tests#Store#Insert and remove report changes]]
+// @tg: verifies:: [[tests#Store#Insert and remove report changes]] {since: "2026-09-22", level: integration}
 #[test]
 fn insert_and_remove_report_changes() -> Result<()> {
     let store = Store::new()?;
@@ -167,7 +167,7 @@ fn insert_and_remove_report_changes() -> Result<()> {
     Ok(())
 }
 
-// @lat: [[tests#Store#Pattern scans match a naive filter]]
+// @tg: verifies:: [[tests#Store#Pattern scans match a naive filter]] {since: "2026-09-22", level: integration}
 #[test]
 fn pattern_scans_match_a_naive_filter() -> Result<()> {
     let store = Store::new()?;
@@ -215,7 +215,7 @@ fn pattern_scans_match_a_naive_filter() -> Result<()> {
     Ok(())
 }
 
-// @lat: [[tests#Store#Planner uses statistics]]
+// @tg: verifies:: [[tests#Store#Planner uses statistics]] {since: "2026-09-22", level: integration}
 #[test]
 fn planner_uses_statistics() -> Result<()> {
     let store = Store::new()?;
@@ -251,7 +251,7 @@ fn planner_uses_statistics() -> Result<()> {
     Ok(())
 }
 
-// @lat: [[tests#Store#Union default graph deduplicates]]
+// @tg: verifies:: [[tests#Store#Union default graph deduplicates]] {since: "2026-09-22", level: integration}
 #[test]
 fn union_default_graph_deduplicates() -> Result<()> {
     let store = Store::new()?;
@@ -271,7 +271,7 @@ fn union_default_graph_deduplicates() -> Result<()> {
     Ok(())
 }
 
-// @lat: [[tests#Store#Dylib store works end to end]]
+// @tg: verifies:: [[tests#Store#Dylib store works end to end]] {since: "2026-09-22", level: integration}
 #[test]
 fn dylib_store_works_end_to_end() -> Result<()> {
     let Some(lib) = oxilite::dylib::find_system_library() else {

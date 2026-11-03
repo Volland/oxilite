@@ -14,7 +14,7 @@ const person = `{
 }`;
 
 describe("@oxilite/node JSON-LD", () => {
-  // @lat: [[tests#Node#JSON-LD documents round-trip and query]]
+  // @tg: verifies:: [[tests#Node#JSON-LD documents round-trip and query]] {since: "2026-09-22", level: integration}
   it("stores documents verbatim, one graph each, queryable with SPARQL", () => {
     const store = new Store();
     const docs = store.jsonld();
@@ -52,7 +52,7 @@ describe("@oxilite/node JSON-LD", () => {
 });
 
 describe("@oxilite/node Verifiable Credentials", () => {
-  // @lat: [[tests#Node#Credentials are stored and found]]
+  // @tg: verifies:: [[tests#Node#Credentials are stored and found]] {since: "2026-09-22", level: integration}
   it("stores credentials under their id and finds them by metadata", () => {
     const store = new Store();
     const vcs = store.credentials();

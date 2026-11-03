@@ -81,7 +81,7 @@ fn all_triples(s: &Store, inferred: bool) -> BTreeSet<String> {
     }
 }
 
-// @lat: [[tests#Reasoning#Agreement with reasonable]]
+// @tg: verifies:: [[tests#Reasoning#Agreement with reasonable]] {since: "2026-09-22", level: integration}
 #[test]
 fn sql_rules_agree_with_reasonable() {
     let mut failures = Vec::new();

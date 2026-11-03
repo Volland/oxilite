@@ -111,7 +111,7 @@ const PEOPLE: &str =
     "@prefix ex: <http://ex.org/> .\nex:alice ex:name \"Alice\" .\nex:bob ex:name \"Bob\" .\n";
 const KNOWS: &str = "@prefix ex: <http://ex.org/> .\nex:alice ex:knows ex:bob .\n";
 
-// @lat: [[tests#Studio server#Files load on initialize]]
+// @tg: verifies:: [[tests#Studio server#Files load on initialize]] {since: "2026-09-24", level: unit}
 #[test]
 fn files_load_on_initialize() {
     let dir = workspace(&[
@@ -127,7 +127,7 @@ fn files_load_on_initialize() {
     assert_eq!(status["triples"], 3);
 }
 
-// @lat: [[tests#Studio server#Query joins across files]]
+// @tg: verifies:: [[tests#Studio server#Query joins across files]] {since: "2026-09-24", level: unit}
 #[test]
 fn query_joins_across_files() {
     let dir = workspace(&[("people.ttl", PEOPLE), ("knows.ttl", KNOWS)]);
@@ -142,7 +142,7 @@ fn query_joins_across_files() {
     assert_eq!(r["truncated"], false);
 }
 
-// @lat: [[tests#Studio server#Row limit truncates]]
+// @tg: verifies:: [[tests#Studio server#Row limit truncates]] {since: "2026-09-24", level: unit}
 #[test]
 fn row_limit_truncates() {
     let mut c = Client::start(workspace(&[("people.ttl", PEOPLE)]));
@@ -154,7 +154,7 @@ fn row_limit_truncates() {
     assert_eq!(r["truncated"], true);
 }
 
-// @lat: [[tests#Studio server#Syntax error is a diagnostic]]
+// @tg: verifies:: [[tests#Studio server#Syntax error is a diagnostic]] {since: "2026-09-24", level: unit}
 #[test]
 fn syntax_error_is_a_diagnostic() {
     let broken = "@prefix ex: <http://ex.org/> .\nex:a ex:p ex:b .\nex:c ex:p \"unterminated .\n";
@@ -173,7 +173,7 @@ fn syntax_error_is_a_diagnostic() {
     );
 }
 
-// @lat: [[tests#Studio server#Reload picks up changes]]
+// @tg: verifies:: [[tests#Studio server#Reload picks up changes]] {since: "2026-09-24", level: unit}
 #[test]
 fn reload_picks_up_changes() {
     let broken = "@prefix ex: <http://ex.org/> .\nex:a ex:p .\n";
@@ -189,7 +189,7 @@ fn reload_picks_up_changes() {
     assert_eq!(cleared[0]["diagnostics"], json!([]));
 }
 
-// @lat: [[tests#Studio server#Query errors are request failures]]
+// @tg: verifies:: [[tests#Studio server#Query errors are request failures]] {since: "2026-09-24", level: unit}
 #[test]
 fn query_errors_are_request_failures() {
     let mut c = Client::start(workspace(&[]));
@@ -217,7 +217,7 @@ fn at(uri: &str, line: u32, character: u32) -> Value {
     json!({"textDocument": {"uri": uri}, "position": {"line": line, "character": character}})
 }
 
-// @lat: [[tests#Studio server#Hover and definition across files]]
+// @tg: verifies:: [[tests#Studio server#Hover and definition across files]] {since: "2026-09-24", level: unit}
 #[test]
 fn hover_and_definition_across_files() {
     let people = "@prefix ex: <http://ex.org/> .\n@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\nex:bob a ex:Person ; rdfs:label \"Bob\" .\n";
@@ -240,7 +240,7 @@ fn hover_and_definition_across_files() {
     assert_eq!(refs.as_array().unwrap().len(), 2);
 }
 
-// @lat: [[tests#Studio server#Initialize announces its capabilities]]
+// @tg: verifies:: [[tests#Studio server#Initialize announces its capabilities]] {since: "2026-09-25", level: unit}
 #[test]
 fn initialize_announces_its_capabilities() {
     let c = Client::start(workspace(&[]));
@@ -252,7 +252,7 @@ fn initialize_announces_its_capabilities() {
     assert_eq!(c.initialized["serverInfo"]["name"], "oxilite studio-server");
 }
 
-// @lat: [[tests#Studio server#Completion follows the document's connection]]
+// @tg: verifies:: [[tests#Studio server#Completion follows the document's connection]] {since: "2026-09-25", level: unit}
 #[test]
 fn completion_follows_the_documents_connection() {
     let mut c = Client::start(workspace(&[("people.ttl", PEOPLE)]));
@@ -301,7 +301,7 @@ fn completion_follows_the_documents_connection() {
     assert_eq!(labels(&mut c), ["ex:name"], "unpinned again");
 }
 
-// @lat: [[tests#Studio server#Completion over LSP uses the store]]
+// @tg: verifies:: [[tests#Studio server#Completion over LSP uses the store]] {since: "2026-09-24", level: unit}
 #[test]
 fn completion_over_lsp_uses_the_store() {
     let mut c = Client::start(workspace(&[("people.ttl", PEOPLE), ("knows.ttl", KNOWS)]));
@@ -324,7 +324,7 @@ fn completion_over_lsp_uses_the_store() {
         .any(|d| d["uri"] == q.as_str() && !d["diagnostics"].as_array().unwrap().is_empty()));
 }
 
-// @lat: [[tests#Studio server#Attached stores and confirmed updates]]
+// @tg: verifies:: [[tests#Studio server#Attached stores and confirmed updates]] {since: "2026-09-24", level: unit}
 #[test]
 fn attached_store_needs_confirmation() {
     let mut c = Client::start(workspace(&[("people.ttl", PEOPLE)]));
@@ -350,7 +350,7 @@ fn attached_store_needs_confirmation() {
     assert_eq!(list[0]["active"], true);
 }
 
-// @lat: [[tests#Studio server#Explain returns the SQL]]
+// @tg: verifies:: [[tests#Studio server#Explain returns the SQL]] {since: "2026-09-24", level: unit}
 #[test]
 fn explain_returns_the_sql() {
     let mut c = Client::start(workspace(&[("people.ttl", PEOPLE)]));
@@ -412,7 +412,7 @@ const ONTOLOGY: &str = "@prefix ex: <http://ex.org/> .\n@prefix rdfs: <http://ww
 const STAFF: &str = "@prefix ex: <http://ex.org/> .\nex:carol a ex:Employee ; ex:name \"Carol\" .\nex:dan a ex:Employee .\n";
 const SHAPES: &str = "@prefix ex: <http://ex.org/> .\n@prefix sh: <http://www.w3.org/ns/shacl#> .\nex:PersonShape a sh:NodeShape ;\n  sh:targetClass ex:Person ;\n  sh:property [ sh:path ex:name ; sh:minCount 1 ] .\n";
 
-// @lat: [[tests#Studio server#SHACL results land on the data line]]
+// @tg: verifies:: [[tests#Studio server#SHACL results land on the data line]] {since: "2026-09-24", level: unit}
 #[test]
 fn shacl_results_land_on_the_data_line() {
     let mut c = Client::start(workspace(&[
@@ -454,7 +454,7 @@ fn shacl_results_land_on_the_data_line() {
     assert_eq!(rows["value"], false);
 }
 
-// @lat: [[tests#Studio server#Manifest graphs and per-graph reload]]
+// @tg: verifies:: [[tests#Studio server#Manifest graphs and per-graph reload]] {since: "2026-09-24", level: unit}
 #[test]
 fn manifest_graphs_and_per_graph_reload() {
     let manifest = "reasoning = \"owl2rl\"\n[[graph]]\niri = \"https://ex.org/g/staff\"\nfiles = [\"data/*.ttl\"]\n[[graph]]\niri = \"https://ex.org/g/onto\"\nfiles = [\"onto.ttl\"]\nrole = \"ontology\"\n[rules]\nfiles = [\"rules/*.dl\"]\n";
@@ -537,7 +537,7 @@ fn manifest_graphs_and_per_graph_reload() {
     assert_eq!(name["inferred"], false);
 }
 
-// @lat: [[tests#Studio server#Ontology graphs apply where the manifest maps them]]
+// @tg: verifies:: [[tests#Studio server#Ontology graphs apply where the manifest maps them]] {since: "2026-09-26", level: unit}
 #[test]
 fn ontology_graphs_apply_where_mapped() {
     let manifest = "reasoning = \"rdfs\"\n[[graph]]\niri = \"https://ex.org/g/staff\"\nfiles = [\"staff.ttl\"]\n[[graph]]\niri = \"https://ex.org/g/guests\"\nfiles = [\"guests.ttl\"]\n[[graph]]\niri = \"https://ex.org/g/onto\"\nfiles = [\"onto.ttl\"]\nrole = \"ontology\"\napplies_to = [\"https://ex.org/g/staff\"]\n";
@@ -572,7 +572,7 @@ fn ontology_graphs_apply_where_mapped() {
     assert_eq!(registry["value"], true, "{registry}");
 }
 
-// @lat: [[tests#Studio server#Explorer shows the class hierarchy]]
+// @tg: verifies:: [[tests#Studio server#Explorer shows the class hierarchy]] {since: "2026-09-24", level: unit}
 #[test]
 fn explorer_shows_the_class_hierarchy() {
     let mut c = Client::start(workspace(&[("onto.ttl", ONTOLOGY), ("staff.ttl", STAFF)]));
@@ -610,7 +610,7 @@ fn explorer_shows_the_class_hierarchy() {
         .starts_with("ontology"));
 }
 
-// @lat: [[tests#Studio server#Datalog runs and reports errors]]
+// @tg: verifies:: [[tests#Studio server#Datalog runs and reports errors]] {since: "2026-09-24", level: unit}
 #[test]
 fn datalog_runs_and_reports_errors() {
     let family =
@@ -654,7 +654,7 @@ fn datalog_runs_and_reports_errors() {
     );
 }
 
-// @lat: [[tests#Studio server#Cypher runs over the data's own names]]
+// @tg: verifies:: [[tests#Studio server#Cypher runs over the data's own names]] {since: "2026-09-24", level: unit}
 #[test]
 fn cypher_runs_over_the_datas_own_names() {
     let people = "@prefix ex: <http://ex.org/> .\nex:alice a ex:Person ; ex:name \"Alice\" ; ex:knows ex:bob .\nex:bob a ex:Person ; ex:name \"Bob\" .\n";
@@ -689,7 +689,7 @@ fn cypher_runs_over_the_datas_own_names() {
     assert!(!d["diagnostics"].as_array().unwrap().is_empty());
 }
 
-// @lat: [[tests#Studio server#Import and export round-trip]]
+// @tg: verifies:: [[tests#Studio server#Import and export round-trip]] {since: "2026-09-24", level: unit}
 #[test]
 fn import_and_export_round_trip() {
     let mut c = Client::start(workspace(&[]));
@@ -724,7 +724,7 @@ fn iri(v: &str) -> Value {
     json!({"termType": "NamedNode", "value": v})
 }
 
-// @lat: [[tests#Studio server#Why explains inferences down to asserted lines]]
+// @tg: verifies:: [[tests#Studio server#Why explains inferences down to asserted lines]] {since: "2026-09-24", level: unit}
 #[test]
 fn why_explains_inferences_down_to_asserted_lines() {
     let manifest = "reasoning = \"owl2rl\"\n[[graph]]\niri = \"https://ex.org/g/all\"\nfiles = [\"*.ttl\"]\n[rules]\nfiles = [\"rules/*.dl\"]\n";
@@ -822,7 +822,7 @@ fn test_workspace() -> PathBuf {
     ])
 }
 
-// @lat: [[tests#Studio server#Manifest tests run and snapshot]]
+// @tg: verifies:: [[tests#Studio server#Manifest tests run and snapshot]] {since: "2026-09-24", level: unit}
 #[test]
 fn manifest_tests_run_and_snapshot() {
     let mut c = Client::start(test_workspace());
@@ -850,7 +850,7 @@ fn manifest_tests_run_and_snapshot() {
     assert_eq!(entail["passed"], true, "{entail}");
 }
 
-// @lat: [[tests#Studio server#Check reports everything and fails]]
+// @tg: verifies:: [[tests#Studio server#Check reports everything and fails]] {since: "2026-09-24", level: unit}
 #[test]
 fn check_reports_everything_and_fails() {
     let dir = test_workspace();
@@ -949,7 +949,7 @@ fn fake_d1() -> (String, std::thread::JoinHandle<()>, Arc<tiny_http::Server>) {
     (url, handle, server)
 }
 
-// @lat: [[tests#Studio server#D1 over HTTP with billing]]
+// @tg: verifies:: [[tests#Studio server#D1 over HTTP with billing]] {since: "2026-09-24", level: unit}
 #[test]
 fn d1_over_http_with_billing() {
     let (url, handle, server) = fake_d1();
@@ -1002,7 +1002,7 @@ fn d1_over_http_with_billing() {
     let _ = handle.join();
 }
 
-// @lat: [[tests#Studio server#MCP tools answer agents]]
+// @tg: verifies:: [[tests#Studio server#MCP tools answer agents]] {since: "2026-09-24", level: unit}
 #[test]
 fn mcp_tools_answer_agents() {
     let dir = test_workspace();
@@ -1065,7 +1065,7 @@ fn mcp_tools_answer_agents() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-// @lat: [[tests#Studio server#ShEx results are diagnostics]]
+// @tg: verifies:: [[tests#Studio server#ShEx results are diagnostics]] {since: "2026-09-24", level: unit}
 #[test]
 fn shex_results_are_diagnostics() {
     let data = "@prefix ex: <http://ex.org/> .\nex:ada ex:name \"Ada\" .\nex:nobody ex:age 3 .\n";
@@ -1093,7 +1093,7 @@ fn shex_results_are_diagnostics() {
         .ends_with("person.shex"));
 }
 
-// @lat: [[tests#Studio server#Full-text search with the manifest index]]
+// @tg: verifies:: [[tests#Studio server#Full-text search with the manifest index]] {since: "2026-09-24", level: unit}
 #[test]
 fn full_text_search_with_the_manifest_index() {
     let manifest =
@@ -1116,7 +1116,7 @@ fn full_text_search_with_the_manifest_index() {
     );
 }
 
-// @lat: [[tests#Studio server#Ontology diagram data]]
+// @tg: verifies:: [[tests#Studio server#Ontology diagram data]] {since: "2026-09-24", level: unit}
 #[test]
 fn ontology_diagram_data() {
     let onto = "@prefix ex: <http://ex.org/> .\n@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n@prefix owl: <http://www.w3.org/2002/07/owl#> .\n@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\nex:Person a owl:Class .\nex:Employee rdfs:subClassOf ex:Person .\nex:Company a owl:Class .\nex:worksFor rdfs:domain ex:Employee ; rdfs:range ex:Company .\nex:name rdfs:domain ex:Person ; rdfs:range xsd:string .\n";
@@ -1159,7 +1159,7 @@ fn ontology_diagram_data() {
     assert_eq!(name["datatype"], true);
 }
 
-// @lat: [[tests#Studio server#Datalog debugger counts per rule]]
+// @tg: verifies:: [[tests#Studio server#Datalog debugger counts per rule]] {since: "2026-09-24", level: unit}
 #[test]
 fn datalog_debugger_counts_per_rule() {
     let family =
@@ -1177,7 +1177,7 @@ fn datalog_debugger_counts_per_rule() {
     assert!(!d["plan"].as_str().unwrap().is_empty());
 }
 
-// @lat: [[tests#Studio server#Why picks the rule whose premises hold]]
+// @tg: verifies:: [[tests#Studio server#Why picks the rule whose premises hold]] {since: "2026-09-24", level: unit}
 #[test]
 fn why_picks_the_rule_whose_premises_hold() {
     let data =
@@ -1197,7 +1197,7 @@ fn why_picks_the_rule_whose_premises_hold() {
     assert_eq!(premises[1]["premises"][0]["status"], "asserted");
 }
 
-// @lat: [[tests#Studio server#Attaching without activating]]
+// @tg: verifies:: [[tests#Studio server#Attaching without activating]] {since: "2026-09-25", level: unit}
 #[test]
 fn attaching_without_activating() {
     let mut c = Client::start(workspace(&[("people.ttl", PEOPLE)]));
@@ -1223,7 +1223,7 @@ fn attaching_without_activating() {
     );
 }
 
-// @lat: [[tests#Studio server#Registry lists the manifest mapping]]
+// @tg: verifies:: [[tests#Studio server#Registry lists the manifest mapping]] {since: "2026-09-27", level: unit}
 #[test]
 fn registry_lists_the_manifest_mapping() {
     let manifest = "reasoning = \"rdfs\"\n[[graph]]\niri = \"https://ex.org/g/staff\"\nfiles = [\"staff.ttl\"]\n[[graph]]\niri = \"https://ex.org/g/onto\"\nfiles = [\"onto.ttl\"]\nrole = \"ontology\"\napplies_to = [\"https://ex.org/g/staff\"]\n";
@@ -1266,7 +1266,7 @@ fn registry_lists_the_manifest_mapping() {
     );
 }
 
-// @lat: [[tests#Studio server#Registry edits follow the update rules]]
+// @tg: verifies:: [[tests#Studio server#Registry edits follow the update rules]] {since: "2026-09-27", level: unit}
 #[test]
 fn registry_edits_follow_the_update_rules() {
     let mut c = Client::start(workspace(&[("people.ttl", PEOPLE)]));
@@ -1344,7 +1344,7 @@ fn registry_edits_follow_the_update_rules() {
     assert!(r.error.unwrap().message.contains("read-only"));
 }
 
-// @lat: [[tests#Studio server#Vector indexes on a Turso connection]]
+// @tg: verifies:: [[tests#Studio server#Vector indexes on a Turso connection]] {since: "2026-09-28", level: unit}
 #[test]
 fn vector_indexes_on_a_turso_connection() {
     let mut c = Client::start(workspace(&[("people.ttl", PEOPLE)]));

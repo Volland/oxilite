@@ -3,7 +3,7 @@ use anyhow::Result;
 use oxilite_compat::allowlist;
 use oxilite_compat::differential::{check, dataset, queries};
 
-// @lat: [[tests#Oxigraph compatibility#Differential corpus matches Oxigraph]]
+// @tg: verifies:: [[tests#Oxigraph compatibility#Differential corpus matches Oxigraph]] {since: "2026-09-22", level: integration}
 #[test]
 fn differential_corpus_matches_oxigraph() -> Result<()> {
     let allow = allowlist::load()?;
@@ -28,7 +28,7 @@ fn differential_corpus_matches_oxigraph() -> Result<()> {
     Ok(())
 }
 
-// @lat: [[tests#Oxigraph compatibility#Optimizer regression query]]
+// @tg: verifies:: [[tests#Oxigraph compatibility#Optimizer regression query]] {since: "2026-09-22", level: integration}
 #[test]
 fn optional_on_foreign_key_matches_oxigraph_and_is_planned_selectively() -> Result<()> {
     use oxilite_compat::differential::{orders_dataset, CorpusQuery, ORDERS_QUERY};
@@ -62,7 +62,7 @@ fn optional_on_foreign_key_matches_oxigraph_and_is_planned_selectively() -> Resu
     Ok(())
 }
 
-// @lat: [[tests#Oxigraph compatibility#Update corpus matches Oxigraph]]
+// @tg: verifies:: [[tests#Oxigraph compatibility#Update corpus matches Oxigraph]] {since: "2026-09-22", level: integration}
 #[test]
 fn update_corpus_matches_oxigraph() -> Result<()> {
     use oxilite_compat::differential::{check_update, updates};

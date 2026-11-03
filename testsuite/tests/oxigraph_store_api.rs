@@ -2,7 +2,7 @@
 //! The only change: `oxigraph::` → `oxilite::`. RocksDB-specific tests are compiled out
 //! by their `feature = "rocksdb"` gates (see testsuite/allowlist.toml).
 #![allow(unexpected_cfgs, clippy::all)]
-// @lat: [[tests#Oxigraph compatibility#Ported Oxigraph store API tests]]
+// @tg: verifies:: [[tests#Oxigraph compatibility#Ported Oxigraph store API tests]] {since: "2026-09-22", level: integration}
 #![cfg(test)]
 #![allow(clippy::panic_in_result_fn)]
 

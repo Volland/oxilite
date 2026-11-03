@@ -113,7 +113,7 @@ fn read(iri: &str) -> Option<String> {
     .ok()
 }
 
-// @lat: [[tests#Validation#ShEx suite matches rudof in memory]]
+// @tg: verifies:: [[tests#Validation#ShEx suite matches rudof in memory]] {since: "2026-09-22", level: integration}
 #[test]
 fn shex_suite_matches_rudof_in_memory() {
     let store = Store::new().unwrap();

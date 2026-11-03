@@ -63,6 +63,7 @@ impl Analysis {
 }
 
 /// Checks a program and orders its strata.
+// @tg: implements:: [[decisions#D24 SQLite's recursive-CTE restrictions are the safety conditions]] {since: "2026-09-24"}
 pub fn analyse(program: &Program) -> Result<Analysis> {
     check_iri_atoms(program)?;
     let arity = arities(program)?;

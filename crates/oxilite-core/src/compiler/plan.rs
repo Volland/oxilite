@@ -148,7 +148,7 @@ mod tests {
     use crate::encoding::named_node_id;
     use crate::stats::PredicateStats;
 
-    // @lat: [[tests#Planner#Rare predicate first]]
+    // @tg: verifies:: [[tests#Planner#Rare predicate first]] {since: "2026-09-22", level: unit}
     #[test]
     fn rare_predicate_first() {
         let ty = rdf_type_id();
@@ -183,7 +183,7 @@ mod tests {
         assert_eq!(order(&patterns, &HashSet::new(), &stats), vec![1, 0]);
     }
 
-    // @lat: [[tests#Planner#Connected patterns are preferred]]
+    // @tg: verifies:: [[tests#Planner#Connected patterns are preferred]] {since: "2026-09-22", level: unit}
     #[test]
     fn connected_patterns_are_preferred() {
         let p = named_node_id("http://ex/p");
@@ -205,7 +205,7 @@ mod tests {
         }
     }
 
-    // @lat: [[tests#Planner#Frequent values are not selective]]
+    // @tg: verifies:: [[tests#Planner#Frequent values are not selective]] {since: "2026-09-22", level: unit}
     #[test]
     fn frequent_values_are_not_selective() {
         // ?x country ex:US (a value 90% of subjects share) vs ?x tag ?t (10 triples in all):
@@ -243,7 +243,7 @@ mod tests {
         assert_eq!(order(&patterns, &HashSet::new(), &stats), vec![1, 0]);
     }
 
-    // @lat: [[tests#Planner#Heuristics without statistics]]
+    // @tg: verifies:: [[tests#Planner#Heuristics without statistics]] {since: "2026-09-22", level: unit}
     #[test]
     fn heuristics_without_statistics() {
         let p = named_node_id("http://ex/p");

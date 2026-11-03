@@ -159,7 +159,7 @@ fn plan_lines<B: SyncBackend + Send + Sync + 'static>(store: &Store<B>, sql: &st
         .collect()
 }
 
-// @lat: [[tests#Planner#BSBM plans use indexes]]
+// @tg: verifies:: [[tests#Planner#BSBM plans use indexes]] {since: "2026-09-22", level: integration}
 #[test]
 fn bsbm_queries_use_indexes_and_fit_d1() {
     let store = Store::new().unwrap();

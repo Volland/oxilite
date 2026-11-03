@@ -26,7 +26,7 @@ const statuses = async (store: Awaited<ReturnType<typeof D1Store.open>>, asOf?: 
 };
 
 describe("versioning on D1", () => {
-  // @lat: [[tests#Versioning#D1 driver keeps history]]
+  // @tg: verifies:: [[tests#Versioning#D1 driver keeps history]] {since: "2026-09-25", level: integration}
   it("records commits and answers as-of queries", async () => {
     const store = await D1Store.open(db, { versioning: "log" });
     await store.withCommit({ author: "ada", message: "seed" }, (s) =>
@@ -74,7 +74,7 @@ describe("versioning on D1", () => {
 });
 
 describe("history queries on D1", () => {
-  // @lat: [[tests#Versioning#D1 driver queries the history]]
+  // @tg: verifies:: [[tests#Versioning#D1 driver queries the history]] {since: "2026-09-25", level: integration}
   it("reads the history graph and Cypher at a version", async () => {
     const store = await D1Store.open(db, { versioning: "log" });
     await store.withCommit({ author: "ada", message: "grant" }, (s) =>

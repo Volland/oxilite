@@ -1,3 +1,6 @@
+---
+type: Change
+---
 # Milestones
 
 Delivery plan. Each milestone ships something usable, has an OpenSpec change under `openspec/changes/`, and has an objective done-criterion.

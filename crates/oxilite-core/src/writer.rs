@@ -234,7 +234,7 @@ mod tests {
     use super::*;
     use oxrdf::{GraphName, Literal, NamedNode, Quad};
 
-    // @lat: [[tests#Write path#Statements respect the size limit]]
+    // @tg: verifies:: [[tests#Write path#Statements respect the size limit]] {since: "2026-09-22", level: unit}
     #[test]
     fn statements_respect_the_size_limit() {
         let quads: Vec<Quad> = (0..500)

@@ -48,7 +48,7 @@ fn select(store: &Store<TursoBackend>, q: &str) -> Vec<Vec<Option<Term>>> {
     .collect()
 }
 
-// @lat: [[tests#Vector indexes#Creation back-fills and search orders by distance]]
+// @tg: verifies:: [[tests#Vector indexes#Creation back-fills and search orders by distance]] {since: "2026-09-28", level: integration}
 #[test]
 fn creation_backfills_and_search_orders() {
     let store = docs();
@@ -85,7 +85,7 @@ fn creation_backfills_and_search_orders() {
     );
 }
 
-// @lat: [[tests#Vector indexes#Writes keep the index current]]
+// @tg: verifies:: [[tests#Vector indexes#Writes keep the index current]] {since: "2026-09-28", level: integration}
 #[test]
 fn writes_keep_the_index_current() {
     let store = docs();
@@ -132,7 +132,7 @@ fn writes_keep_the_index_current() {
     assert_eq!(store.vector_indexes().unwrap()[0].rows, 3);
 }
 
-// @lat: [[tests#Vector indexes#Malformed embeddings abort the write]]
+// @tg: verifies:: [[tests#Vector indexes#Malformed embeddings abort the write]] {since: "2026-09-28", level: integration}
 #[test]
 fn malformed_embeddings_abort_the_write() {
     let store = docs();
@@ -179,7 +179,7 @@ fn malformed_embeddings_abort_the_write() {
     assert!(err.to_string().contains("the index 3"), "{err}");
 }
 
-// @lat: [[tests#Vector indexes#Definitions from SPARQL Update]]
+// @tg: verifies:: [[tests#Vector indexes#Definitions from SPARQL Update]] {since: "2026-09-28", level: integration}
 #[test]
 fn definitions_from_sparql_update() {
     let store = docs();
@@ -218,7 +218,7 @@ fn definitions_from_sparql_update() {
     assert!(store.stats().vector_built.is_empty());
 }
 
-// @lat: [[tests#Vector indexes#A loaded definition is built on sync]]
+// @tg: verifies:: [[tests#Vector indexes#A loaded definition is built on sync]] {since: "2026-09-28", level: integration}
 #[test]
 fn loaded_definition_is_built_on_sync() {
     let source = docs();
@@ -238,7 +238,7 @@ fn loaded_definition_is_built_on_sync() {
     assert_eq!(info[0].rows, 3);
 }
 
-// @lat: [[tests#Vector indexes#Refused without vector functions]]
+// @tg: verifies:: [[tests#Vector indexes#Refused without vector functions]] {since: "2026-09-28", level: integration}
 #[test]
 fn refused_without_vector_functions() {
     let store = Store::new().unwrap();
@@ -270,7 +270,7 @@ fn refused_without_vector_functions() {
         .contains("already exists"));
 }
 
-// @lat: [[tests#Vector indexes#Class restriction and element types]]
+// @tg: verifies:: [[tests#Vector indexes#Class restriction and element types]] {since: "2026-09-28", level: integration}
 #[test]
 fn class_restriction_and_element_types() {
     let store = docs();
@@ -296,7 +296,7 @@ fn class_restriction_and_element_types() {
     }
 }
 
-// @lat: [[tests#Vector indexes#Sparse Jaccard index]]
+// @tg: verifies:: [[tests#Vector indexes#Sparse Jaccard index]] {since: "2026-09-28", level: integration}
 #[test]
 fn sparse_jaccard_index() {
     let store = Store::new_turso().unwrap();
@@ -321,7 +321,7 @@ fn sparse_jaccard_index() {
     assert!(hits.windows(2).all(|w| w[0].distance <= w[1].distance));
 }
 
-// @lat: [[tests#Vector indexes#SPARQL search joins the graph in one statement]]
+// @tg: verifies:: [[tests#Vector indexes#SPARQL search joins the graph in one statement]] {since: "2026-09-28", level: integration}
 #[test]
 fn sparql_search_joins_the_graph() {
     let store = docs();
@@ -385,7 +385,7 @@ fn cypher(store: &Store<TursoBackend>, q: &str) -> oxilite::cypher::CypherResult
         .unwrap_or_else(|e| panic!("{q}: {e}"))
 }
 
-// @lat: [[tests#Vector indexes#Cypher DDL]]
+// @tg: verifies:: [[tests#Vector indexes#Cypher DDL]] {since: "2026-09-28", level: integration}
 #[test]
 fn cypher_ddl() {
     use oxilite::cypher::Value;
@@ -427,7 +427,7 @@ fn cypher_ddl() {
         .is_err());
 }
 
-// @lat: [[tests#Vector indexes#Cypher queryNodes binds a node]]
+// @tg: verifies:: [[tests#Vector indexes#Cypher queryNodes binds a node]] {since: "2026-09-28", level: integration}
 #[test]
 fn cypher_query_nodes() {
     use oxilite::cypher::Value;
@@ -489,7 +489,7 @@ fn cypher_query_nodes() {
     assert!(explain.contains("vector_distance_cos"), "{explain}");
 }
 
-// @lat: [[tests#Vector indexes#Datalog nearest ranks neighbours]]
+// @tg: verifies:: [[tests#Vector indexes#Datalog nearest ranks neighbours]] {since: "2026-09-28", level: integration}
 #[test]
 fn datalog_nearest() {
     let store = docs();

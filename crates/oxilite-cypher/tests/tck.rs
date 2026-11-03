@@ -843,7 +843,7 @@ fn load_allowlist() -> BTreeMap<String, String> {
     out
 }
 
-// @lat: [[tests#Cypher#openCypher TCK]]
+// @tg: verifies:: [[tests#Cypher#openCypher TCK]] {since: "2026-09-22", level: integration}
 /// Runs on its own thread: path-heavy scenarios (Match6/7/9, Pattern2) nest the compiled
 /// algebra about a hundred joins deep, and unoptimized `Compiler::pattern` frames are large
 /// enough to overflow the 2 MiB default test-thread stack.

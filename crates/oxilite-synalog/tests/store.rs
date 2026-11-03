@@ -51,7 +51,7 @@ fn rows(r: &SynalogResult) -> Vec<String> {
     out
 }
 
-// @lat: [[tests#Synalog#Rule over triples]]
+// @tg: verifies:: [[tests#Synalog#Rule over triples]] {since: "2026-09-29", level: integration}
 #[test]
 fn rule_over_triples() {
     let r = store()
@@ -65,7 +65,7 @@ fn rule_over_triples() {
     assert_eq!(rows(&r), ["ada|bob", "bob|cy", "cy|dee"]);
 }
 
-// @lat: [[tests#Synalog#Numbers compare as numbers]]
+// @tg: verifies:: [[tests#Synalog#Numbers compare as numbers]] {since: "2026-09-29", level: integration}
 #[test]
 fn numbers_compare_as_numbers() {
     let s = store();
@@ -79,7 +79,7 @@ fn numbers_compare_as_numbers() {
     assert_eq!(total.rows, [[SqlValue::Integer(138)]]);
 }
 
-// @lat: [[tests#Synalog#Literal details are kept]]
+// @tg: verifies:: [[tests#Synalog#Literal details are kept]] {since: "2026-09-29", level: integration}
 #[test]
 fn literal_details_are_kept() {
     let r = store()
@@ -113,7 +113,7 @@ fn literal_details_are_kept() {
     assert_eq!(blank[3], SqlValue::Null);
 }
 
-// @lat: [[tests#Synalog#Predicate table selects by term id]]
+// @tg: verifies:: [[tests#Synalog#Predicate table selects by term id]] {since: "2026-09-29", level: integration}
 #[test]
 fn predicate_table_selects_by_term_id() {
     let s = store();
@@ -129,7 +129,7 @@ fn predicate_table_selects_by_term_id() {
     assert!(!sql.contains("triples AS NOT MATERIALIZED"), "{sql}");
 }
 
-// @lat: [[tests#Synalog#Class table]]
+// @tg: verifies:: [[tests#Synalog#Class table]] {since: "2026-09-29", level: integration}
 #[test]
 fn class_table() {
     let r = store()
@@ -141,7 +141,7 @@ fn class_table() {
     assert_eq!(rows(&r), ["ada", "bob", "cy", "dee"]);
 }
 
-// @lat: [[tests#Synalog#Named graphs need the union option]]
+// @tg: verifies:: [[tests#Synalog#Named graphs need the union option]] {since: "2026-09-29", level: integration}
 #[test]
 fn named_graphs_need_the_union_option() {
     let s = store();
@@ -155,7 +155,7 @@ fn named_graphs_need_the_union_option() {
     assert_eq!(rows(&r), ["ada|NULL", "bob|NULL", "cy|NULL", "eve|g"]);
 }
 
-// @lat: [[tests#Synalog#Inferences are opt-in]]
+// @tg: verifies:: [[tests#Synalog#Inferences are opt-in]] {since: "2026-09-29", level: integration}
 #[test]
 fn inferences_are_opt_in() {
     let s = store();
@@ -177,7 +177,7 @@ fn inferences_are_opt_in() {
     );
 }
 
-// @lat: [[tests#Synalog#Inferences merge with asserted triples]]
+// @tg: verifies:: [[tests#Synalog#Inferences merge with asserted triples]] {since: "2026-09-30", level: integration}
 #[test]
 fn an_inference_that_is_also_asserted_reads_once() {
     let s = store();
@@ -204,7 +204,7 @@ fn an_inference_that_is_also_asserted_reads_once() {
     }
 }
 
-// @lat: [[tests#Synalog#Time travel]]
+// @tg: verifies:: [[tests#Synalog#Time travel]] {since: "2026-09-29", level: integration}
 #[test]
 fn time_travel() {
     let s = Store::with_backend_and_options(
@@ -239,7 +239,7 @@ fn time_travel() {
     ));
 }
 
-// @lat: [[tests#Synalog#Recursion agrees with a property path]]
+// @tg: verifies:: [[tests#Synalog#Recursion agrees with a property path]] {since: "2026-09-29", level: integration}
 #[test]
 fn recursion_agrees_with_a_property_path() {
     let s = store();
@@ -270,7 +270,7 @@ fn recursion_agrees_with_a_property_path() {
     assert_eq!(got.len(), 6);
 }
 
-// @lat: [[tests#Synalog#Negation needs no runtime function]]
+// @tg: verifies:: [[tests#Synalog#Negation needs no runtime function]] {since: "2026-09-29", level: integration}
 #[test]
 fn negation_needs_no_runtime_function() {
     let s = store();
@@ -286,7 +286,7 @@ fn negation_needs_no_runtime_function() {
     );
 }
 
-// @lat: [[tests#Synalog#Runtime-only functions are rejected]]
+// @tg: verifies:: [[tests#Synalog#Runtime-only functions are rejected]] {since: "2026-09-29", level: integration}
 #[test]
 fn runtime_only_functions_are_rejected() {
     let err = store()
@@ -302,7 +302,7 @@ fn runtime_only_functions_are_rejected() {
     );
 }
 
-// @lat: [[tests#Synalog#Ground is rejected]]
+// @tg: verifies:: [[tests#Synalog#Ground is rejected]] {since: "2026-09-29", level: integration}
 #[test]
 fn ground_is_rejected() {
     let err = store()
@@ -317,7 +317,7 @@ fn ground_is_rejected() {
     );
 }
 
-// @lat: [[tests#Synalog#Verifier errors are reported]]
+// @tg: verifies:: [[tests#Synalog#Verifier errors are reported]] {since: "2026-09-29", level: integration}
 #[test]
 fn verifier_errors_are_reported() {
     let program = format!(
@@ -339,7 +339,7 @@ fn verifier_errors_are_reported() {
     ));
 }
 
-// @lat: [[tests#Synalog#Compile for another engine]]
+// @tg: verifies:: [[tests#Synalog#Compile for another engine]] {since: "2026-09-29", level: integration}
 #[test]
 fn compile_for_another_engine() {
     let program = "@OrderBy(Big, \"n\");\nBig(n:) :- orders(amount: n), n > 100;";
@@ -351,7 +351,7 @@ fn compile_for_another_engine() {
     assert!(compile_for_engine(program, "Big", "oracle", None, None).is_err());
 }
 
-// @lat: [[tests#Synalog#Pagination]]
+// @tg: verifies:: [[tests#Synalog#Pagination]] {since: "2026-09-29", level: integration}
 #[test]
 fn pagination() {
     let program = r#"
@@ -367,7 +367,7 @@ fn pagination() {
     assert_eq!(rows(&r), ["bob|17"]);
 }
 
-// @lat: [[tests#Synalog#D1 limits are checked before sending]]
+// @tg: verifies:: [[tests#Synalog#D1 limits are checked before sending]] {since: "2026-09-29", level: integration}
 #[test]
 fn d1_limits_are_checked_before_sending() {
     let program = |bound: usize| {

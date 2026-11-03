@@ -8,7 +8,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.oxilitedb.oxilite.exceptions.OxiliteException;
 import org.junit.jupiter.api.Test;
 
-// @lat: [[tests#JVM bindings#Cypher writes and reads through the native layer]]
+// @tg: verifies:: [[tests#JVM bindings#Cypher writes and reads through the native layer]] {since: "2026-09-30", level: integration}
 class CypherTest {
     private static final String BASE = "{\"base\": \"http://example.com/\"}";
 

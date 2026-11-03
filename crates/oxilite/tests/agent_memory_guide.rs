@@ -178,7 +178,7 @@ fn recall(
     Ok(out)
 }
 
-// @lat: [[tests#Agent memory guide#Recall recipes]]
+// @tg: verifies:: [[tests#Agent memory guide#Recall recipes]] {since: "2026-09-28", level: integration}
 #[test]
 fn recall_recipes() {
     let store = memory();
@@ -334,7 +334,7 @@ fn recall_recipes() {
     assert!(explain.contains("vector_distance_cos"), "{explain}");
 }
 
-// @lat: [[tests#Agent memory guide#Remember consolidate forget]]
+// @tg: verifies:: [[tests#Agent memory guide#Remember consolidate forget]] {since: "2026-09-28", level: integration}
 #[test]
 fn remember_consolidate_forget() {
     let store = memory();
@@ -419,7 +419,7 @@ fn day_number(t: &Term) -> Option<i64> {
     Some(365 * y + y / 4 - y / 100 + y / 400 + (153 * (m - 3) + 2) / 5 + d)
 }
 
-// @lat: [[tests#Agent memory guide#Recency decay host function]]
+// @tg: verifies:: [[tests#Agent memory guide#Recency decay host function]] {since: "2026-09-28", level: integration}
 #[test]
 fn recency_decay_host_function() {
     let store = memory();
@@ -456,7 +456,7 @@ fn recency_decay_host_function() {
     );
 }
 
-// @lat: [[tests#Agent memory guide#Cypher and Datalog recall]]
+// @tg: verifies:: [[tests#Agent memory guide#Cypher and Datalog recall]] {since: "2026-09-28", level: integration}
 #[test]
 fn cypher_and_datalog_recall() {
     let store = memory();

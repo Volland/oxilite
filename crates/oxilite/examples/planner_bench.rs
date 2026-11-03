@@ -2,7 +2,7 @@
 //!
 //! `cargo run --release -p oxilite --example planner_bench [people]`
 //!
-// @lat: [[tests#Planner benchmark]]
+// @tg: verifies:: [[tests#Planner benchmark]] {since: "2026-09-22", level: manual}
 
 use oxilite::model::*;
 use oxilite::sparql::QueryResults;

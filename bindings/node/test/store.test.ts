@@ -11,7 +11,7 @@ const { namedNode, literal, quad, defaultGraph } = DataFactory;
 const ex = namedNode("http://example.com");
 
 describe("@oxilite/node", () => {
-  // @lat: [[tests#Node#File store persists across processes]]
+  // @tg: verifies:: [[tests#Node#File store persists across processes]] {since: "2026-09-22", level: integration}
   it("a file store persists across processes", () => {
     const path = join(mkdtempSync(join(tmpdir(), "oxilite-")), "data.sqlite");
     const script = `import { Store, DataFactory as F } from ${JSON.stringify(new URL("../dist/index.js", import.meta.url).href)};
@@ -36,7 +36,7 @@ describe("@oxilite/node", () => {
     assert.strictEqual(r[0]?.get("s")?.value, "6");
   });
 
-  // @lat: [[tests#Node#Explain returns SQL]]
+  // @tg: verifies:: [[tests#Node#Explain returns SQL]] {since: "2026-09-22", level: integration}
   it("explains queries and updates", () => {
     const store = new Store();
     const plan = store.explain("SELECT * WHERE { ?s ?p ?o }");
@@ -73,7 +73,7 @@ describe("@oxilite/node", () => {
     assert.throws(() => store.update("CREATE GRAPH <http://example.com/g>"), /already exists/);
   });
 
-  // @lat: [[tests#Node#Reasoning options]]
+  // @tg: verifies:: [[tests#Node#Reasoning options]] {since: "2026-09-22", level: integration}
   it("reasons per query and materializes OWL 2 RL", () => {
     const store = new Store();
     store.load(
@@ -93,7 +93,7 @@ describe("@oxilite/node", () => {
     assert.strictEqual((store.query(q, { include_inferred: true }) as unknown[]).length, 0);
   });
 
-  // @lat: [[tests#Node#Schema registry]]
+  // @tg: verifies:: [[tests#Node#Schema registry]] {since: "2026-09-26", level: integration}
   it("registers ontology and shapes graphs", () => {
     const store = new Store();
     const good = namedNode("http://example.com/onto/good");
@@ -167,7 +167,7 @@ describe("@oxilite/node", () => {
     assert.throws(() => store.registerSchemaGraph(good, "taxonomy" as "shacl"), /unknown schema role/);
   });
 
-  // @lat: [[tests#Node#System graphs]]
+  // @tg: verifies:: [[tests#Node#System graphs]] {since: "2026-09-26", level: integration}
   it("starts a blank store with the system graphs on request", () => {
     const store = new Store({ systemGraphs: true });
     assert.strictEqual(store.query("ASK { GRAPH <oxilite:vocabulary> { <https://oxilite.dev/ns#appliesTo> ?p ?o } }"), true);

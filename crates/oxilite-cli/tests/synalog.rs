@@ -20,7 +20,7 @@ fn ok(args: &[&str]) -> String {
     String::from_utf8_lossy(&out.stdout).into_owned()
 }
 
-// @lat: [[tests#Synalog#Run from the command line]]
+// @tg: verifies:: [[tests#Synalog#Run from the command line]] {since: "2026-09-29", level: e2e}
 #[test]
 fn run_from_the_command_line() {
     let dir = std::env::temp_dir().join(format!("oxilite-synalog-{}", std::process::id()));

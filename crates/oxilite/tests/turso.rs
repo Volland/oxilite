@@ -38,7 +38,7 @@ const QUERIES: &[&str] = &[
     "PREFIX ex: <http://example.com/> SELECT ?n (UCASE(?n) AS ?u) WHERE { ?p ex:name ?n FILTER(REGEX(?n, '^a', 'i')) }",
 ];
 
-// @lat: [[tests#Turso#Same answers as bundled SQLite]]
+// @tg: verifies:: [[tests#Turso#Same answers as bundled SQLite]] {since: "2026-09-28", level: integration}
 #[test]
 fn same_answers_as_bundled_sqlite() {
     let turso = Store::new_turso().unwrap();
@@ -69,7 +69,7 @@ fn same_answers_as_bundled_sqlite() {
         .unwrap();
 }
 
-// @lat: [[tests#Turso#Cypher and Datalog on Turso]]
+// @tg: verifies:: [[tests#Turso#Cypher and Datalog on Turso]] {since: "2026-09-28", level: integration}
 #[test]
 fn cypher_and_datalog_on_turso() {
     let store = Store::new_turso().unwrap();
@@ -96,7 +96,7 @@ fn cypher_and_datalog_on_turso() {
     assert_eq!(r.rows.len(), 3);
 }
 
-// @lat: [[tests#Turso#File store survives reopening]]
+// @tg: verifies:: [[tests#Turso#File store survives reopening]] {since: "2026-09-28", level: integration}
 #[test]
 fn file_store_survives_reopening() {
     let dir = std::env::temp_dir().join(format!("oxilite-turso-{}", std::process::id()));
@@ -115,7 +115,7 @@ fn file_store_survives_reopening() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-// @lat: [[tests#Turso#Schema and refusals]]
+// @tg: verifies:: [[tests#Turso#Schema and refusals]] {since: "2026-09-28", level: integration}
 #[test]
 fn schema_and_refusals() {
     let store = Store::new_turso().unwrap();

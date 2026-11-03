@@ -97,7 +97,7 @@ fn run_on<B: SyncBackend + Send + Sync + 'static>(
     (compared, violations, failures)
 }
 
-// @lat: [[tests#Validation#SHACL suite matches rudof in memory]]
+// @tg: verifies:: [[tests#Validation#SHACL suite matches rudof in memory]] {since: "2026-09-22", level: integration}
 #[test]
 fn shacl_core_suite_matches_rudof_in_memory() {
     let (n, v, mut failures) = run_on(Store::new().unwrap(), "rusqlite");
