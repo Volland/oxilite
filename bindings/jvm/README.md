@@ -19,7 +19,7 @@ interop, so there is nothing language-specific to install beyond the jar.
 <dependency>
   <groupId>com.oxilitedb</groupId>
   <artifactId>oxilite-jvm</artifactId>
-  <version>0.9.1</version>
+  <version>0.10.0</version>
 </dependency>
 ```
 

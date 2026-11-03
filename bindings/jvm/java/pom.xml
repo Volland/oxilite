@@ -6,7 +6,7 @@
 
   <groupId>com.oxilitedb</groupId>
   <artifactId>oxilite-jvm</artifactId>
-  <version>0.9.1</version>
+  <version>0.10.0</version>
   <packaging>jar</packaging>
 
   <name>oxilite</name>

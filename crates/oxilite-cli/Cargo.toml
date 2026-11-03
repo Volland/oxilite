@@ -27,7 +27,7 @@ elpi = ["oxilite/elpi-native"]
 [dependencies]
 oxilite = { workspace = true, features = ["rusqlite", "dylib", "datalog", "synalog", "cypher", "turso", "n3"] }
 oxilite-core = { workspace = true, features = ["serde"] }
-oxilite-validate = { path = "../oxilite-validate", version = "0.9.1" }
+oxilite-validate = { path = "../oxilite-validate", version = "0.10.0" }
 oxrdf.workspace = true
 oxiri.workspace = true
 regex.workspace = true
