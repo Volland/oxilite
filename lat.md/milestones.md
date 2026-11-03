@@ -149,3 +149,5 @@ Changes: `n3-reasoning` and `elpi-reasoning`; the resulting specs are `n3-rules`
 
 Scope: [[architecture#N3 reasoning]], [[architecture#ELPI reasoning]], [[decisions#D44 N3 rules run by eyeron, materialized per producer]] and [[decisions#D45 ELPI programs run by lean-elpi over host builtins]]. Done when both engines answer, check and materialize over the store from Rust and the CLI, N3 also on the async store, and every scenario of [[tests#N3 reasoning]] and [[tests#ELPI reasoning]] passes (the ELPI engine tests with `elpi-native`).
 
+Status: done, released in 0.10.0 (crates `oxilite-n3` and `oxilite-elpi`; the CLI's `n3` subcommand by default, `elpi` with `--features elpi`). Follow-ups: Node, Python and JVM bindings for both engines, and a CI job that runs the ELPI engine tests against a native `libleanelpi`.
+
