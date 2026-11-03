@@ -11,7 +11,7 @@
 
 **[oxilitedb.com](https://oxilitedb.com)** · [crates.io](https://crates.io/crates/oxilite) · [docs.rs](https://docs.rs/oxilite) · [npm](https://www.npmjs.com/package/@oxilite/node)
 
-> **Status: version 0.9, milestones M1–M8 and M9 phase 1 done.** Full SPARQL 1.1 query and update compiled to SQL, on bundled SQLite, your own `libsqlite3`, [Turso](#vector-search-on-turso) and [Cloudflare D1](#using-oxilite-with-cloudflare-d1); RDFS / OWL reasoning; SHACL / ShEx validation; [openCypher](#cypher-and-property-graphs), [Datalog](#datalog-your-own-recursive-rules) and [Synalog](https://oxilitedb.com/articles/synalog-agents) over the same data; [JSON-LD and Verifiable Credentials](#json-ld-and-verifiable-credentials); a [schema registry](#reasoning-and-validation) stored as RDF; [versioning and time travel](#versioning-history-and-time-travel); [vector search and host functions](#vector-search-on-turso); bindings for [Node.js, Workers](#nodejs-typescript), [Python](#python) and [the JVM](bindings/jvm/README.md) (Java, Kotlin, Scala, Clojure); and [oxilite studio](#oxilite-studio), a VS Code workbench. Next: branches and merge, then push/pull between stores. See [Roadmap](#roadmap).
+> **Status: version 0.9, milestones M1–M8 and M9 phase 1 done.** Full SPARQL 1.1 query and update compiled to SQL, on bundled SQLite, your own `libsqlite3`, [Turso](#vector-search-on-turso) and [Cloudflare D1](#using-oxilite-with-cloudflare-d1); RDFS / OWL reasoning; SHACL / ShEx validation; [openCypher](#cypher-and-property-graphs), [Datalog](#datalog-your-own-recursive-rules), [Synalog](https://oxilitedb.com/articles/synalog-agents), [N3 rules](https://oxilitedb.com/articles/n3-rules) and [λProlog](https://oxilitedb.com/articles/elpi-lambda-prolog) over the same data; [JSON-LD and Verifiable Credentials](#json-ld-and-verifiable-credentials); a [schema registry](#reasoning-and-validation) stored as RDF; [versioning and time travel](#versioning-history-and-time-travel); [vector search and host functions](#vector-search-on-turso); bindings for [Node.js, Workers](#nodejs-typescript), [Python](#python) and [the JVM](bindings/jvm/README.md) (Java, Kotlin, Scala, Clojure); and [oxilite studio](#oxilite-studio), a VS Code workbench. Next: branches and merge, then push/pull between stores. See [Roadmap](#roadmap).
 
 ---
 
@@ -157,7 +157,7 @@ The filter is applied right after the first scan, before any join. The unary `+`
 ## Usage
 
 ```bash
-cargo add oxilite                      # Rust (features: rusqlite (default), dylib, d1, turso, cypher, datalog, jsonld, vc, reasonable)
+cargo add oxilite                      # Rust (features: rusqlite (default), dylib, d1, turso, cypher, datalog, n3, elpi, jsonld, vc, reasonable)
 cargo install oxilite-cli              # the `oxilite` command and SPARQL endpoint
 npm install @oxilite/node              # Node.js (prebuilt for macOS arm64)
 npm install @oxilite/d1                # Cloudflare D1 (WebAssembly)
@@ -177,6 +177,8 @@ Every package has its own README with installation, examples and its API:
 | [`oxilite-cypher`](crates/oxilite-cypher/README.md) | openCypher over the same data, OWL- and SHACL-aware |
 | [`oxilite-datalog`](crates/oxilite-datalog/README.md) | Datalog rules over the same data: recursion, stratified negation, aggregation |
 | [`oxilite-synalog`](crates/oxilite-synalog/README.md) | [Synalog](https://github.com/SynaLinks/synalog), the Datalog-family language for AI agents, run over the store as relational tables |
+| [`oxilite-n3`](crates/oxilite-n3/README.md) | Notation3 rules run by [eyeron](https://crates.io/crates/eyeron): ask what follows, or store it as inferences (every backend, D1 included) |
+| [`oxilite-elpi`](crates/oxilite-elpi/README.md) | λProlog programs run by [lean-elpi](https://github.com/Volland/lean-elpi): goals, hypothetical reasoning, checks and materialization |
 | [`oxilite-jsonld`](crates/oxilite-jsonld/README.md) | JSON-LD documents stored verbatim, one named graph each |
 | [`oxilite-vc`](crates/oxilite-vc/README.md) | Verifiable Credentials: stored under their id, indexed, queryable |
 | [`oxilite-reason`](crates/oxilite-reason/README.md) | OWL 2 RL materialization with `reasonable` |
@@ -281,6 +283,8 @@ oxilite query -l data.sqlite --as-of HEAD~1 -q '…'   # the store as it was one
 oxilite versioning log -l data.sqlite                 # the history; also status, set, diff, changes, purge
 oxilite datalog -l data.sqlite -f rules.dl            # run a Datalog program (--explain, --materialize)
 oxilite synalog Pred -l data.sqlite -f rules.l        # run a Synalog predicate (--sql, --engine duckdb)
+oxilite n3 -l data.sqlite -f rules.n3                # run N3 rules with eyeron (--materialize, --proof)
+oxilite elpi -l data.sqlite -f rules.elpi --goal G    # run a λProlog goal (--check, --materialize; CLI feature elpi)
 oxilite registry register -l data.sqlite http://ex/onto --role ontology --file onto.ttl   # schema registry
 oxilite query --turso -l data.db -q '…'              # the same, on Turso
 ```

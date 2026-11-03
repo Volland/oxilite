@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>N3 rules on oxilite – oxilite</title>
+  <meta name="description" content="oxilite runs Notation3 rules with the eyeron reasoner: ask what follows from your knowledge graph without writing, or store the conclusions as inferences SPARQL, Cypher and Datalog can read. On SQLite, Turso and Cloudflare D1.">
+  <meta property="og:title" content="Notation3 rules over a SQLite knowledge graph">
+  <meta property="og:description" content="Write N3 rules, ask what follows, keep the proof, store the conclusions: eyeron over oxilite, on every backend.">
+  <meta property="og:image" content="../assets/logo.png">
+  <meta name="theme-color" content="#0a0a0a">
+  <link rel="canonical" href="https://oxilitedb.com/articles/n3-rules">
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg">
+  <link rel="icon" type="image/png" href="../assets/logo.png">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt=""><span>oxi<b>lite</b></span></a>
+      <nav class="nav" aria-label="Main">
+        <a href="../">Home</a>
+        <a href="./">Articles</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="article">
+    <article class="wrap">
+      <span class="kicker">N3 · Rules · Reasoning · Guide</span>
+      <h1>Notation3 rules over a SQLite knowledge graph</h1>
+      <p class="standfirst">Notation3 is the rule language of the Semantic Web stack: rules are triples about triples, <code>{ … } =&gt; { … }</code>. oxilite now runs N3 with <a href="https://crates.io/crates/eyeron">eyeron</a>, an EYE-compatible reasoner written in Rust. You can ask what follows from your graph without writing anything, or store the conclusions as inferences that SPARQL, Cypher and Datalog read like any other.</p>
+      <p class="meta">A guide · Every rule and result on this page comes from the test suite (<a href="https://github.com/Volland/oxilite/blob/main/crates/oxilite/tests/n3.rs"><code>n3.rs</code></a>) or from the <code>oxilite</code> command line</p>
+
+      <h2>Where N3 fits</h2>
+      <p>oxilite already reasons three ways: RDFS and OWL&nbsp;QL rewriting at query time, OWL&nbsp;2&nbsp;RL materialization, and its own Datalog. N3 adds what those cannot say:</p>
+      <ul>
+        <li><strong>Rules as data.</strong> A rule is a triple between two formulas, so a rule can conclude another rule.</li>
+        <li><strong>Builtins</strong> for math, strings, lists, time and lookups: <code>math:sum</code>, <code>string:matches</code>, <code>list:member</code>, <code>time:localTime</code>, and many more.</li>
+        <li><strong>Scoped negation and aggregates:</strong> <code>log:notIncludes</code>, <code>log:collectAllIn</code>, <code>log:forAllIn</code>.</li>
+        <li><strong>Backward rules</strong> (<code>&lt;=</code>), queries (<code>log:query</code>) and <strong>inference fuses</strong>: <code>{ … } =&gt; false</code> stops the run when the data matches something forbidden.</li>
+        <li><strong>Proofs:</strong> every conclusion can come with the rule, the bindings and the facts it used.</li>
+      </ul>
+
+      <h2>Setup</h2>
+<pre><code>cargo add oxilite --features n3          <span class="c"># Rust</span>
+cargo install oxilite-cli                <span class="c"># the command line has N3 built in</span></code></pre>
+      <p>eyeron is a normal crates.io dependency, built without its HTTP client, so a rule never fetches anything from the web.</p>
+
+      <h2>1. Ask what follows</h2>
+      <p>Start with a small family graph and one rule:</p>
+<pre><code><span class="c"># kg.ttl</span>
+@prefix ex: &lt;http://example.org/&gt; .
+ex:ada ex:parent ex:bob . ex:bob ex:parent ex:cy .
+ex:ada a ex:Person ; ex:name "Ada" ; ex:email "ada@example.org" .
+ex:bob a ex:Person ; ex:name "Bob" .
+ex:cy  a ex:Person .
+
+<span class="c"># grand.n3</span>
+@prefix ex: &lt;http://example.org/&gt; .
+{ ?x ex:parent ?y . ?y ex:parent ?z } =&gt; { ?x ex:grandparent ?z } .</code></pre>
+<pre><code>$ oxilite load -l kg.db -f kg.ttl
+$ oxilite n3 -l kg.db -f grand.n3
+&lt;http://example.org/ada&gt; &lt;http://example.org/grandparent&gt; &lt;http://example.org/cy&gt; .
+1 conclusion(s) from 2 statement(s)</code></pre>
+      <p><code>from 2 statement(s)</code> is the first thing to notice. The rule only reads <code>ex:parent</code>, so only the two parent statements were loaded, not the names, emails or types. oxilite collects the predicates of every rule body and reads just those, in one request. A rule with a variable predicate (<code>{ ?s ?p ?o } =&gt; …</code>) reads the whole scope, and so does <code>--no-prune</code>.</p>
+      <p>The same from Rust:</p>
+<pre><code><span class="k">let</span> r = store.n3_reason(rules)?;    <span class="c">// nothing is written</span>
+<span class="k">for</span> t <span class="k">in</span> &amp;r.derived { println!(<span class="s">"{t}"</span>); }
+assert!(r.complete);</code></pre>
+
+      <h2>2. Keep the proof</h2>
+      <p>Add <code>--proof</code> (or <code>Options { proof: true, .. }</code>) and eyeron explains each conclusion: the rule, the bindings and the facts it used.</p>
+<pre><code>$ oxilite n3 -l kg.db -f grand.n3 --proof
+...
+{ ex:ada ex:grandparent ex:cy . }
+  pe:rule
+    { { ?x ex:parent ?y . ?y ex:parent ?z . } =&gt; { ?x ex:grandparent ?z . } . };
+  pe:binding
+    [ pe:var "x"; pe:value ex:ada ],
+    [ pe:var "y"; pe:value ex:bob ],
+    [ pe:var "z"; pe:value ex:cy ];
+  pe:uses
+    { ex:ada ex:parent ex:bob . },
+    { ex:bob ex:parent ex:cy . }.</code></pre>
+      <p>The proof is N3 too, so you can store it, query it, or give it to another reasoner to check.</p>
+
+      <h2>3. Store the conclusions</h2>
+      <p><code>--materialize</code> writes the conclusions into oxilite's inference table, under a producer name (<code>n3</code> by default):</p>
+<pre><code>$ oxilite n3 -l kg.db -f grand.n3 --materialize
+1 inferred triple(s) from 2 statement(s) (producer n3)
+
+$ oxilite query -l kg.db --inferred -q 'SELECT ?z WHERE { &lt;http://example.org/ada&gt; &lt;http://example.org/grandparent&gt; ?z }'</code></pre>
+      <p>Inferences sit beside the asserted data, not in it. A query sees them only with <code>include_inferred</code> (<code>--inferred</code>), and <code>store.inference_producers(&amp;quad)</code> tells you that <code>n3</code> derived one. Each run <em>replaces</em> its producer's earlier conclusions in one atomic request, so the stored set always matches the store as it is now. Delete <code>ex:bob ex:parent ex:cy</code>, materialize again, and the grandparent triple is gone. Other producers are not touched: OWL&nbsp;2&nbsp;RL (<code>owl2rl</code>), Datalog programs and other N3 rule sets each keep their own conclusions.</p>
+      <p>Give each rule set its own producer, so they can be refreshed independently:</p>
+<pre><code>store.n3_materialize_with(family_rules, &amp;Options { producer: <span class="s">"family"</span>.into(), ..Default::default() })?;
+store.n3_materialize_with(org_rules,    &amp;Options { producer: <span class="s">"org"</span>.into(),    ..Default::default() })?;</code></pre>
+
+      <h2>4. Rules on top of rules</h2>
+      <p>With <code>include_inferred</code>, a run also reads the conclusions of <em>other</em> producers, so one rule set can build on another's output, or on OWL&nbsp;2&nbsp;RL's. It never reads its own: a conclusion whose premise was deleted can't keep itself alive by being read back in.</p>
+<pre><code>store.materialize()?;                                         <span class="c">// OWL 2 RL, producer owl2rl</span>
+store.n3_materialize_with(rules, &amp;Options { include_inferred: true, ..Default::default() })?;</code></pre>
+
+      <h2>5. Negation, aggregates and the clock</h2>
+      <p>Scoped negation as failure asks whether something is <em>not</em> in the data. Here, a person without an email address is unreachable:</p>
+<pre><code>@prefix ex: &lt;http://example.org/&gt; .
+@prefix log: &lt;http://www.w3.org/2000/10/swap/log#&gt; .
+{ ?p a ex:Person . ?SCOPE log:notIncludes { ?p ex:email ?e } } =&gt; { ?p a ex:Unreachable } .</code></pre>
+<pre><code>$ oxilite n3 -l kg.db -f unreachable.n3
+&lt;http://example.org/bob&gt; &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&gt; &lt;http://example.org/Unreachable&gt; .
+&lt;http://example.org/cy&gt; &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&gt; &lt;http://example.org/Unreachable&gt; .</code></pre>
+      <p>Rules like this are <em>non-monotonic</em>: adding an email to Bob takes back a conclusion. Some reasoners refuse to store them. oxilite can, because each materialization recomputes its producer from scratch. <code>r.info.monotonicity</code> still tells you which kind of rule set you have.</p>
+      <p><code>time:localTime</code> reads the clock. Pin it with <code>--now MILLIS</code> or <code>Options::now</code>, so the same rules over the same data give the same answer, which tests and audits need.</p>
+
+      <h2>6. Fuses: rules that forbid</h2>
+      <p>A rule whose conclusion is <code>false</code> is a constraint. When the data matches it, reasoning stops and says why:</p>
+<pre><code>$ cat fuse.n3
+{ ?x a ex:Dog . ?x a ex:Cat } =&gt; false .
+
+$ oxilite n3 -l kg.db -f fuse.n3 --materialize
+error: N3 inference fuse fired: # Inference fuse triggered.
+# Fired rule:
+#   { ?x a ex:Dog . ?x a ex:Cat . } =&gt; false .
+# Matched instance:
+#   { ex:rex a ex:Dog . ex:rex a ex:Cat . } =&gt; false .</code></pre>
+      <p><code>n3_reason</code> reports the fuse in <code>r.fuse</code>. <code>n3_materialize</code> fails before writing anything, so a rule set whose constraints are violated never stores half its conclusions.</p>
+
+      <h2>7. Scope, limits and what can't be stored</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Option</th><th>CLI</th><th>Effect</th></tr></thead>
+          <tbody>
+            <tr><td><code>graphs</code></td><td><code>--graph G</code></td><td>Reason over chosen graphs only. By default every graph but the system graphs is read, merged.</td></tr>
+            <tr><td><code>include_inferred</code></td><td><code>--inferred</code></td><td>Also read other producers' inferences.</td></tr>
+            <tr><td><code>prune</code></td><td><code>--no-prune</code></td><td>Turn predicate pruning off.</td></tr>
+            <tr><td><code>producer</code></td><td><code>--producer</code></td><td>The name stored conclusions are attributed to.</td></tr>
+            <tr><td><code>limits</code></td><td><code>--max-iterations</code></td><td>eyeron's step limits. A run they cut short is <code>complete: false</code>. Materialization refuses it, so a partial fixpoint is never stored.</td></tr>
+            <tr><td><code>now</code>, <code>proof</code></td><td><code>--now</code>, <code>--proof</code></td><td>Pin the clock; return the proof.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>N3 can conclude things RDF can't hold, such as a triple whose subject is a literal (<code>"Ada" ex:nameOf ex:ada</code>) or one whose object is a list. Those come back as N3 text in <code>r.unstorable</code> and are never written. Blank nodes a rule invents keep eyeron's deterministic labels, so a rerun reproduces the same node.</p>
+
+      <h2>On Cloudflare D1</h2>
+      <p>A run is one read request for the pruned scope, reasoning in memory, and, when materializing, one atomic write. That works the same way over D1, so <code>AsyncStore::n3_reason</code> and <code>n3_materialize</code> run there unchanged. Keep the scope small (one graph, a pruned rule set): the whole input is held in memory while eyeron reasons.</p>
+
+      <div class="callout">
+        <p><strong>The takeaway.</strong> Write the rule once in N3. Ask what follows from it, with a proof if you want one, or store what follows as inferences your queries can opt into. Pruning keeps the read small, fuses keep bad data from being half-reasoned over, and each rule set's conclusions can be refreshed or dropped on their own.</p>
+      </div>
+      <p>Next: <a href="elpi-lambda-prolog.html">λProlog over the same store</a>, for higher-order rules and hypothetical questions.</p>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <a class="brand" href="../"><img src="../assets/logo.svg" alt="" width="28" height="28"><span>oxilite</span></a>
+      <span>MIT or Apache-2.0</span>
+      <nav aria-label="Rechtliches">
+        <a href="../impressum.html">Impressum</a>
+        <a href="../datenschutz.html">Datenschutz</a>
+        <a href="../agb.html">AGB</a>
+        <a href="https://github.com/Volland/oxilite">GitHub</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>
